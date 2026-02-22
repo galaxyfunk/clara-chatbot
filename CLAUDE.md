@@ -8,14 +8,14 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 **Tagline:** "Your AI-Powered Chatbot, Built in Minutes"
 
 ## Current Version
-**v1.0: Ship by Friday** — Full product launch by Friday, February 27, 2026
+**v1.0: DEPLOYED** — Live at https://chatbot.jakevibes.dev (Feb 23, 2026)
 - Dashboard app at chatbot.jakevibes.dev
 - Auth, Q&A management, chat engine, gap detection, suggestion chips, smart escalation
 - Embeddable widget (iframe + floating bubble via `<script>` tag)
 - 5 tabs settings with save button
 - Styled chat playground
 - CE-branded landing page
-- 4 sessions, 18 build steps
+- 4 sessions, 18 build steps — ALL COMPLETE
 
 ## Codebase
 - **Repo:** ce-chatbot (GitHub)
@@ -94,8 +94,8 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 ## Version Roadmap
 | Version | Focus | Status |
 |---------|-------|--------|
-| v1.0 | Core Product + Widget + Deploy | **IN PROGRESS — Ships Fri Feb 27** |
-| v1.1 | Polish (onboarding wizard, bulk ops, auto-save, live preview) | Next week |
+| v1.0 | Core Product + Widget + Deploy | **✅ SHIPPED — Feb 23, 2026** |
+| v1.1 | Polish (onboarding wizard, bulk ops, auto-save, live preview) | Next |
 | v1.2 | Channel Integrations (Slack, Telegram, WhatsApp) | Future |
 | v1.3 | Analytics + Reporting | Future |
 | Bridge | Insights Bank one-way API push | Future |
@@ -106,10 +106,19 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | 1 | Setup + DB + Auth + Types + All Lib Functions | 1–5 | Mon | ✅ COMPLETE |
 | 2 | All API Routes | 6–9 | Tue | ✅ COMPLETE |
 | 3 | All Dashboard UI | 10–14 | Wed–Thu | ✅ COMPLETE |
-| 4 | Widget + Landing + Deploy | 15–18 | Thu–Fri | ⏳ Next |
+| 4 | Widget + Landing + Deploy | 15–18 | Thu–Fri | ✅ COMPLETE |
 
-## Current Session
-**Session 4** — Widget + Landing + Deploy (Steps 15–18)
+## Deployment Info
+- **Production URL:** https://chatbot.jakevibes.dev
+- **Vercel Project:** clara-chatbot (Cloud Employee team)
+- **GitHub Repo:** galaxyfunk/clara-chatbot
+- **Supabase Project:** clara-chatbot
+
+## Post-Deploy Notes (Feb 23, 2026)
+- Middleware updated to handle Edge runtime more robustly
+- Supabase URL Configuration set: Site URL + redirect URLs for prod and localhost
+- NEXT_PUBLIC_SUPABASE_URL must include `https://` prefix
+- Auth working with email/password signup
 
 ## Build Process
 1. Session briefs generated from scope doc (SHIP_BY_FRIDAY_V1_0.md) before each Claude Code session
