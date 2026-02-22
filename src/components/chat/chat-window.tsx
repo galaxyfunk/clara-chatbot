@@ -14,6 +14,7 @@ interface Message {
   gap_detected?: boolean;
   escalation_offered?: boolean;
   booking_url?: string | null;
+  suggestion_chips?: string[];
 }
 
 interface ChatWindowProps {
@@ -82,6 +83,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
           gap_detected: response.gap_detected,
           escalation_offered: response.escalation_offered,
           booking_url: response.booking_url,
+          suggestion_chips: response.suggestion_chips,
         };
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
@@ -117,7 +119,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
   const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant');
   const currentChips = showInitialChips
     ? settings.suggested_messages.slice(0, settings.max_suggestion_chips)
-    : [];
+    : lastAssistantMessage?.suggestion_chips || [];
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
