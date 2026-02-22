@@ -149,19 +149,98 @@ Maps every feature to its owning files. Organized by feature area.
 
 ---
 
-## Pending Features (Session 2+)
+## API Routes (Session 2)
 
-The following features have lib modules built but await API routes and UI:
+### Chat Endpoint
+- **Description:** Public chat endpoint calling full RAG pipeline with rate limiting, gap detection, escalation
+- **API Route:** `src/app/api/chat/route.ts` — POST (public)
+- **Lib Modules:** `src/lib/chat/engine.ts`
+- **DB Tables:** `workspaces`, `qa_pairs`, `api_keys`, `chat_sessions`, `qa_gaps`
+- **Session:** 2
 
-| Feature | Lib Module | API Route | UI Page | Session |
-|---------|------------|-----------|---------|---------|
-| Chat API | `chat/engine.ts` | `/api/chat` | `/chat/[workspaceId]` | 2, 4 |
-| Q&A CRUD | `chat/dedup.ts` | `/api/qa-pairs` | `/dashboard/knowledge` | 2, 3 |
-| Transcript Extraction | `chat/extract-qa.ts` | `/api/qa-pairs/extract` | `/dashboard/knowledge/extract` | 2, 3 |
-| Q&A Improvement | `chat/improve-qa.ts` | `/api/qa-pairs/improve` | `/dashboard/knowledge` | 2, 3 |
-| API Key Management | `encryption.ts` | `/api/api-keys` | `/dashboard/settings` | 2, 3 |
-| Gap Review | — | `/api/gaps` | `/dashboard/gaps` | 2, 3 |
-| Session Browser | — | `/api/sessions` | `/dashboard/sessions` | 2, 3 |
-| Dashboard Stats | — | `/api/dashboard/stats` | `/dashboard` | 2, 3 |
-| Workspace Settings | — | `/api/workspace` | `/dashboard/settings` | 2, 3 |
-| Image Upload | — | `/api/upload` | `/dashboard/settings` | 2, 3 |
+### Q&A CRUD
+- **Description:** List, create, update, delete Q&A pairs with dedup check and auto-embedding
+- **API Routes:**
+  - `src/app/api/qa-pairs/route.ts` — GET (list with filters) + POST (create with dedup)
+  - `src/app/api/qa-pairs/[id]/route.ts` — PATCH (update, re-embed if question changed) + DELETE (soft delete)
+- **Lib Modules:** `src/lib/chat/dedup.ts`, `src/lib/embed.ts`
+- **DB Tables:** `qa_pairs`
+- **Session:** 2
+
+### Q&A Import & Extraction
+- **Description:** CSV import, transcript extraction, AI improvement, bulk save
+- **API Routes:**
+  - `src/app/api/qa-pairs/import/route.ts` — POST (CSV with overlap detection)
+  - `src/app/api/qa-pairs/extract/route.ts` — POST (transcript → Q&A via Claude)
+  - `src/app/api/qa-pairs/improve/route.ts` — POST (AI improve single pair)
+  - `src/app/api/qa-pairs/bulk-save/route.ts` — POST (save with sequential embedding)
+- **Lib Modules:** `src/lib/chat/extract-qa.ts`, `src/lib/chat/improve-qa.ts`, `src/lib/embed.ts`
+- **DB Tables:** `qa_pairs`
+- **Dependencies:** papaparse
+- **Session:** 2
+
+### API Key Management
+- **Description:** Encrypted storage of user LLM API keys with provider validation
+- **API Routes:**
+  - `src/app/api/api-keys/route.ts` — GET (key_last4 only) + POST (validate + encrypt)
+  - `src/app/api/api-keys/[id]/route.ts` — PATCH (toggle default/active) + DELETE (hard delete)
+- **Lib Modules:** `src/lib/encryption.ts`
+- **DB Tables:** `api_keys`
+- **Session:** 2
+
+### Gap Review
+- **Description:** Review queue for low-confidence questions flagged by chat engine
+- **API Routes:**
+  - `src/app/api/gaps/route.ts` — GET (queue with best match question)
+  - `src/app/api/gaps/resolve/route.ts` — POST (create Q&A pair + update gap)
+  - `src/app/api/gaps/dismiss/route.ts` — POST (mark as dismissed)
+- **DB Tables:** `qa_gaps`, `qa_pairs`
+- **Session:** 2
+
+### Session Browser
+- **Description:** List chat sessions with message counts
+- **API Route:** `src/app/api/sessions/route.ts` — GET
+- **DB Tables:** `chat_sessions`
+- **Session:** 2
+
+### Workspace Settings
+- **Description:** Read and update workspace settings with JSONB merge
+- **API Route:** `src/app/api/workspace/route.ts` — GET + PATCH (settings merge, not replace)
+- **DB Tables:** `workspaces`
+- **Session:** 2
+
+### Dashboard Stats
+- **Description:** Aggregate counts for dashboard overview
+- **API Route:** `src/app/api/dashboard/stats/route.ts` — GET
+- **DB Tables:** `qa_pairs`, `chat_sessions`, `qa_gaps`
+- **Session:** 2
+
+### Image Upload
+- **Description:** Upload avatar/icon images to Supabase Storage
+- **API Route:** `src/app/api/upload/route.ts` — POST
+- **Storage:** `chatbot-assets` bucket
+- **Session:** 2
+
+---
+
+## Pending UI (Session 3)
+
+The following features have API routes built but await UI implementation:
+
+| Feature | API Route | UI Page | Session |
+|---------|-----------|---------|---------|
+| Q&A Management | `/api/qa-pairs` | `/dashboard/knowledge` | 3 |
+| Transcript Extraction | `/api/qa-pairs/extract` | `/dashboard/knowledge/extract` | 3 |
+| Gap Review | `/api/gaps` | `/dashboard/gaps` | 3 |
+| Session Browser | `/api/sessions` | `/dashboard/sessions` | 3 |
+| Dashboard Home | `/api/dashboard/stats` | `/dashboard` | 3 |
+| Settings Tabs | `/api/workspace`, `/api/api-keys`, `/api/upload` | `/dashboard/settings` | 3 |
+| Chat Playground | `/api/chat` | `/dashboard/chat` | 3 |
+
+## Pending Widget (Session 4)
+
+| Feature | Description | Files | Session |
+|---------|-------------|-------|---------|
+| Public Chat Page | Widget iframe target | `/chat/[workspaceId]` | 4 |
+| Widget Script | Floating bubble embed | `public/widget.js` | 4 |
+| Landing Page | CE-branded with login CTA | `/` | 4 |

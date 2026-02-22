@@ -112,8 +112,108 @@ src/
 ---
 
 ## v1.0 Session 2 — API Routes
-**Date:** TBD
+**Date:** February 22, 2026
 **Steps:** 6–9
+**Status:** ✅ Complete
+
+### What Was Built
+
+**Step 6: Q&A CRUD Routes**
+- `GET /api/qa-pairs` — List pairs with search, category, active_only filters
+- `POST /api/qa-pairs` — Create pair with dedup check (0.95 threshold) + auto-embed
+- `PATCH /api/qa-pairs/[id]` — Update pair, re-embed if question changes
+- `DELETE /api/qa-pairs/[id]` — Soft delete (is_active = false)
+
+**Step 7: Q&A Import + Extraction Routes**
+- Installed papaparse for CSV parsing
+- `POST /api/qa-pairs/import` — CSV import with overlap detection (0.85 threshold)
+- `POST /api/qa-pairs/extract` — Transcript extraction via Claude Sonnet
+- `POST /api/qa-pairs/improve` — AI Q&A improvement via Claude
+- `POST /api/qa-pairs/bulk-save` — Save multiple pairs with sequential embedding
+
+**Step 8: Supporting Routes**
+- `GET/POST /api/api-keys` — List keys (key_last4 only), add key with provider validation
+- `PATCH/DELETE /api/api-keys/[id]` — Toggle default/active, hard delete
+- `POST /api/upload` — Image upload to Supabase Storage (avatar/icon)
+- `GET /api/gaps` — Gap queue with status filter and best match question
+- `POST /api/gaps/resolve` — Create Q&A pair + update gap status
+- `POST /api/gaps/dismiss` — Mark gap as dismissed
+- `GET /api/sessions` — Session list with message counts
+- `GET/PATCH /api/workspace` — Read/update workspace settings (merge, not replace)
+- `GET /api/dashboard/stats` — Aggregate counts (pairs, sessions, gaps, escalations)
+
+**Step 9: Chat Endpoint**
+- `POST /api/chat` — Public endpoint calling processChat() with full RAG pipeline
+- Validates workspace_id, session_token, message
+- 2000 character message limit
+- maxDuration = 30 for Vercel
+
+### Files Created
+
+```
+src/app/api/
+├── chat/
+│   └── route.ts                    POST (public)
+├── qa-pairs/
+│   ├── route.ts                    GET + POST
+│   ├── [id]/
+│   │   └── route.ts                PATCH + DELETE
+│   ├── import/
+│   │   └── route.ts                POST
+│   ├── extract/
+│   │   └── route.ts                POST
+│   ├── improve/
+│   │   └── route.ts                POST
+│   └── bulk-save/
+│       └── route.ts                POST
+├── api-keys/
+│   ├── route.ts                    GET + POST
+│   └── [id]/
+│       └── route.ts                PATCH + DELETE
+├── upload/
+│   └── route.ts                    POST
+├── gaps/
+│   ├── route.ts                    GET
+│   ├── resolve/
+│   │   └── route.ts                POST
+│   └── dismiss/
+│       └── route.ts                POST
+├── sessions/
+│   └── route.ts                    GET
+├── workspace/
+│   └── route.ts                    GET + PATCH
+└── dashboard/
+    └── stats/
+        └── route.ts                GET
+```
+
+**Total: 16 route files, 20 HTTP methods**
+
+### Key Patterns Established
+- Auth helper pattern: createAuthClient() for user, createServerClient() for data
+- API key validation with live provider test before saving
+- Never return encrypted_key — only key_last4 in responses
+- maxDuration exports for long-running routes (30-120s)
+- Sequential embedding in bulk operations (for loop, never Promise.all)
+- Settings merge (not replace) for workspace updates
+- Soft delete for Q&A pairs, hard delete for API keys
+
+### Data State
+- All API routes functional
+- Chat endpoint ready to receive messages
+- Full RAG pipeline connected end-to-end
+
+### Git Commits
+1. `feat: Q&A CRUD routes - GET/POST qa-pairs, PATCH/DELETE qa-pairs/[id]`
+2. `feat: Q&A import, extraction, improve, and bulk-save routes`
+3. `feat: api-keys, upload, gaps, sessions, workspace, stats routes`
+4. `feat: chat endpoint - Clara speaks! Full flow verified`
+
+---
+
+## v1.0 Session 3 — Dashboard UI
+**Date:** TBD
+**Steps:** 10–14
 **Status:** ⏳ Next
 
 *(Entry will be written after session completes)*

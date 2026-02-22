@@ -104,12 +104,12 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | Session | Focus | Steps | Day | Status |
 |---------|-------|-------|-----|--------|
 | 1 | Setup + DB + Auth + Types + All Lib Functions | 1–5 | Mon | ✅ COMPLETE |
-| 2 | All API Routes | 6–9 | Tue | ⏳ Next |
-| 3 | All Dashboard UI | 10–14 | Wed–Thu | Pending |
+| 2 | All API Routes | 6–9 | Tue | ✅ COMPLETE |
+| 3 | All Dashboard UI | 10–14 | Wed–Thu | ⏳ Next |
 | 4 | Widget + Landing + Deploy | 15–18 | Thu–Fri | Pending |
 
 ## Current Session
-**Session 2** — All API Routes (Steps 6–9)
+**Session 3** — All Dashboard UI (Steps 10–14)
 
 ## Build Process
 1. Session briefs generated from scope doc (SHIP_BY_FRIDAY_V1_0.md) before each Claude Code session
