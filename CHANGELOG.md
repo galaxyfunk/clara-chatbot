@@ -5,7 +5,7 @@ Track of what shipped in each version. One paragraph per release.
 ---
 
 ## v1.0 — Ship by Friday
-**Status:** In Progress (Session 2 of 4 complete)
+**Status:** In Progress (Session 3 of 4 complete)
 **Deadline:** Friday, February 27, 2026
 
 ### Session 1 — Foundation (Feb 22, 2026)
@@ -13,5 +13,8 @@ Project scaffolded with Next.js 14, TypeScript, Tailwind, and CE brand tokens. S
 
 ### Session 2 — API Routes (Feb 22, 2026)
 All 16 API route files built with 20 HTTP methods total. Q&A CRUD with dedup checking and auto-embedding on create/update. CSV import with overlap detection and papaparse. Transcript extraction via Claude Sonnet. Q&A improvement endpoint. Bulk save for imported/extracted pairs. API key management with provider validation, AES-256-GCM encryption, and secure GET responses (key_last4 only). Image upload to Supabase Storage. Gap review queue with resolve (creates Q&A pair) and dismiss. Session browser with message counts. Workspace settings with JSONB merge. Dashboard stats aggregation. Public chat endpoint calling the full RAG engine with rate limiting, gap detection, and escalation.
+
+### Session 3 — Dashboard UI (Feb 22, 2026)
+Complete dashboard UI built across 5 main sections. Dashboard home with stats cards (Q&A pairs, sessions, gaps, escalations). Knowledge base management with searchable table, add/edit modal, category filters, and import modal (CSV upload with overlap detection). Transcript extraction page with paste-or-upload flow, extraction preview, and bulk save. Gap review queue with accept/dismiss actions and "add to knowledge base" flow. Session browser with expandable conversation view showing full message history. Chat playground styled to match the widget with suggestion chips and escalation support. 5-tab settings panel (Content, Style, AI, API Keys, Embed) with unified save. Multiple bug fixes: transcript extraction max_tokens increased from 4096 to 16000, CSV import flexible column detection, API key model list updated with GPT-5 family and custom model option, dynamic suggestion chips now display after AI responses.
 
 *(Full entry will be written when v1.0 ships)*

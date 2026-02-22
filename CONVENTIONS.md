@@ -437,11 +437,48 @@ Use soft delete for user content (Q&A pairs), hard delete for credentials (API k
 
 ---
 
+## Flexible Input Detection Pattern
+
+For user-provided data (CSV imports, forms), accept multiple column/field name variations:
+
+```typescript
+const getColumn = (row: Record<string, string>, ...names: string[]): string | undefined => {
+  for (const name of names) {
+    if (row[name]?.trim()) return row[name].trim();
+  }
+  return undefined;
+};
+
+// Usage: accepts "question", "questions", or "q"
+const question = getColumn(row, 'question', 'questions', 'q');
+const answer = getColumn(row, 'answer', 'answers', 'a', 'response');
+```
+
+---
+
+## Custom Model Option Pattern
+
+When providing model selection, always include a "Custom Model" option for flexibility:
+
+```typescript
+export const SUPPORTED_MODELS: LLMModel[] = [
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic', ... },
+  { id: 'custom-anthropic', name: 'Custom Model', provider: 'anthropic', description: 'Enter any model ID' },
+  // ...
+];
+
+// In form: detect custom and show text input
+const isCustomModel = form.model.startsWith('custom-');
+const modelToUse = isCustomModel ? form.customModel : form.model;
+```
+
+---
+
 ## Version History
 
 | Version | Status | Key Patterns Established |
 |---------|--------|-------------------------|
 | v1.0 Session 1 | Complete | File structure, Supabase clients, encryption, LLM provider abstraction, workspace isolation, idempotency, dedup, type definitions, lib function structure |
 | v1.0 Session 2 | Complete | Auth helper pattern, API route pattern, API key validation, settings merge, soft/hard delete, maxDuration exports |
-| v1.0 Session 3 | Next | Component patterns, settings tabs, skeleton variants |
-| v1.0 Session 4 | Pending | Widget embed system, public chat page |
+| v1.0 Session 3 | Complete | Component patterns, settings tabs, skeleton variants, flexible input detection, custom model option, dynamic suggestion chips |
+| v1.0 Session 4 | Next | Widget embed system, public chat page |

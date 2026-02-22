@@ -212,8 +212,137 @@ src/app/api/
 ---
 
 ## v1.0 Session 3 — Dashboard UI
-**Date:** TBD
+**Date:** February 22, 2026
 **Steps:** 10–14
+**Status:** ✅ Complete
+
+### What Was Built
+
+**Step 10: Dashboard Home**
+- Stats cards showing total Q&A pairs, chat sessions, open gaps, escalations
+- Recent gaps widget with quick accept/dismiss
+- Quick actions for common tasks
+- Skeleton loading states
+
+**Step 11: Knowledge Base Management**
+- Searchable Q&A pairs table with category filters
+- Add/edit Q&A modal with category dropdown
+- Delete confirmation with soft delete
+- CSV import modal with file upload and paste option
+- Overlap detection preview before bulk save
+
+**Step 12: Transcript Extraction**
+- Full extraction page at `/dashboard/knowledge/extract`
+- Paste or upload transcript flow
+- Claude-powered extraction with progress indicator
+- Preview extracted pairs with edit capability
+- Bulk save with sequential embedding
+
+**Step 13: Supporting Pages**
+- Gap review queue with accept (creates Q&A pair) and dismiss actions
+- Session browser with expandable conversation view
+- Full message history display with timestamps
+
+**Step 14: Settings + Chat Playground**
+- 5-tab settings panel:
+  - Content: display name, welcome message, suggested messages, placeholder, booking URL
+  - Style: primary color, bubble color, bubble position, avatar/icon upload
+  - AI: personality prompt (resizable textarea), confidence threshold, max chips, escalation toggle
+  - API Keys: add/delete keys, set default, custom model support
+  - Embed: workspace ID display, embed code snippets
+- Unified save button with loading state
+- Chat playground styled to match widget
+- Suggestion chips (initial + dynamic from AI responses)
+- Escalation message display
+
+### Bug Fixes
+
+1. **Transcript Extraction Truncation**
+   - Problem: Large transcripts caused JSON parse errors
+   - Cause: max_tokens was 4096, Claude's response got cut off
+   - Fix: Increased max_tokens to 16000 in `src/lib/chat/extract-qa.ts`
+
+2. **CSV Import Column Names**
+   - Problem: Import failed with "question and answer are required"
+   - Cause: User's CSV had "questions"/"answers" (plural)
+   - Fix: Added flexible column detection in `src/app/api/qa-pairs/import/route.ts`
+
+3. **API Key Model List**
+   - Problem: Outdated models, no GPT-5 options
+   - Fix: Updated `src/types/api-keys.ts` with GPT-5 family + custom model option
+
+4. **Dynamic Suggestion Chips**
+   - Problem: Only initial chips displayed, not AI-generated ones
+   - Fix: Updated `src/components/chat/chat-window.tsx` to store and display `suggestion_chips` from API response
+
+### Files Created
+
+```
+src/app/dashboard/
+├── page.tsx                    Dashboard home
+├── knowledge/
+│   ├── page.tsx                Q&A management
+│   └── extract/
+│       └── page.tsx            Transcript extraction
+├── gaps/
+│   └── page.tsx                Gap review
+├── sessions/
+│   └── page.tsx                Session browser
+├── chat/
+│   └── page.tsx                Chat playground
+└── settings/
+    └── page.tsx                5-tab settings
+
+src/components/
+├── dashboard/
+│   ├── stats-cards.tsx
+│   ├── recent-gaps.tsx
+│   └── quick-actions.tsx
+├── knowledge/
+│   ├── qa-pairs-table.tsx
+│   ├── add-qa-modal.tsx
+│   └── import-modal.tsx
+├── gaps/
+│   └── gaps-list.tsx
+├── sessions/
+│   └── sessions-list.tsx
+├── settings/
+│   ├── content-tab.tsx
+│   ├── style-tab.tsx
+│   ├── ai-tab.tsx
+│   ├── api-keys-tab.tsx
+│   └── embed-tab.tsx
+└── chat/
+    ├── chat-window.tsx
+    ├── message-bubble.tsx
+    └── suggestion-chips.tsx
+```
+
+### Key Patterns Established
+- Component data arrays for repeated UI (cards, nav items)
+- Skeleton variants for async loading states
+- Modal pattern with form state management
+- Flexible input detection for user-provided data
+- Custom model option in dropdown with text input fallback
+- Dynamic chip display from API responses
+
+### Data State
+- Full dashboard functional end-to-end
+- Chat playground working with RAG + suggestion chips
+- Settings saving correctly with JSONB merge
+- API key validation with live provider test
+
+### Git Commits
+1. `feat: dashboard UI - stats, knowledge, gaps, sessions, settings, chat`
+2. `fix: transcript extraction, CSV import, and API key improvements`
+3. `fix: make personality prompt textarea larger and resizable`
+4. `fix: display dynamic suggestion chips from AI responses`
+
+---
+
+## v1.0 Session 4 — Widget + Landing + Deploy
+**Date:** TBD
+**Steps:** 15–18
 **Status:** ⏳ Next
 
 *(Entry will be written after session completes)*

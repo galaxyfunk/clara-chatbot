@@ -223,19 +223,23 @@ Maps every feature to its owning files. Organized by feature area.
 
 ---
 
-## Pending UI (Session 3)
+## Dashboard UI (Session 3) ✅ Complete
 
-The following features have API routes built but await UI implementation:
+| Feature | API Route | UI Page | Components |
+|---------|-----------|---------|------------|
+| Dashboard Home | `/api/dashboard/stats` | `/dashboard` | `stats-cards.tsx`, `recent-gaps.tsx`, `quick-actions.tsx` |
+| Q&A Management | `/api/qa-pairs` | `/dashboard/knowledge` | `qa-pairs-table.tsx`, `add-qa-modal.tsx`, `import-modal.tsx` |
+| Transcript Extraction | `/api/qa-pairs/extract` | `/dashboard/knowledge/extract` | `extraction-page.tsx` |
+| Gap Review | `/api/gaps` | `/dashboard/gaps` | `gaps-list.tsx` |
+| Session Browser | `/api/sessions` | `/dashboard/sessions` | `sessions-list.tsx` |
+| Settings (5 tabs) | `/api/workspace`, `/api/api-keys`, `/api/upload` | `/dashboard/settings` | `content-tab.tsx`, `style-tab.tsx`, `ai-tab.tsx`, `api-keys-tab.tsx`, `embed-tab.tsx` |
+| Chat Playground | `/api/chat` | `/dashboard/chat` | `chat-window.tsx`, `message-bubble.tsx`, `suggestion-chips.tsx` |
 
-| Feature | API Route | UI Page | Session |
-|---------|-----------|---------|---------|
-| Q&A Management | `/api/qa-pairs` | `/dashboard/knowledge` | 3 |
-| Transcript Extraction | `/api/qa-pairs/extract` | `/dashboard/knowledge/extract` | 3 |
-| Gap Review | `/api/gaps` | `/dashboard/gaps` | 3 |
-| Session Browser | `/api/sessions` | `/dashboard/sessions` | 3 |
-| Dashboard Home | `/api/dashboard/stats` | `/dashboard` | 3 |
-| Settings Tabs | `/api/workspace`, `/api/api-keys`, `/api/upload` | `/dashboard/settings` | 3 |
-| Chat Playground | `/api/chat` | `/dashboard/chat` | 3 |
+### Bug Fixes in Session 3
+- Transcript extraction: max_tokens increased 4096 → 16000 (prevents JSON truncation)
+- CSV import: flexible column names (question/questions/q, answer/answers/a/response)
+- API keys: updated model list with GPT-5 family + custom model option
+- Suggestion chips: now display dynamically from AI responses (not just initial chips)
 
 ## Pending Widget (Session 4)
 
