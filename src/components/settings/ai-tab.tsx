@@ -18,8 +18,8 @@ export function AITab({ settings, onChange }: AITabProps) {
         <textarea
           value={settings.personality_prompt}
           onChange={(e) => onChange({ personality_prompt: e.target.value })}
-          rows={12}
-          className="w-full px-3 py-2 border border-ce-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ce-navy resize-none font-mono text-sm"
+          rows={20}
+          className="w-full px-3 py-2 border border-ce-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ce-navy resize-y font-mono text-sm min-h-[300px]"
         />
         <p className="mt-1 text-xs text-ce-text-muted">
           System instructions that define how your chatbot behaves
