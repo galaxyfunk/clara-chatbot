@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createAuthClient } from '@/lib/supabase/auth-server';
 import { ensureWorkspace } from '@/lib/workspace';
+import { DashboardShell } from '@/components/dashboard-shell';
 
 export default async function DashboardLayout({
   children,
@@ -19,11 +20,11 @@ export default async function DashboardLayout({
   // Ensure workspace exists for this user
   await ensureWorkspace(user.id);
 
+  const userEmail = user.email || '';
+
   return (
-    <div className="min-h-screen bg-ce-muted">
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {children}
-      </main>
-    </div>
+    <DashboardShell userEmail={userEmail}>
+      {children}
+    </DashboardShell>
   );
 }
