@@ -192,12 +192,18 @@ export default function TranscriptExtractPage() {
             </span>
             <button
               onClick={handleExtract}
-              disabled={transcript.length < 100}
+              disabled={transcript.length < 100 || transcript.length > 100000}
               className="px-4 py-2 bg-ce-navy text-white text-sm font-medium rounded-lg hover:bg-ce-navy/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Extract Q&A Pairs
             </button>
           </div>
+
+          {transcript.length > 100000 && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              Text too long (max 100,000 characters)
+            </div>
+          )}
 
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">

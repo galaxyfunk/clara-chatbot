@@ -11,6 +11,7 @@ interface ApiKeysTabProps {
 interface ApiKeyForm {
   provider: LLMProvider;
   model: string;
+  customModel: string;
   apiKey: string;
   label: string;
   isDefault: boolean;
@@ -19,6 +20,7 @@ interface ApiKeyForm {
 const INITIAL_FORM: ApiKeyForm = {
   provider: 'anthropic',
   model: 'claude-sonnet-4-20250514',
+  customModel: '',
   apiKey: '',
   label: '',
   isDefault: false,
@@ -74,10 +76,21 @@ export function ApiKeysTab({}: ApiKeysTabProps) {
     });
   };
 
+  const isCustomModel = form.model.startsWith('custom-');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSaving(true);
+
+    // Use custom model ID if custom is selected
+    const modelToUse = isCustomModel ? form.customModel : form.model;
+
+    if (isCustomModel && !form.customModel.trim()) {
+      setError('Please enter a custom model ID');
+      setSaving(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/api-keys', {
@@ -85,7 +98,7 @@ export function ApiKeysTab({}: ApiKeysTabProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider: form.provider,
-          model: form.model,
+          model: modelToUse,
           api_key: form.apiKey,
           label: form.label || null,
           is_default: form.isDefault,
@@ -249,7 +262,7 @@ export function ApiKeysTab({}: ApiKeysTabProps) {
             </label>
             <select
               value={form.model}
-              onChange={(e) => setForm({ ...form, model: e.target.value })}
+              onChange={(e) => setForm({ ...form, model: e.target.value, customModel: '' })}
               className="w-full px-3 py-2 border border-ce-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ce-navy bg-white"
             >
               {filteredModels.map((model) => (
@@ -259,6 +272,25 @@ export function ApiKeysTab({}: ApiKeysTabProps) {
               ))}
             </select>
           </div>
+
+          {/* Custom Model ID */}
+          {isCustomModel && (
+            <div>
+              <label className="block text-sm font-medium text-ce-text mb-1">
+                Custom Model ID
+              </label>
+              <input
+                type="text"
+                value={form.customModel}
+                onChange={(e) => setForm({ ...form, customModel: e.target.value })}
+                placeholder="e.g. gpt-5, o3-mini, claude-3-opus"
+                className="w-full px-3 py-2 border border-ce-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ce-navy"
+              />
+              <p className="mt-1 text-xs text-ce-text-muted">
+                Enter the exact model ID from the provider's API docs
+              </p>
+            </div>
+          )}
 
           {/* API Key */}
           <div>

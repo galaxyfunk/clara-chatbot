@@ -103,8 +103,17 @@ export async function POST(request: Request) {
           messages: [{ role: 'user', content: 'hi' }],
         });
       }
-    } catch {
-      return NextResponse.json({ success: false, error: 'Invalid API key — could not connect to provider' }, { status: 400 });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[api-keys] Validation error:', errorMessage);
+      // Check if it's an auth error vs model error
+      if (errorMessage.includes('401') || errorMessage.includes('auth') || errorMessage.includes('API key')) {
+        return NextResponse.json({ success: false, error: 'Invalid API key — authentication failed' }, { status: 400 });
+      }
+      if (errorMessage.includes('model') || errorMessage.includes('does not exist')) {
+        return NextResponse.json({ success: false, error: `Model "${model}" not available — try a different model` }, { status: 400 });
+      }
+      return NextResponse.json({ success: false, error: `Validation failed: ${errorMessage}` }, { status: 400 });
     }
 
     // 5. Encrypt and extract last 4

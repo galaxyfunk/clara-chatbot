@@ -35,9 +35,10 @@ export async function POST(request: Request) {
     }
 
     // 4. Parse CSV
-    const parsed = Papa.parse<{ question?: string; answer?: string; category?: string }>(body.csv_text, {
+    const parsed = Papa.parse<Record<string, string>>(body.csv_text, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (h) => h.trim().toLowerCase(),
     });
 
     const errors: string[] = [];
@@ -45,14 +46,22 @@ export async function POST(request: Request) {
       parsed.errors.forEach((e) => errors.push(`CSV parse error: ${e.message}`));
     }
 
+    // Helper to get value from row with flexible column names
+    const getColumn = (row: Record<string, string>, ...names: string[]): string | undefined => {
+      for (const name of names) {
+        if (row[name]?.trim()) return row[name].trim();
+      }
+      return undefined;
+    };
+
     // 5. Validate and check overlaps
     const enrichedPairs: ExtractedQAPair[] = [];
 
     for (let i = 0; i < parsed.data.length; i++) {
       const row = parsed.data[i];
-      const question = row.question?.trim();
-      const answer = row.answer?.trim();
-      const category = row.category?.trim() || 'general';
+      const question = getColumn(row, 'question', 'questions', 'q');
+      const answer = getColumn(row, 'answer', 'answers', 'a', 'response');
+      const category = getColumn(row, 'category', 'categories', 'cat', 'type') || 'general';
 
       if (!question || !answer) {
         errors.push(`Row ${i + 1}: question and answer are required`);

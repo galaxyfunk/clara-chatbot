@@ -3,7 +3,7 @@ import { createAuthClient } from '@/lib/supabase/auth-server';
 import { createServerClient } from '@/lib/supabase/server';
 import { extractQAPairsFromTranscript } from '@/lib/chat/extract-qa';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   try {
@@ -34,8 +34,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Text is required' }, { status: 400 });
     }
 
-    if (text.length > 50000) {
-      return NextResponse.json({ success: false, error: 'Text too long (max 50,000 characters)' }, { status: 400 });
+    if (text.length > 100000) {
+      return NextResponse.json({ success: false, error: 'Text too long (max 100,000 characters)' }, { status: 400 });
     }
 
     // 4. Extract Q&A pairs
