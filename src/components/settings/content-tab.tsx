@@ -129,7 +129,7 @@ export function ContentTab({ settings, onChange }: ContentTabProps) {
           className="w-full px-3 py-2 border border-ce-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ce-navy"
         />
         <p className="mt-1 text-xs text-ce-text-muted">
-          Link for the "Book a Call" button when escalation is triggered
+          Link for the Book a Call button when escalation is triggered
         </p>
       </div>
     </div>

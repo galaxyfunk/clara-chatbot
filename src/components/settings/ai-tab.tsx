@@ -96,7 +96,7 @@ export function AITab({ settings, onChange }: AITabProps) {
               Enable Smart Escalation
             </span>
             <span className="block mt-1 text-xs text-ce-text-muted">
-              When the chatbot can't confidently answer a question, offer
+              When the chatbot cannot confidently answer a question, offer
               visitors the option to book a call. Requires a booking URL in the
               Content tab.
             </span>

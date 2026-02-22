@@ -4,10 +4,6 @@ import { useState, useEffect } from 'react';
 import { Plus, Trash2, Star, Loader2, Key, AlertCircle } from 'lucide-react';
 import { SUPPORTED_MODELS, type LLMProvider, type ApiKey } from '@/types/api-keys';
 
-interface ApiKeysTabProps {
-  // This tab manages its own state since it's separate from workspace settings
-}
-
 interface ApiKeyForm {
   provider: LLMProvider;
   model: string;
@@ -26,7 +22,7 @@ const INITIAL_FORM: ApiKeyForm = {
   isDefault: false,
 };
 
-export function ApiKeysTab({}: ApiKeysTabProps) {
+export function ApiKeysTab() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -287,7 +283,7 @@ export function ApiKeysTab({}: ApiKeysTabProps) {
                 className="w-full px-3 py-2 border border-ce-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ce-navy"
               />
               <p className="mt-1 text-xs text-ce-text-muted">
-                Enter the exact model ID from the provider's API docs
+                Enter the exact model ID from the provider API docs
               </p>
             </div>
           )}

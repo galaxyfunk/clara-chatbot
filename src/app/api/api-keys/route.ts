@@ -4,9 +4,8 @@ import OpenAI from 'openai';
 import { createAuthClient } from '@/lib/supabase/auth-server';
 import { createServerClient } from '@/lib/supabase/server';
 import { encrypt } from '@/lib/encryption';
-import { SUPPORTED_MODELS } from '@/types/api-keys';
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     // 1. Get authenticated user
     const authClient = await createAuthClient();
@@ -78,8 +77,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Invalid provider (must be openai or anthropic)' }, { status: 400 });
     }
 
-    if (!model || !SUPPORTED_MODELS.some((m) => m.id === model)) {
-      return NextResponse.json({ success: false, error: 'Invalid model' }, { status: 400 });
+    if (!model || model.trim().length === 0) {
+      return NextResponse.json({ success: false, error: 'Model is required' }, { status: 400 });
     }
 
     if (!apiKey || apiKey.trim().length === 0) {
@@ -105,8 +104,6 @@ export async function POST(request: Request) {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('[api-keys] Validation error:', errorMessage);
-      // Check if it's an auth error vs model error
       if (errorMessage.includes('401') || errorMessage.includes('auth') || errorMessage.includes('API key')) {
         return NextResponse.json({ success: false, error: 'Invalid API key — authentication failed' }, { status: 400 });
       }

@@ -281,7 +281,7 @@ export function StyleTab({ settings, onChange }: StyleTabProps) {
             className="w-4 h-4 rounded border-ce-border text-ce-navy focus:ring-ce-navy"
           />
           <span className="text-sm font-medium text-ce-text">
-            Show "Powered by Clara" badge
+            Show Powered by Clara badge
           </span>
         </label>
       </div>

@@ -8,15 +8,25 @@ import { ImproveDialog } from '@/components/knowledge/improve-dialog';
 import { CSVImportDialog } from '@/components/knowledge/csv-import-dialog';
 import { DEFAULT_CATEGORIES, type QAPair } from '@/types/qa';
 
+// Helper to get initial modal state from URL params
+function getInitialModalState() {
+  if (typeof window === 'undefined') return { add: false, import: false };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    add: params.get('action') === 'add',
+    import: params.get('action') === 'import',
+  };
+}
+
 export default function KnowledgePage() {
   const [pairs, setPairs] = useState<QAPair[]>([]);
   const [workspace, setWorkspace] = useState<{ settings?: { display_name?: string } } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(() => getInitialModalState().add);
   const [editingPair, setEditingPair] = useState<QAPair | null>(null);
   const [improvingPair, setImprovingPair] = useState<QAPair | null>(null);
-  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(() => getInitialModalState().import);
   const [loading, setLoading] = useState(true);
 
   const displayName = workspace?.settings?.display_name || 'Clara';
@@ -56,13 +66,6 @@ export default function KnowledgePage() {
       setLoading(false);
     }
     load();
-  }, []);
-
-  // Check URL params on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('action') === 'add') setIsAddModalOpen(true);
-    if (params.get('action') === 'import') setIsImportOpen(true);
   }, []);
 
   const handleDelete = async (pairId: string) => {

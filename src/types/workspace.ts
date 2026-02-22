@@ -35,7 +35,7 @@ export interface WorkspaceSettings {
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
-  display_name: 'Clara',
+  display_name: 'Assistant',
   welcome_message: 'Hi! How can I help you today?',
   placeholder_text: 'Type your message...',
   suggested_messages: [],
@@ -49,7 +49,7 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
 Describe what your company does, your key services, and your target audience.
 
 ### Role
-You are Clara, a friendly and knowledgeable virtual assistant. Your primary role is to answer questions accurately using the knowledge base provided. Be conversational, helpful, and professional.
+You are a friendly and knowledgeable virtual assistant. Your primary role is to answer questions accurately using the knowledge base provided. Be conversational, helpful, and professional.
 
 ### Constraints
 1. Only answer from the knowledge base context provided.

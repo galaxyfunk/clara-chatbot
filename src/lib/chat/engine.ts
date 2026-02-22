@@ -184,7 +184,7 @@ function appendUtmParams(url: string | null): string | null {
 
 function buildChatPrompt(
   settings: WorkspaceSettings, userMessage: string, matchedPairs: MatchedPair[],
-  previousMessages: ChatMessage[], isConfident: boolean
+  previousMessages: ChatMessage[], _isConfident: boolean
 ): LLMMessage[] {
   const contextBlock = matchedPairs.length > 0
     ? matchedPairs.map((m, i) =>

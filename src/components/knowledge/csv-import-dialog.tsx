@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { X, Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, Upload, Loader2, CheckCircle } from 'lucide-react';
 import type { ExtractedQAPair } from '@/types/qa';
 
 interface CSVImportDialogProps {
