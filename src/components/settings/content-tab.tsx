@@ -132,6 +132,31 @@ export function ContentTab({ settings, onChange }: ContentTabProps) {
           Link for the Book a Call button when escalation is triggered
         </p>
       </div>
+
+      {/* Powered by Clara Toggle */}
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="text-sm font-medium text-ce-text">
+            Show &quot;Powered by Clara&quot; in widget footer
+          </label>
+          <p className="text-xs text-ce-text-muted">
+            Display product attribution in the chat widget
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ powered_by_clara: !settings.powered_by_clara })}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            settings.powered_by_clara ? 'bg-ce-teal' : 'bg-gray-200'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              settings.powered_by_clara ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
     </div>
   );
 }
