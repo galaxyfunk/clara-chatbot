@@ -6,12 +6,21 @@ import { GapResolveForm } from '@/components/gaps/gap-resolve-form';
 
 type GapStatus = 'open' | 'resolved' | 'dismissed';
 
+interface WorkspaceData {
+  settings?: {
+    custom_categories?: string[];
+  };
+}
+
 export default function GapsPage() {
   const [gaps, setGaps] = useState<Gap[]>([]);
   const [statusFilter, setStatusFilter] = useState<GapStatus>('open');
   const [resolvingGap, setResolvingGap] = useState<Gap | null>(null);
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState({ open: 0, resolved: 0, dismissed: 0 });
+  const [workspace, setWorkspace] = useState<WorkspaceData | null>(null);
+
+  const customCategories = workspace?.settings?.custom_categories || [];
 
   // Fetch gaps when filter changes
   useEffect(() => {
@@ -29,23 +38,28 @@ export default function GapsPage() {
     load();
   }, [statusFilter]);
 
-  // Fetch all three counts on mount
+  // Fetch all three counts and workspace on mount
   useEffect(() => {
     async function loadCounts() {
       try {
-        const [openRes, resolvedRes, dismissedRes] = await Promise.all([
+        const [openRes, resolvedRes, dismissedRes, wsRes] = await Promise.all([
           fetch('/api/gaps?status=open'),
           fetch('/api/gaps?status=resolved'),
           fetch('/api/gaps?status=dismissed'),
+          fetch('/api/workspace'),
         ]);
         const openData = await openRes.json();
         const resolvedData = await resolvedRes.json();
         const dismissedData = await dismissedRes.json();
+        const wsData = await wsRes.json();
         setCounts({
           open: (openData.gaps || []).length,
           resolved: (resolvedData.gaps || []).length,
           dismissed: (dismissedData.gaps || []).length,
         });
+        if (wsData.success) {
+          setWorkspace(wsData.workspace);
+        }
       } catch (error) {
         console.error('Failed to load counts:', error);
       }
@@ -83,6 +97,26 @@ export default function GapsPage() {
       }));
     }
     setResolvingGap(null);
+  };
+
+  const handleNewCategory = async (category: string) => {
+    const normalized = category.toLowerCase().trim();
+    if (!normalized || customCategories.includes(normalized)) return;
+
+    const newCategories = [...customCategories, normalized];
+    try {
+      await fetch('/api/workspace', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ custom_categories: newCategories }),
+      });
+      setWorkspace((prev) => ({
+        ...prev,
+        settings: { ...prev?.settings, custom_categories: newCategories },
+      }));
+    } catch (error) {
+      console.error('Failed to save category:', error);
+    }
   };
 
   const statusTabs: { value: GapStatus; label: string; count: number }[] = [
@@ -152,8 +186,10 @@ export default function GapsPage() {
       {resolvingGap && (
         <GapResolveForm
           gap={resolvingGap}
+          categories={customCategories}
           onSave={handleResolveComplete}
           onCancel={() => setResolvingGap(null)}
+          onNewCategory={handleNewCategory}
         />
       )}
     </div>

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Loader2 } from 'lucide-react';
-import { DEFAULT_CATEGORIES } from '@/types/qa';
+import { useState, useEffect, useRef } from 'react';
+import { X, Loader2, ChevronDown } from 'lucide-react';
+import { getMergedCategories, formatCategory } from '@/lib/categories';
 
 interface GapResolveFormProps {
   gap: {
@@ -10,16 +10,56 @@ interface GapResolveFormProps {
     question: string;
     ai_answer: string | null;
   };
+  categories: string[];
   onSave: () => void;
   onCancel: () => void;
+  onNewCategory?: (category: string) => void;
 }
 
-export function GapResolveForm({ gap, onSave, onCancel }: GapResolveFormProps) {
+export function GapResolveForm({ gap, categories, onSave, onCancel, onNewCategory }: GapResolveFormProps) {
   const [question, setQuestion] = useState(gap.question);
   const [answer, setAnswer] = useState(gap.ai_answer || '');
   const [category, setCategory] = useState('general');
+  const [categoryInput, setCategoryInput] = useState('');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const categoryRef = useRef<HTMLDivElement>(null);
+
+  const mergedCategories = getMergedCategories(categories);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (categoryRef.current && !categoryRef.current.contains(e.target as Node)) {
+        setShowCategoryDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredCategories = categoryInput.trim()
+    ? mergedCategories.filter(c => c.includes(categoryInput.toLowerCase().trim()))
+    : mergedCategories;
+
+  const handleSelectCategory = (cat: string) => {
+    setCategory(cat);
+    setCategoryInput('');
+    setShowCategoryDropdown(false);
+  };
+
+  const handleAddNewCategory = () => {
+    const normalized = categoryInput.toLowerCase().trim();
+    if (normalized && !mergedCategories.includes(normalized)) {
+      onNewCategory?.(normalized);
+      setCategory(normalized);
+    } else if (normalized) {
+      setCategory(normalized);
+    }
+    setCategoryInput('');
+    setShowCategoryDropdown(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,21 +149,58 @@ export function GapResolveForm({ gap, onSave, onCancel }: GapResolveFormProps) {
             />
           </div>
 
-          <div>
+          <div ref={categoryRef} className="relative">
             <label className="block text-sm font-medium text-ce-text mb-1">
               Category
             </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-3 py-2 border border-ce-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ce-teal focus:border-transparent"
-            >
-              {DEFAULT_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat.charAt(0).toUpperCase() + cat.slice(1).replace('_', ' ')}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                type="text"
+                value={categoryInput}
+                onChange={(e) => {
+                  setCategoryInput(e.target.value);
+                  setShowCategoryDropdown(true);
+                }}
+                onFocus={() => setShowCategoryDropdown(true)}
+                placeholder={formatCategory(category)}
+                className="w-full px-3 py-2 border border-ce-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ce-teal focus:border-transparent pr-8"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-ce-text-muted"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+            {showCategoryDropdown && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-ce-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {filteredCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => handleSelectCategory(cat)}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${
+                      cat === category ? 'bg-ce-teal/10 text-ce-teal' : 'text-ce-text'
+                    }`}
+                  >
+                    {formatCategory(cat)}
+                  </button>
+                ))}
+                {categoryInput.trim() && !filteredCategories.includes(categoryInput.toLowerCase().trim()) && (
+                  <button
+                    type="button"
+                    onClick={handleAddNewCategory}
+                    className="w-full px-3 py-2 text-left text-sm text-ce-teal hover:bg-gray-50 border-t border-ce-border"
+                  >
+                    + Add &quot;{categoryInput.trim()}&quot;
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="mt-1 text-xs text-ce-text-muted">
+              Current: {formatCategory(category)}
+            </p>
           </div>
 
           {/* Footer */}

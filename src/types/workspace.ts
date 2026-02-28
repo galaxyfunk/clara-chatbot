@@ -32,6 +32,9 @@ export interface WorkspaceSettings {
 
   // Widget
   powered_by_clara: boolean;
+
+  // Knowledge Base
+  custom_categories: string[];
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
@@ -60,4 +63,5 @@ You are a friendly and knowledgeable virtual assistant. Your primary role is to 
   max_suggestion_chips: 3,
   escalation_enabled: true,
   powered_by_clara: true,
+  custom_categories: [],
 };

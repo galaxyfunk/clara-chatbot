@@ -1,20 +1,22 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { generateEmbedding } from '@/lib/embed';
 import { createServerClient } from '@/lib/supabase/server';
-import type { ExtractedQAPair, TranscriptExtractionResult } from '@/types/qa';
+import { DEFAULT_CATEGORIES, type ExtractedQAPair, type TranscriptExtractionResult } from '@/types/qa';
 
 export async function extractQAPairsFromTranscript(
   transcript: string,
-  workspaceId: string
+  workspaceId: string,
+  categories?: string[]
 ): Promise<TranscriptExtractionResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
 
   const client = new Anthropic({ apiKey });
 
+  const systemPrompt = buildExtractionPrompt(categories);
   const extractionResponse = await client.messages.create({
     model: 'claude-sonnet-4-20250514', max_tokens: 16000, temperature: 0.3,
-    system: EXTRACTION_SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: [{ role: 'user', content: `Here is the transcript:\n\n${transcript}` }],
   });
 
@@ -63,7 +65,10 @@ export async function extractQAPairsFromTranscript(
   };
 }
 
-const EXTRACTION_SYSTEM_PROMPT = `You are an expert at extracting question-and-answer pairs from business call transcripts.
+function buildExtractionPrompt(categories?: string[]): string {
+  const categoryList = categories?.length ? categories.join(', ') : DEFAULT_CATEGORIES.join(', ');
+
+  return `You are an expert at extracting question-and-answer pairs from business call transcripts.
 
 Your job:
 1. Read the transcript carefully
@@ -88,7 +93,8 @@ Respond with a JSON array (no markdown fences):
   }
 ]
 
-Categories to use: pricing, process, developers, retention, case_studies, comparisons, compliance, scaling, onboarding, general`;
+Categories to use: ${categoryList}`;
+}
 
 function parseExtractionResponse(raw: string): ExtractedQAPair[] {
   try {

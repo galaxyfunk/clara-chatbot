@@ -95,7 +95,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | Version | Focus | Status |
 |---------|-------|--------|
 | v1.0 | Core Product + Widget + Deploy | **✅ SHIPPED — Feb 23, 2026** |
-| v1.1 | Polish (onboarding wizard, bulk ops, auto-save, live preview) | Next |
+| v1.1 | Polish + Intelligence + Integrations (18 features, 3 sessions) | **IN PROGRESS** |
 | v1.2 | Channel Integrations (Slack, Telegram, WhatsApp) | Future |
 | v1.3 | Analytics + Reporting | Future |
 | Bridge | Insights Bank one-way API push | Future |

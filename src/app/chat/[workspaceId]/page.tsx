@@ -99,10 +99,11 @@ export default function PublicChatPage() {
     chat_icon_url: settings.chat_icon_url,
     max_suggestion_chips: settings.max_suggestion_chips,
     escalation_enabled: settings.escalation_enabled,
-    powered_by_clara: settings.powered_by_clara
+    powered_by_clara: settings.powered_by_clara,
     // These fields aren't used in the public chat, but required by type
     personality_prompt: '',
     confidence_threshold: 0.78,
+    custom_categories: [],
   };
 
   return (

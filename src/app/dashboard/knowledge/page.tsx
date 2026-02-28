@@ -6,7 +6,8 @@ import { QAPairsTable, QAPairsTableSkeleton } from '@/components/knowledge/qa-pa
 import { QAPairForm } from '@/components/knowledge/qa-pair-form';
 import { ImproveDialog } from '@/components/knowledge/improve-dialog';
 import { CSVImportDialog } from '@/components/knowledge/csv-import-dialog';
-import { DEFAULT_CATEGORIES, type QAPair } from '@/types/qa';
+import { type QAPair } from '@/types/qa';
+import { getMergedCategories, formatCategory } from '@/lib/categories';
 
 // Helper to get initial modal state from URL params
 function getInitialModalState() {
@@ -18,9 +19,16 @@ function getInitialModalState() {
   };
 }
 
+interface WorkspaceData {
+  settings?: {
+    display_name?: string;
+    custom_categories?: string[];
+  };
+}
+
 export default function KnowledgePage() {
   const [pairs, setPairs] = useState<QAPair[]>([]);
-  const [workspace, setWorkspace] = useState<{ settings?: { display_name?: string } } | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceData | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(() => getInitialModalState().add);
@@ -30,6 +38,8 @@ export default function KnowledgePage() {
   const [loading, setLoading] = useState(true);
 
   const displayName = workspace?.settings?.display_name || 'Clara';
+  const customCategories = workspace?.settings?.custom_categories || [];
+  const mergedCategories = getMergedCategories(customCategories);
 
   useEffect(() => {
     async function load() {
@@ -146,6 +156,26 @@ export default function KnowledgePage() {
     setIsImportOpen(false);
   };
 
+  const handleNewCategory = async (category: string) => {
+    const normalized = category.toLowerCase().trim();
+    if (!normalized || customCategories.includes(normalized)) return;
+
+    const newCategories = [...customCategories, normalized];
+    try {
+      await fetch('/api/workspace', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ custom_categories: newCategories }),
+      });
+      setWorkspace((prev) => ({
+        ...prev,
+        settings: { ...prev?.settings, custom_categories: newCategories },
+      }));
+    } catch (error) {
+      console.error('Failed to save category:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -211,9 +241,9 @@ export default function KnowledgePage() {
           className="px-4 py-2 border border-ce-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ce-teal focus:border-transparent"
         >
           <option value="all">All Categories</option>
-          {DEFAULT_CATEGORIES.map((cat) => (
+          {mergedCategories.map((cat) => (
             <option key={cat} value={cat}>
-              {cat.charAt(0).toUpperCase() + cat.slice(1).replace('_', ' ')}
+              {formatCategory(cat)}
             </option>
           ))}
         </select>
@@ -234,11 +264,13 @@ export default function KnowledgePage() {
       {(isAddModalOpen || editingPair) && (
         <QAPairForm
           pair={editingPair}
+          categories={customCategories}
           onSave={handleSave}
           onClose={() => {
             setIsAddModalOpen(false);
             setEditingPair(null);
           }}
+          onNewCategory={handleNewCategory}
         />
       )}
 

@@ -341,8 +341,35 @@ src/components/
 ---
 
 ## v1.0 Session 4 — Widget + Landing + Deploy
-**Date:** TBD
+**Date:** February 23, 2026
 **Steps:** 15–18
-**Status:** ⏳ Next
+**Status:** ✅ Complete
 
-*(Entry will be written after session completes)*
+### What Was Built
+
+**Step 15: Public Chat Route**
+- `/chat/[workspaceId]` — Public chat page serving as widget iframe target
+- Loads workspace settings on init, renders chat window with full styling
+
+**Step 16: Widget Script + Embed Tab**
+- `public/widget.js` — Embeddable script that creates floating bubble + iframe
+- Bubble respects `bubble_color` and `bubble_position` from settings
+- Embed tab in settings shows copy-paste snippet
+
+**Step 17: Landing Page**
+- CE-branded landing page at `/`
+- Login CTA routing to `/login`
+
+**Step 18: Deploy**
+- Deployed to Vercel at chatbot.jakevibes.dev
+- Auth configured for production (site URL, redirect URLs)
+- Middleware hardened for Edge runtime
+- E2E flow verified: signup → add Q&A → chat → widget embed
+
+### Deployment Notes
+- `NEXT_PUBLIC_SUPABASE_URL` must include `https://` prefix
+- Middleware updated for Edge runtime compatibility
+- Auth callback working with email/password signup
+
+### Git Commits
+- Widget, landing page, and deployment commits (exact messages in git log)
