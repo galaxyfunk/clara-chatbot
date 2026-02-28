@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createAuthClient } from '@/lib/supabase/auth-server';
 import { improveQAPair } from '@/lib/chat/improve-qa';
 
+export const maxDuration = 30;
+
 export async function POST(request: Request) {
   try {
     // 1. Get authenticated user
