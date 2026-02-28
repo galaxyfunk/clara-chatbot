@@ -48,8 +48,11 @@ export function ImproveDialog({ pair, onAccept, onClose }: ImproveDialogProps) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'improve',
           question: improved.question,
           answer: improved.answer,
+          original_question: pair.question,
+          original_answer: pair.answer,
         }),
       });
       const data = await res.json();

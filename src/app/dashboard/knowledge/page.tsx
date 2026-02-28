@@ -122,12 +122,50 @@ export default function KnowledgePage() {
       setPairs((prev) =>
         prev.map((p) =>
           p.id === improvingPair.id
-            ? { ...p, question: improved.question, answer: improved.answer }
+            ? {
+                ...p,
+                question: improved.question,
+                answer: improved.answer,
+                metadata: {
+                  ...p.metadata,
+                  original_question: improvingPair.question,
+                  original_answer: improvingPair.answer,
+                  improved_at: new Date().toISOString(),
+                },
+              }
             : p
         )
       );
     }
     setImprovingPair(null);
+  };
+
+  const handleRevert = async (pairId: string) => {
+    if (!window.confirm('Revert to original version? The improved version will be discarded.')) return;
+    try {
+      const res = await fetch(`/api/qa-pairs/${pairId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'revert' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.pair) {
+        setPairs((prev) =>
+          prev.map((p) =>
+            p.id === pairId
+              ? {
+                  ...p,
+                  question: data.pair.question,
+                  answer: data.pair.answer,
+                  metadata: data.pair.metadata || {},
+                }
+              : p
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Failed to revert:', error);
+    }
   };
 
   const handleImportComplete = async () => {
@@ -257,6 +295,7 @@ export default function KnowledgePage() {
         onEdit={setEditingPair}
         onImprove={setImprovingPair}
         onDelete={handleDelete}
+        onRevert={handleRevert}
         displayName={displayName}
       />
 

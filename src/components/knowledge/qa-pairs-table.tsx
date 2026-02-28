@@ -1,6 +1,6 @@
 'use client';
 
-import { Pencil, Sparkles, Trash2 } from 'lucide-react';
+import { Pencil, Sparkles, Trash2, Undo2 } from 'lucide-react';
 import type { QAPair } from '@/types/qa';
 
 interface QAPairsTableProps {
@@ -10,7 +10,13 @@ interface QAPairsTableProps {
   onEdit: (pair: QAPair) => void;
   onImprove: (pair: QAPair) => void;
   onDelete: (pairId: string) => void;
+  onRevert?: (pairId: string) => void;
   displayName: string;
+}
+
+function hasOriginal(pair: QAPair): boolean {
+  const metadata = pair.metadata as Record<string, unknown> | undefined;
+  return !!(metadata?.original_question && metadata?.original_answer);
 }
 
 const categoryColors: Record<string, string> = {
@@ -47,6 +53,7 @@ export function QAPairsTable({
   onEdit,
   onImprove,
   onDelete,
+  onRevert,
   displayName,
 }: QAPairsTableProps) {
   // Filter pairs
@@ -147,6 +154,15 @@ export function QAPairsTable({
                     >
                       <Sparkles className="w-4 h-4" />
                     </button>
+                    {hasOriginal(pair) && onRevert && (
+                      <button
+                        onClick={() => onRevert(pair.id)}
+                        className="p-2 text-ce-text-muted hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                        title="Revert to original"
+                      >
+                        <Undo2 className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => onDelete(pair.id)}
                       className="p-2 text-ce-text-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -183,6 +199,14 @@ export function QAPairsTable({
                 >
                   <Sparkles className="w-4 h-4" />
                 </button>
+                {hasOriginal(pair) && onRevert && (
+                  <button
+                    onClick={() => onRevert(pair.id)}
+                    className="p-1.5 text-ce-text-muted hover:text-orange-600 rounded transition-colors"
+                  >
+                    <Undo2 className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={() => onDelete(pair.id)}
                   className="p-1.5 text-ce-text-muted hover:text-red-600 rounded transition-colors"
