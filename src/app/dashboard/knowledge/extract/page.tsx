@@ -2,15 +2,19 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, FileText, Loader2, CheckCircle } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, Loader2, CheckCircle } from 'lucide-react';
 import { ExtractionResults } from '@/components/knowledge/extraction-results';
+import { FileUploadZone } from '@/components/knowledge/file-upload-zone';
 import type { ExtractedQAPair } from '@/types/qa';
 
 type Step = 'input' | 'extracting' | 'review' | 'saving' | 'done';
+type InputMode = 'paste' | 'upload';
 
 export default function TranscriptExtractPage() {
   const [step, setStep] = useState<Step>('input');
+  const [inputMode, setInputMode] = useState<InputMode>('paste');
   const [transcript, setTranscript] = useState('');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [pairs, setPairs] = useState<ExtractedQAPair[]>([]);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [improvingIndex, setImprovingIndex] = useState<number | null>(null);
@@ -18,17 +22,34 @@ export default function TranscriptExtractPage() {
   const [savedCount, setSavedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
+  const canExtract = inputMode === 'paste'
+    ? transcript.length >= 100 && transcript.length <= 100000
+    : uploadedFile !== null;
+
   const handleExtract = async () => {
-    if (transcript.length < 100) return;
+    if (!canExtract) return;
     setStep('extracting');
     setError(null);
 
     try {
-      const res = await fetch('/api/qa-pairs/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: transcript }),
-      });
+      let res: Response;
+
+      if (inputMode === 'paste') {
+        res = await fetch('/api/qa-pairs/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: transcript }),
+        });
+      } else {
+        // File upload mode - use multipart form
+        const formData = new FormData();
+        formData.append('file', uploadedFile!);
+        res = await fetch('/api/qa-pairs/extract', {
+          method: 'POST',
+          body: formData,
+        });
+      }
+
       const data = await res.json();
 
       if (!res.ok) {
@@ -140,7 +161,9 @@ export default function TranscriptExtractPage() {
 
   const handleReset = () => {
     setStep('input');
+    setInputMode('paste');
     setTranscript('');
+    setUploadedFile(null);
     setPairs([]);
     setSelectedIndices(new Set());
     setStats({ totalFound: 0, newCount: 0, overlapCount: 0 });
@@ -168,41 +191,87 @@ export default function TranscriptExtractPage() {
       {/* Step: Input */}
       {step === 'input' && (
         <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
-          <div className="flex items-center gap-2 text-ce-teal mb-4">
-            <FileText className="w-5 h-5" />
-            <span className="text-sm font-medium">Paste your transcript</span>
-          </div>
-
-          <textarea
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            rows={12}
-            className="w-full px-4 py-3 border border-ce-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ce-teal focus:border-transparent resize-none"
-            placeholder="Paste a call transcript, meeting notes, or FAQ content. Clara will extract Q&A pairs automatically."
-          />
-
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-ce-text-muted">
-              {transcript.length.toLocaleString()} characters
-              {transcript.length < 100 && transcript.length > 0 && (
-                <span className="text-yellow-600 ml-2">
-                  (minimum 100 characters)
-                </span>
-              )}
-            </span>
+          {/* Tab buttons */}
+          <div className="flex border-b border-ce-border">
             <button
-              onClick={handleExtract}
-              disabled={transcript.length < 100 || transcript.length > 100000}
-              className="px-4 py-2 bg-ce-navy text-white text-sm font-medium rounded-lg hover:bg-ce-navy/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setInputMode('paste')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                inputMode === 'paste'
+                  ? 'border-ce-teal text-ce-teal'
+                  : 'border-transparent text-ce-text-muted hover:text-ce-text'
+              }`}
             >
-              Extract Q&A Pairs
+              <FileText className="w-4 h-4" />
+              Paste Text
+            </button>
+            <button
+              onClick={() => setInputMode('upload')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                inputMode === 'upload'
+                  ? 'border-ce-teal text-ce-teal'
+                  : 'border-transparent text-ce-text-muted hover:text-ce-text'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              Upload File
             </button>
           </div>
 
-          {transcript.length > 100000 && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              Text too long (max 100,000 characters)
-            </div>
+          {/* Paste text mode */}
+          {inputMode === 'paste' && (
+            <>
+              <textarea
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                rows={12}
+                className="w-full px-4 py-3 border border-ce-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ce-teal focus:border-transparent resize-none"
+                placeholder="Paste a call transcript, meeting notes, or FAQ content. Clara will extract Q&A pairs automatically."
+              />
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-ce-text-muted">
+                  {transcript.length.toLocaleString()} characters
+                  {transcript.length < 100 && transcript.length > 0 && (
+                    <span className="text-yellow-600 ml-2">
+                      (minimum 100 characters)
+                    </span>
+                  )}
+                </span>
+                <button
+                  onClick={handleExtract}
+                  disabled={!canExtract}
+                  className="px-4 py-2 bg-ce-navy text-white text-sm font-medium rounded-lg hover:bg-ce-navy/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Extract Q&A Pairs
+                </button>
+              </div>
+
+              {transcript.length > 100000 && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  Text too long (max 100,000 characters)
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Upload file mode */}
+          {inputMode === 'upload' && (
+            <>
+              <FileUploadZone
+                onFileSelect={setUploadedFile}
+                disabled={false}
+              />
+
+              <div className="flex items-center justify-end">
+                <button
+                  onClick={handleExtract}
+                  disabled={!canExtract}
+                  className="px-4 py-2 bg-ce-navy text-white text-sm font-medium rounded-lg hover:bg-ce-navy/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Extract Q&A Pairs
+                </button>
+              </div>
+            </>
           )}
 
           {error && (

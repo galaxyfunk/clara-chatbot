@@ -13,9 +13,11 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.97.0",
     "lucide-react": "^0.575.0",
+    "mammoth": "^1.11.0",
     "next": "16.1.6",
     "openai": "^6.22.0",
     "papaparse": "^5.5.3",
+    "pdf-parse": "^2.4.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "uuid": "^13.0.0"
