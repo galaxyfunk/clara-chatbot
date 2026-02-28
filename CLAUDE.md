@@ -8,6 +8,8 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 **Tagline:** "Your AI-Powered Chatbot, Built in Minutes"
 
 ## Current Version
+**v1.1: IN PROGRESS** — Session 1 of 3 complete (Feb 28, 2026)
+
 **v1.0: DEPLOYED** — Live at https://chatbot.jakevibes.dev (Feb 23, 2026)
 - Dashboard app at chatbot.jakevibes.dev
 - Auth, Q&A management, chat engine, gap detection, suggestion chips, smart escalation
@@ -54,6 +56,8 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | /api/qa-pairs/extract | POST | Auth | Transcript → Q&A via Claude |
 | /api/qa-pairs/improve | POST | Auth | AI improve single pair |
 | /api/qa-pairs/bulk-save | POST | Auth | Save extracted/imported pairs |
+| /api/qa-pairs/bulk-action | POST | Auth | Bulk delete/activate/categorize pairs |
+| /api/qa-pairs/test-match | POST | Auth | Test question similarity against knowledge base |
 | /api/api-keys | GET/POST | Auth | List/add encrypted keys |
 | /api/api-keys/[id] | PATCH/DELETE | Auth | Update/delete key |
 | /api/workspace | GET/PATCH | Auth | Read/update workspace settings |
@@ -90,12 +94,15 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 - Q&A dedup check before creation (> 0.95 similarity)
 - Gap dedup before insertion (same question check)
 - Dynamic display name — never hardcode "Clara", use settings.display_name
+- Category normalization — lowercase + trim via getMergedCategories() helper
+- Bulk operations — verify workspace ownership, validate categories, single atomic UPDATE
+- Iframe detection — window.self !== window.top, postMessage for resize
 
 ## Version Roadmap
 | Version | Focus | Status |
 |---------|-------|--------|
 | v1.0 | Core Product + Widget + Deploy | **✅ SHIPPED — Feb 23, 2026** |
-| v1.1 | Polish + Intelligence + Integrations (18 features, 3 sessions) | **IN PROGRESS** |
+| v1.1 | Polish + Intelligence + Integrations (18 features, 3 sessions) | **IN PROGRESS — 1/3 sessions complete** |
 | v1.2 | Channel Integrations (Slack, Telegram, WhatsApp) | Future |
 | v1.3 | Analytics + Reporting | Future |
 | Bridge | Insights Bank one-way API push | Future |
@@ -107,6 +114,25 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | 2 | All API Routes | 6–9 | Tue | ✅ COMPLETE |
 | 3 | All Dashboard UI | 10–14 | Wed–Thu | ✅ COMPLETE |
 | 4 | Widget + Landing + Deploy | 15–18 | Thu–Fri | ✅ COMPLETE |
+
+## v1.1 Build Sessions
+| Session | Focus | Features | Status |
+|---------|-------|----------|--------|
+| 5 (v1.1-1) | Quick Wins + Infrastructure | 10 features | **✅ COMPLETE — Feb 28, 2026** |
+| 6 (v1.1-2) | Deeper Intelligence | TBD | Pending |
+| 7 (v1.1-3) | Integrations | TBD | Pending |
+
+## v1.1 Session 1 Features (Complete)
+1. Deploy fixes — remotePatterns + maxDuration
+2. Sliding window bump — 10 → 20 messages
+3. Powered by Clara toggle in settings
+4. Custom categories with combo input + extraction fix
+5. Gap export as CSV
+6. Improve with persistent revert
+7. Session search across messages
+8. Iframe-responsive public chat page
+9. Bulk Q&A operations (delete/activate/categorize)
+10. Test-this-pair similarity check
 
 ## Deployment Info
 - **Production URL:** https://chatbot.jakevibes.dev
