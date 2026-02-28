@@ -1,5 +1,4 @@
 import mammoth from 'mammoth';
-import pdf from 'pdf-parse';
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
 
@@ -76,6 +75,7 @@ async function parseDocx(buffer: Buffer): Promise<ParseResult> {
  */
 async function parsePdf(buffer: Buffer): Promise<ParseResult> {
   try {
+    const pdf = (await import('pdf-parse')).default;
     const data = await pdf(buffer);
     const text = data.text.trim();
 
