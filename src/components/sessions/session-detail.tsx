@@ -2,11 +2,18 @@
 
 import { useEffect, useRef } from 'react';
 import { ExternalLink, AlertCircle } from 'lucide-react';
-import type { ChatMessage } from '@/types/chat';
+import { IntentCard } from './intent-card';
+import type { ChatMessage, ConversationSummary } from '@/types/chat';
+
+interface SessionMetadata {
+  summary?: ConversationSummary;
+  summarized_at?: string;
+}
 
 interface Session {
   id: string;
   messages: ChatMessage[];
+  metadata?: SessionMetadata;
   escalated: boolean;
   created_at: string;
 }
@@ -27,10 +34,12 @@ export function SessionDetail({ session }: SessionDetailProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [session.id]);
 
+  const summary = session.metadata?.summary;
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b border-ce-border bg-white">
+      <div className="flex-shrink-0 p-4 border-b border-ce-border bg-white space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm text-ce-text-muted">
             {new Date(session.created_at).toLocaleDateString([], {
@@ -45,6 +54,9 @@ export function SessionDetail({ session }: SessionDetailProps) {
             </span>
           )}
         </div>
+
+        {/* Visitor Intent Card */}
+        {summary && <IntentCard summary={summary} />}
       </div>
 
       {/* Messages */}

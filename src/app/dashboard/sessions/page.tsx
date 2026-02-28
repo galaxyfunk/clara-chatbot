@@ -4,12 +4,18 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, Search, X, Loader2 } from 'lucide-react';
 import { SessionList, SessionListSkeleton } from '@/components/sessions/session-list';
 import { SessionDetail, SessionDetailEmpty } from '@/components/sessions/session-detail';
-import type { ChatMessage } from '@/types/chat';
+import type { ChatMessage, ConversationSummary } from '@/types/chat';
+
+interface SessionMetadata {
+  summary?: ConversationSummary;
+  summarized_at?: string;
+}
 
 interface Session {
   id: string;
   session_token: string;
   messages: ChatMessage[];
+  metadata?: SessionMetadata;
   escalated: boolean;
   escalated_at: string | null;
   created_at: string;

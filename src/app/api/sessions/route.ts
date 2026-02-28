@@ -28,9 +28,9 @@ export async function GET(request: Request) {
     const searchParam = url.searchParams.get('search')?.trim();
 
     // 4. Get sessions with optional search
-    let query = supabase
+    const query = supabase
       .from('chat_sessions')
-      .select('id, session_token, messages, escalated, escalated_at, created_at, updated_at')
+      .select('id, session_token, messages, metadata, escalated, escalated_at, created_at, updated_at')
       .eq('workspace_id', workspaceId)
       .order('updated_at', { ascending: false })
       .limit(50); // Cap for performance

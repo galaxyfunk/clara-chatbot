@@ -1,11 +1,19 @@
 'use client';
 
 import { MessageSquare, AlertTriangle } from 'lucide-react';
+import { IntentTags } from './intent-card';
+import type { ConversationSummary } from '@/types/chat';
+
+interface SessionMetadata {
+  summary?: ConversationSummary;
+  summarized_at?: string;
+}
 
 interface Session {
   id: string;
   session_token: string;
   messages: unknown[];
+  metadata?: SessionMetadata;
   escalated: boolean;
   escalated_at: string | null;
   created_at: string;
@@ -49,34 +57,49 @@ export function SessionList({ sessions, selectedId, onSelect }: SessionListProps
 
   return (
     <div className="divide-y divide-ce-border">
-      {sessions.map((session) => (
-        <button
-          key={session.id}
-          onClick={() => onSelect(session.id)}
-          className={`w-full text-left px-4 py-3 hover:bg-ce-muted transition-colors ${
-            selectedId === session.id
-              ? 'bg-ce-muted border-l-2 border-ce-teal'
-              : ''
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-ce-text">
-              {formatDateTime(session.created_at)}
-            </span>
-            <div className="flex items-center gap-2">
-              {session.escalated && (
-                <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  Escalated
-                </span>
-              )}
-              <span className="text-xs text-ce-text-muted">
-                {session.message_count} msgs
+      {sessions.map((session) => {
+        const summary = session.metadata?.summary;
+        return (
+          <button
+            key={session.id}
+            onClick={() => onSelect(session.id)}
+            className={`w-full text-left px-4 py-3 hover:bg-ce-muted transition-colors ${
+              selectedId === session.id
+                ? 'bg-ce-muted border-l-2 border-ce-teal'
+                : ''
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-medium text-ce-text">
+                {summary?.visitor_name || formatDateTime(session.created_at)}
               </span>
+              <div className="flex items-center gap-2">
+                {session.escalated && (
+                  <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    Escalated
+                  </span>
+                )}
+                <span className="text-xs text-ce-text-muted">
+                  {session.message_count} msgs
+                </span>
+              </div>
             </div>
-          </div>
-        </button>
-      ))}
+            {/* Intent tags from summary */}
+            {summary?.intent_tags && summary.intent_tags.length > 0 && (
+              <div className="mt-1">
+                <IntentTags tags={summary.intent_tags} />
+              </div>
+            )}
+            {/* Show date if we used visitor name above */}
+            {summary?.visitor_name && (
+              <p className="text-xs text-ce-text-muted mt-1">
+                {formatDateTime(session.created_at)}
+              </p>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
