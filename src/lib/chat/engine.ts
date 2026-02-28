@@ -223,8 +223,8 @@ ${settings.escalation_enabled && settings.booking_url ? `When escalation_offered
 
   const messages: LLMMessage[] = [{ role: 'system', content: systemPrompt }];
 
-  // Sliding window: last 10 messages
-  const recentHistory = previousMessages.slice(-10);
+  // Sliding window: last 20 messages
+  const recentHistory = previousMessages.slice(-20);
   for (const msg of recentHistory) {
     messages.push({ role: msg.role, content: msg.content });
   }
