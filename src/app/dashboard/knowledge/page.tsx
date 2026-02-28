@@ -6,6 +6,7 @@ import { QAPairsTable, QAPairsTableSkeleton } from '@/components/knowledge/qa-pa
 import { QAPairForm } from '@/components/knowledge/qa-pair-form';
 import { ImproveDialog } from '@/components/knowledge/improve-dialog';
 import { CSVImportDialog } from '@/components/knowledge/csv-import-dialog';
+import { BulkActionBar } from '@/components/knowledge/bulk-action-bar';
 import { type QAPair } from '@/types/qa';
 import { getMergedCategories, formatCategory } from '@/lib/categories';
 
@@ -36,6 +37,7 @@ export default function KnowledgePage() {
   const [improvingPair, setImprovingPair] = useState<QAPair | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(() => getInitialModalState().import);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const displayName = workspace?.settings?.display_name || 'Clara';
   const customCategories = workspace?.settings?.custom_categories || [];
@@ -214,6 +216,78 @@ export default function KnowledgePage() {
     }
   };
 
+  // Bulk selection handlers
+  const handleToggleSelect = (pairId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(pairId)) {
+        next.delete(pairId);
+      } else {
+        next.add(pairId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = (ids: string[]) => {
+    setSelectedIds((prev) => {
+      const allSelected = ids.every((id) => prev.has(id));
+      if (allSelected) {
+        // Deselect all filtered
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      } else {
+        // Select all filtered
+        return new Set([...prev, ...ids]);
+      }
+    });
+  };
+
+  const handleBulkAction = async (action: string, category?: string) => {
+    if (selectedIds.size === 0) return;
+
+    try {
+      const res = await fetch('/api/qa-pairs/bulk-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: Array.from(selectedIds),
+          action,
+          category,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        // Refresh pairs
+        const pairsRes = await fetch('/api/qa-pairs');
+        const pairsData = await pairsRes.json();
+        if (pairsData.success) {
+          const mappedPairs = (pairsData.pairs || []).map((p: Record<string, unknown>) => ({
+            id: p.id,
+            workspaceId: p.workspace_id,
+            question: p.question,
+            answer: p.answer,
+            category: p.category,
+            source: p.source,
+            isActive: p.is_active,
+            metadata: p.metadata,
+            createdAt: p.created_at,
+            updatedAt: p.updated_at,
+          }));
+          setPairs(mappedPairs);
+        }
+        setSelectedIds(new Set());
+      }
+    } catch (error) {
+      console.error('Failed to execute bulk action:', error);
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -297,6 +371,17 @@ export default function KnowledgePage() {
         onDelete={handleDelete}
         onRevert={handleRevert}
         displayName={displayName}
+        selectedIds={selectedIds}
+        onToggleSelect={handleToggleSelect}
+        onToggleSelectAll={handleToggleSelectAll}
+      />
+
+      {/* Bulk Action Bar */}
+      <BulkActionBar
+        selectedCount={selectedIds.size}
+        customCategories={customCategories}
+        onAction={handleBulkAction}
+        onClear={handleClearSelection}
       />
 
       {/* Modals */}

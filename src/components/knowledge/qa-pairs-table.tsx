@@ -12,6 +12,9 @@ interface QAPairsTableProps {
   onDelete: (pairId: string) => void;
   onRevert?: (pairId: string) => void;
   displayName: string;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (pairId: string) => void;
+  onToggleSelectAll?: (ids: string[]) => void;
 }
 
 function hasOriginal(pair: QAPair): boolean {
@@ -55,6 +58,9 @@ export function QAPairsTable({
   onDelete,
   onRevert,
   displayName,
+  selectedIds = new Set(),
+  onToggleSelect,
+  onToggleSelectAll,
 }: QAPairsTableProps) {
   // Filter pairs
   const filteredPairs = pairs.filter((pair) => {
@@ -87,6 +93,10 @@ export function QAPairsTable({
     );
   }
 
+  const filteredIds = filteredPairs.map(p => p.id);
+  const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
+  const someSelected = filteredIds.some(id => selectedIds.has(id));
+
   return (
     <>
       {/* Desktop Table */}
@@ -94,6 +104,17 @@ export function QAPairsTable({
         <table className="w-full">
           <thead className="bg-ce-muted">
             <tr>
+              {onToggleSelectAll && (
+                <th className="px-4 py-3 w-12">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                    onChange={() => onToggleSelectAll(filteredIds)}
+                    className="w-4 h-4 rounded border-ce-border text-ce-teal focus:ring-ce-teal"
+                  />
+                </th>
+              )}
               <th className="px-4 py-3 text-left text-xs font-medium text-ce-text-muted uppercase">
                 Question
               </th>
@@ -113,7 +134,17 @@ export function QAPairsTable({
           </thead>
           <tbody className="divide-y divide-ce-border">
             {filteredPairs.map((pair) => (
-              <tr key={pair.id} className="hover:bg-ce-muted/50">
+              <tr key={pair.id} className={`hover:bg-ce-muted/50 ${selectedIds.has(pair.id) ? 'bg-ce-teal/5' : ''}`}>
+                {onToggleSelect && (
+                  <td className="px-4 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(pair.id)}
+                      onChange={() => onToggleSelect(pair.id)}
+                      className="w-4 h-4 rounded border-ce-border text-ce-teal focus:ring-ce-teal"
+                    />
+                  </td>
+                )}
                 <td className="px-4 py-4 text-sm text-ce-text max-w-xs">
                   {truncateText(pair.question, 60)}
                 </td>
