@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createAuthClient } from '@/lib/supabase/auth-server';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
+import { autoResolveGaps } from '@/lib/chat/auto-resolve-gaps';
 
 export const maxDuration = 120;
 
@@ -84,6 +85,17 @@ export async function POST(request: Request) {
         const errMsg = e instanceof Error ? e.message : 'Unknown error';
         errors.push(`Error processing "${question.substring(0, 50)}...": ${errMsg}`);
       }
+    }
+
+    // Auto-resolve gaps in the background after response is sent
+    if (imported > 0) {
+      after(async () => {
+        try {
+          await autoResolveGaps(workspaceId);
+        } catch {
+          // Silently fail - this is background work
+        }
+      });
     }
 
     return NextResponse.json({ success: true, imported, errors });
