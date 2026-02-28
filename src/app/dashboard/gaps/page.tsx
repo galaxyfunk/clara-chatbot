@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Download } from 'lucide-react';
 import { GapCard, GapCardSkeleton, type Gap } from '@/components/gaps/gap-card';
 import { GapResolveForm } from '@/components/gaps/gap-resolve-form';
 
@@ -119,6 +120,28 @@ export default function GapsPage() {
     }
   };
 
+  const exportGapsToCSV = () => {
+    if (gaps.length === 0) return;
+
+    const headers = ['Question', 'AI Answer', 'Similarity Score', 'Status', 'Created At'];
+    const rows = gaps.map(g => [
+      `"${g.question.replace(/"/g, '""')}"`,
+      `"${(g.ai_answer || '').replace(/"/g, '""')}"`,
+      g.similarity_score?.toFixed(3) || '',
+      g.status,
+      g.created_at,
+    ]);
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gaps-export-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const statusTabs: { value: GapStatus; label: string; count: number }[] = [
     { value: 'open', label: 'Open', count: counts.open },
     { value: 'resolved', label: 'Resolved', count: counts.resolved },
@@ -134,11 +157,22 @@ export default function GapsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-ce-text">Gap Review</h1>
-        <p className="mt-1 text-sm text-ce-text-muted">
-          Review unanswered questions and add them to your knowledge base
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-ce-text">Gap Review</h1>
+          <p className="mt-1 text-sm text-ce-text-muted">
+            Review unanswered questions and add them to your knowledge base
+          </p>
+        </div>
+        {gaps.length > 0 && (
+          <button
+            onClick={exportGapsToCSV}
+            className="px-4 py-2 text-sm font-medium text-ce-text border border-ce-border rounded-lg hover:bg-ce-muted transition-colors flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+        )}
       </div>
 
       {/* Status tabs */}
