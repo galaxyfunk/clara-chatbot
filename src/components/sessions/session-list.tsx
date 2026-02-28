@@ -1,7 +1,7 @@
 'use client';
 
 import { MessageSquare, AlertTriangle } from 'lucide-react';
-import { IntentTags } from './intent-card';
+import { SummaryBadges } from './intent-card';
 import type { ConversationSummary } from '@/types/chat';
 
 interface SessionMetadata {
@@ -71,7 +71,7 @@ export function SessionList({ sessions, selectedId, onSelect }: SessionListProps
           >
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm font-medium text-ce-text">
-                {summary?.visitor_name || formatDateTime(session.created_at)}
+                {summary?.contact_info?.name || formatDateTime(session.created_at)}
               </span>
               <div className="flex items-center gap-2">
                 {session.escalated && (
@@ -85,14 +85,14 @@ export function SessionList({ sessions, selectedId, onSelect }: SessionListProps
                 </span>
               </div>
             </div>
-            {/* Intent tags from summary */}
-            {summary?.intent_tags && summary.intent_tags.length > 0 && (
+            {/* Summary badges (intent, sentiment, buying stage) */}
+            {summary && (
               <div className="mt-1">
-                <IntentTags tags={summary.intent_tags} />
+                <SummaryBadges summary={summary} />
               </div>
             )}
             {/* Show date if we used visitor name above */}
-            {summary?.visitor_name && (
+            {summary?.contact_info?.name && (
               <p className="text-xs text-ce-text-muted mt-1">
                 {formatDateTime(session.created_at)}
               </p>

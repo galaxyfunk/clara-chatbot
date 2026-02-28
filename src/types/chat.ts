@@ -44,9 +44,16 @@ export interface ChatResponse {
 }
 
 export interface ConversationSummary {
-  visitor_name: string | null;
-  intent_tags: string[];
   summary: string;
-  extracted_facts: string[];
-  next_steps: string[];
+  visitor_intent: string;
+  topics_discussed: string[];
+  sentiment: 'positive' | 'neutral' | 'negative';
+  buying_stage: 'awareness' | 'consideration' | 'decision' | 'unknown';
+  contact_info: {
+    name: string | null;
+    email: string | null;
+    company: string | null;
+  };
+  action_items: string[];
+  generated_at: string;
 }

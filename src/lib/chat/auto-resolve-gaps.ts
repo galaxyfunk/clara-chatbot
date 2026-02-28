@@ -1,7 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
-
-const AUTO_RESOLVE_THRESHOLD = 0.85;
+import { DEFAULT_WORKSPACE_SETTINGS, type WorkspaceSettings } from '@/types/workspace';
 
 interface AutoResolveResult {
   checked: number;
@@ -11,7 +10,7 @@ interface AutoResolveResult {
 
 /**
  * Auto-resolve open gaps by matching against existing Q&A pairs.
- * Gaps with > 0.85 similarity to a Q&A pair are marked as resolved.
+ * Uses the workspace's confidence_threshold for matching.
  * This runs in the background after bulk Q&A imports.
  */
 export async function autoResolveGaps(workspaceId: string): Promise<AutoResolveResult> {
@@ -19,7 +18,22 @@ export async function autoResolveGaps(workspaceId: string): Promise<AutoResolveR
   const result: AutoResolveResult = { checked: 0, resolved: 0, errors: [] };
 
   try {
-    // 1. Get all open gaps for this workspace
+    // 1. Get workspace settings for confidence threshold
+    const { data: workspace, error: wsError } = await supabase
+      .from('workspaces')
+      .select('settings')
+      .eq('id', workspaceId)
+      .single();
+
+    if (wsError || !workspace) {
+      result.errors.push(`Failed to fetch workspace: ${wsError?.message || 'Not found'}`);
+      return result;
+    }
+
+    const settings = { ...DEFAULT_WORKSPACE_SETTINGS, ...workspace.settings } as WorkspaceSettings;
+    const threshold = settings.confidence_threshold;
+
+    // 2. Get all open gaps for this workspace
     const { data: gaps, error: gapsError } = await supabase
       .from('qa_gaps')
       .select('id, question')
@@ -35,7 +49,7 @@ export async function autoResolveGaps(workspaceId: string): Promise<AutoResolveR
       return result;
     }
 
-    // 2. Process each gap sequentially (to avoid rate limits on embedding API)
+    // 3. Process each gap sequentially (to avoid rate limits on embedding API)
     for (const gap of gaps) {
       result.checked++;
 
@@ -43,11 +57,11 @@ export async function autoResolveGaps(workspaceId: string): Promise<AutoResolveR
         // Generate embedding for gap question
         const embedding = await generateEmbedding(gap.question);
 
-        // Search for matching Q&A pairs
+        // Search for matching Q&A pairs using workspace threshold
         const { data: matches, error: searchError } = await supabase.rpc('search_qa_pairs', {
           p_workspace_id: workspaceId,
           query_embedding: embedding,
-          match_threshold: AUTO_RESOLVE_THRESHOLD,
+          match_threshold: threshold,
           match_count: 1,
         });
 
@@ -57,7 +71,7 @@ export async function autoResolveGaps(workspaceId: string): Promise<AutoResolveR
         }
 
         // If we found a match above threshold, resolve the gap
-        if (matches && matches.length > 0 && matches[0].similarity >= AUTO_RESOLVE_THRESHOLD) {
+        if (matches && matches.length > 0 && matches[0].similarity >= threshold) {
           const matchedPair = matches[0];
 
           const { error: updateError } = await supabase
@@ -65,7 +79,6 @@ export async function autoResolveGaps(workspaceId: string): Promise<AutoResolveR
             .update({
               status: 'resolved',
               resolved_qa_id: matchedPair.id,
-              resolution_type: 'auto_matched',
             })
             .eq('id', gap.id);
 

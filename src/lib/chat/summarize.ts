@@ -3,12 +3,14 @@ import type { ChatMessage, ConversationSummary } from '@/types/chat';
 
 const SUMMARIZE_PROMPT = `You are analyzing a customer support conversation. Extract structured information from the chat.
 
-Return a JSON object with these fields:
-- visitor_name: The visitor's name if mentioned, or null
-- intent_tags: Array of 1-3 tags describing what the visitor wanted (e.g., "pricing_inquiry", "technical_support", "demo_request", "general_question", "complaint", "feature_request")
+Return a JSON object with these exact fields:
 - summary: A 1-2 sentence summary of what the conversation was about
-- extracted_facts: Array of key facts learned about the visitor (e.g., company name, industry, use case, budget)
-- next_steps: Array of follow-up actions if any were mentioned
+- visitor_intent: A short phrase describing the visitor's primary intent (e.g., "pricing inquiry", "technical support", "demo request")
+- topics_discussed: Array of topics covered in the conversation
+- sentiment: One of "positive", "neutral", or "negative" based on the visitor's tone
+- buying_stage: One of "awareness", "consideration", "decision", or "unknown"
+- contact_info: Object with { name: string|null, email: string|null, company: string|null }
+- action_items: Array of follow-up actions if any were mentioned
 
 Respond ONLY with valid JSON, no markdown or explanation.`;
 
@@ -54,13 +56,35 @@ export async function summarizeConversation(messages: ChatMessage[]): Promise<Su
       return { success: false, error: 'Failed to parse summary response' };
     }
 
-    // Validate required fields
+    // Parse contact_info object
+    const contactInfo = parsed.contact_info as Record<string, unknown> | undefined;
+
+    // Validate sentiment
+    const validSentiments = ['positive', 'neutral', 'negative'] as const;
+    const sentiment = validSentiments.includes(parsed.sentiment as typeof validSentiments[number])
+      ? (parsed.sentiment as 'positive' | 'neutral' | 'negative')
+      : 'neutral';
+
+    // Validate buying_stage
+    const validStages = ['awareness', 'consideration', 'decision', 'unknown'] as const;
+    const buyingStage = validStages.includes(parsed.buying_stage as typeof validStages[number])
+      ? (parsed.buying_stage as 'awareness' | 'consideration' | 'decision' | 'unknown')
+      : 'unknown';
+
+    // Build validated summary object
     const summary: ConversationSummary = {
-      visitor_name: typeof parsed.visitor_name === 'string' ? parsed.visitor_name : null,
-      intent_tags: Array.isArray(parsed.intent_tags) ? parsed.intent_tags : [],
       summary: typeof parsed.summary === 'string' ? parsed.summary : '',
-      extracted_facts: Array.isArray(parsed.extracted_facts) ? parsed.extracted_facts : [],
-      next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps : [],
+      visitor_intent: typeof parsed.visitor_intent === 'string' ? parsed.visitor_intent : '',
+      topics_discussed: Array.isArray(parsed.topics_discussed) ? parsed.topics_discussed : [],
+      sentiment,
+      buying_stage: buyingStage,
+      contact_info: {
+        name: typeof contactInfo?.name === 'string' ? contactInfo.name : null,
+        email: typeof contactInfo?.email === 'string' ? contactInfo.email : null,
+        company: typeof contactInfo?.company === 'string' ? contactInfo.company : null,
+      },
+      action_items: Array.isArray(parsed.action_items) ? parsed.action_items : [],
+      generated_at: new Date().toISOString(),
     };
 
     return { success: true, summary };
