@@ -1,6 +1,6 @@
 'use client';
 
-import { Pencil, Sparkles, Trash2, Undo2 } from 'lucide-react';
+import { Pencil, Sparkles, Trash2, Undo2, FlaskConical } from 'lucide-react';
 import type { QAPair } from '@/types/qa';
 
 interface QAPairsTableProps {
@@ -11,6 +11,7 @@ interface QAPairsTableProps {
   onImprove: (pair: QAPair) => void;
   onDelete: (pairId: string) => void;
   onRevert?: (pairId: string) => void;
+  onTest?: (pair: QAPair) => void;
   displayName: string;
   selectedIds?: Set<string>;
   onToggleSelect?: (pairId: string) => void;
@@ -57,6 +58,7 @@ export function QAPairsTable({
   onImprove,
   onDelete,
   onRevert,
+  onTest,
   displayName,
   selectedIds = new Set(),
   onToggleSelect,
@@ -185,6 +187,15 @@ export function QAPairsTable({
                     >
                       <Sparkles className="w-4 h-4" />
                     </button>
+                    {onTest && (
+                      <button
+                        onClick={() => onTest(pair)}
+                        className="p-2 text-ce-text-muted hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                        title="Test match"
+                      >
+                        <FlaskConical className="w-4 h-4" />
+                      </button>
+                    )}
                     {hasOriginal(pair) && onRevert && (
                       <button
                         onClick={() => onRevert(pair.id)}
@@ -230,6 +241,14 @@ export function QAPairsTable({
                 >
                   <Sparkles className="w-4 h-4" />
                 </button>
+                {onTest && (
+                  <button
+                    onClick={() => onTest(pair)}
+                    className="p-1.5 text-ce-text-muted hover:text-purple-600 rounded transition-colors"
+                  >
+                    <FlaskConical className="w-4 h-4" />
+                  </button>
+                )}
                 {hasOriginal(pair) && onRevert && (
                   <button
                     onClick={() => onRevert(pair.id)}

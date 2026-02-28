@@ -7,6 +7,7 @@ import { QAPairForm } from '@/components/knowledge/qa-pair-form';
 import { ImproveDialog } from '@/components/knowledge/improve-dialog';
 import { CSVImportDialog } from '@/components/knowledge/csv-import-dialog';
 import { BulkActionBar } from '@/components/knowledge/bulk-action-bar';
+import { TestMatchDialog } from '@/components/knowledge/test-match-dialog';
 import { type QAPair } from '@/types/qa';
 import { getMergedCategories, formatCategory } from '@/lib/categories';
 
@@ -36,6 +37,7 @@ export default function KnowledgePage() {
   const [editingPair, setEditingPair] = useState<QAPair | null>(null);
   const [improvingPair, setImprovingPair] = useState<QAPair | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(() => getInitialModalState().import);
+  const [testingPair, setTestingPair] = useState<QAPair | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -370,6 +372,7 @@ export default function KnowledgePage() {
         onImprove={setImprovingPair}
         onDelete={handleDelete}
         onRevert={handleRevert}
+        onTest={setTestingPair}
         displayName={displayName}
         selectedIds={selectedIds}
         onToggleSelect={handleToggleSelect}
@@ -410,6 +413,13 @@ export default function KnowledgePage() {
         <CSVImportDialog
           onComplete={handleImportComplete}
           onClose={() => setIsImportOpen(false)}
+        />
+      )}
+
+      {testingPair && (
+        <TestMatchDialog
+          pair={testingPair}
+          onClose={() => setTestingPair(null)}
         />
       )}
     </div>
