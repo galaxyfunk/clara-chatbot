@@ -29,6 +29,12 @@ export default function PublicChatPage() {
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isIframe, setIsIframe] = useState(false);
+
+  // Detect if running inside an iframe
+  useEffect(() => {
+    setIsIframe(window.self !== window.top);
+  }, []);
 
   useEffect(() => {
     async function fetchSettings() {
@@ -54,10 +60,25 @@ export default function PublicChatPage() {
     }
   }, [workspaceId]);
 
+  // Send height to parent for dynamic iframe sizing
+  useEffect(() => {
+    if (isIframe) {
+      const sendHeight = () => {
+        const height = document.body.scrollHeight;
+        window.parent.postMessage({ type: 'clara-resize', height }, '*');
+      };
+      // Send on mount and on resize
+      sendHeight();
+      const observer = new ResizeObserver(sendHeight);
+      observer.observe(document.body);
+      return () => observer.disconnect();
+    }
+  }, [isIframe]);
+
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className={`${isIframe ? 'h-full' : 'min-h-screen'} flex items-center justify-center bg-gray-50`}>
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" />
           <p className="mt-2 text-sm text-gray-500">Loading chat...</p>
@@ -69,7 +90,7 @@ export default function PublicChatPage() {
   // Error state
   if (error || !settings) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className={`${isIframe ? 'h-full' : 'min-h-screen'} flex items-center justify-center bg-gray-50 p-4`}>
         <div className="text-center max-w-md">
           <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="w-6 h-6 text-red-500" />
