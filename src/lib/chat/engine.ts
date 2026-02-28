@@ -160,12 +160,12 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
   const updatedMessages = [...previousMessages, userMessage, assistantMessage];
 
-  await supabase.from('chat_sessions').upsert({
+  const { data: upsertedSession } = await supabase.from('chat_sessions').upsert({
     workspace_id: request.workspace_id, session_token: request.session_token,
     messages: updatedMessages,
     escalated: parsed.escalation_offered || existingSession?.escalated || false,
     escalated_at: parsed.escalation_offered ? new Date().toISOString() : existingSession?.escalated_at ?? null,
-  }, { onConflict: 'chat_sessions_workspace_token_unique' });
+  }, { onConflict: 'chat_sessions_workspace_token_unique' }).select('id').single();
 
   // 13. Return response
   return {
@@ -173,6 +173,8 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     gap_detected: gapDetected, escalation_offered: parsed.escalation_offered,
     booking_url: parsed.escalation_offered ? appendUtmParams(settings.booking_url) : null,
     matched_pairs: matchedPairs.map(m => ({ id: m.id, question: m.question, similarity: m.similarity })),
+    session_id: upsertedSession?.id || existingSession?.id,
+    message_count: updatedMessages.length,
   };
 }
 

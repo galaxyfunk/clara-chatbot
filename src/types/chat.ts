@@ -39,4 +39,14 @@ export interface ChatResponse {
   escalation_offered: boolean;
   booking_url: string | null;
   matched_pairs: { id: string; question: string; similarity: number }[];
+  session_id?: string;
+  message_count?: number;
+}
+
+export interface ConversationSummary {
+  visitor_name: string | null;
+  intent_tags: string[];
+  summary: string;
+  extracted_facts: string[];
+  next_steps: string[];
 }
