@@ -1,6 +1,5 @@
 import mammoth from 'mammoth';
-// Use direct path for Vercel bundling compatibility
-import pdf from 'pdf-parse/lib/pdf-parse.js';
+import pdf from 'pdf-parse';
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
 
