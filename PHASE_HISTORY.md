@@ -373,3 +373,125 @@ src/components/
 
 ### Git Commits
 - Widget, landing page, and deployment commits (exact messages in git log)
+
+---
+
+## v1.1 Session 2 + Polish
+**Date:** March 1, 2026
+**Status:** ✅ Complete
+
+### Features Built
+
+1. **File Upload for Transcript Extraction**
+   - Support for .docx (mammoth) and .pdf (pdf-parse v1.1.1) files
+   - Drag-and-drop or click-to-upload interface
+   - File parsing in extraction page with runtime = 'nodejs'
+
+2. **Gap Auto-Resolution on Bulk Save**
+   - When Q&A pairs are saved, checks for matching open gaps (0.85 similarity threshold)
+   - Uses `after()` from next/server for background processing
+   - Auto-updates gap status to 'resolved' with best_match_id
+
+3. **AI Conversation Summaries**
+   - ConversationSummary type with summary, topics, sentiment, actionItems
+   - Summarize lib using app-level Claude key
+   - Auto-triggers after 6+ messages in a session
+   - POST /api/sessions/summarize endpoint
+
+4. **Visitor Intent Cards**
+   - IntentCard component showing conversation insights
+   - Session list and detail integration
+   - Displays summary, topics, sentiment, action items
+
+5. **Sessions Bug Fix**
+   - Fixed onConflict in chat engine to use column names vs constraint name
+   - Session display and message rendering corrected
+
+6. **Expandable Knowledge Base Rows**
+   - Q&A pairs table rows expand to show full answer text
+   - Click-to-expand pattern instead of full-text display
+
+7. **Flagged Questions Rename + Bulk Operations**
+   - Renamed "Gaps" to "Flagged Questions" throughout UI
+   - URL changed to /dashboard/gaps (kept for routing simplicity)
+   - Bulk dismiss and delete operations with selection checkboxes
+   - PATCH /api/gaps/bulk route for batch operations
+   - GapsBulkActionBar component
+
+8. **Chat Playground Dotted Background**
+   - Added subtle dotted pattern to chat playground
+   - Matches widget styling for consistency
+
+9. **Auto-Resolve Notification on Extraction**
+   - Shows notification when extracted Q&A pairs auto-resolve open gaps
+   - Feedback loop for users saving new knowledge
+
+10. **Interview Guide Export**
+    - Export dropdown with 3 options: Questions Only, Interview Guide Only, Questions + Interview Guide
+    - AI-powered interview guide generation using user's LLM key (BYOK)
+    - Cross-references existing knowledge base to identify coverage gaps
+    - Clusters flagged questions into 4-8 logical themes
+    - Generates interview prompts, edge cases, escalation triggers per question
+    - Excel export with Master Question List and Interview Guide sheets
+    - POST /api/gaps/interview-guide route with xlsx package
+
+### Bugs Fixed
+
+1. **Sessions onConflict Column Names**
+   - Problem: Upsert was failing with constraint name instead of column names
+   - Fix: Changed onConflict to use proper column list
+
+2. **pdf-parse v2 → v1.1.1 Downgrade**
+   - Problem: pdf-parse v2 had ESM compatibility issues with Turbopack
+   - Fix: Downgraded to v1.1.1, using `pdf-parse/lib/pdf-parse.js` import path
+
+3. **Anthropic SDK Timeout 120s**
+   - Problem: Interview guide generation was timing out for large requests
+   - Fix: Added `timeout: 120000` to Anthropic client initialization in provider.ts
+
+### Key Decisions
+
+1. **Rename Gaps → Flagged Questions**
+   - More user-friendly terminology
+   - "Gaps" was confusing for non-technical users
+   - Kept /dashboard/gaps URL for routing simplicity
+
+2. **BYOK for Interview Guide**
+   - Uses user's own LLM API key for interview guide generation
+   - Consistent with rest of application (user brings own key)
+   - No additional cost to platform
+
+3. **Expandable Rows over Full-Text Display**
+   - Knowledge base table shows truncated answers
+   - Click to expand for full text
+   - Better UX for scanning many pairs
+
+4. **Excel Download over Google Sheets**
+   - Interview guide exports as .xlsx file
+   - No auth required for Google Sheets API
+   - Works offline, user owns the file
+   - Uses xlsx (SheetJS) package
+
+### Files Created/Modified
+
+```
+Created:
+├── src/app/api/gaps/bulk/route.ts
+├── src/app/api/gaps/interview-guide/route.ts
+├── src/components/gaps/gaps-bulk-action-bar.tsx
+
+Modified:
+├── src/app/dashboard/gaps/page.tsx (bulk operations, export dropdown)
+├── src/app/dashboard/knowledge/extract/page.tsx (file upload, auto-resolve notification)
+├── src/app/dashboard/chat/page.tsx (dotted background)
+├── src/app/api/qa-pairs/bulk-save/route.ts (auto-resolve logic)
+├── src/components/gaps/gap-card.tsx (checkbox support)
+├── src/lib/llm/provider.ts (120s timeout)
+├── src/lib/files/parse.ts (pdf-parse fix)
+├── package.json (xlsx dependency)
+```
+
+### Git Commits
+1. `feat: sessions bug fix, UI polish, rename Gaps to Flagged Questions`
+2. `fix: use dynamic import for pdf-parse to resolve Turbopack ESM issue`
+3. `feat: Interview Guide Export + v1.1 Session 2 polish complete`

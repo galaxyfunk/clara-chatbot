@@ -241,10 +241,68 @@ Maps every feature to its owning files. Organized by feature area.
 - API keys: updated model list with GPT-5 family + custom model option
 - Suggestion chips: now display dynamically from AI responses (not just initial chips)
 
-## Pending Widget (Session 4)
+## Widget (Session 4) ✅ Complete
 
 | Feature | Description | Files | Session |
 |---------|-------------|-------|---------|
 | Public Chat Page | Widget iframe target | `/chat/[workspaceId]` | 4 |
 | Widget Script | Floating bubble embed | `public/widget.js` | 4 |
 | Landing Page | CE-branded with login CTA | `/` | 4 |
+
+---
+
+## v1.1 Session 2 + Polish Features ✅ Complete
+
+### Interview Guide Export
+- **Description:** AI-powered founder interview guide generation from flagged questions with KB cross-referencing
+- **Page:** `/dashboard/gaps` (Export dropdown)
+- **API Route:** `src/app/api/gaps/interview-guide/route.ts` — POST
+- **Components:** Export dropdown in `src/app/dashboard/gaps/page.tsx`
+- **Lib Modules:** `src/lib/llm/provider.ts`
+- **DB Tables:** `qa_gaps`, `qa_pairs`, `api_keys`
+- **Dependencies:** xlsx (SheetJS)
+- **Session:** v1.1-2
+
+### Bulk Gap Operations
+- **Description:** Bulk dismiss and delete operations for flagged questions
+- **Page:** `/dashboard/gaps`
+- **API Route:** `src/app/api/gaps/bulk/route.ts` — PATCH
+- **Components:** `src/components/gaps/gaps-bulk-action-bar.tsx`, `src/components/gaps/gap-card.tsx` (checkbox support)
+- **DB Tables:** `qa_gaps`
+- **Session:** v1.1-2
+
+### Expandable Knowledge Base Rows
+- **Description:** Click-to-expand rows showing full answer text in Q&A table
+- **Page:** `/dashboard/knowledge`
+- **Components:** `src/components/knowledge/qa-pairs-table.tsx`
+- **Session:** v1.1-2
+
+### Auto-Resolve Notification
+- **Description:** Shows notification when extracted Q&A pairs auto-resolve open flagged questions
+- **Page:** `/dashboard/knowledge/extract`
+- **API Route:** `src/app/api/qa-pairs/bulk-save/route.ts` (returns autoResolvedCount)
+- **Components:** Notification toast in extraction results
+- **DB Tables:** `qa_gaps`
+- **Session:** v1.1-2
+
+### Chat Playground Dotted Background
+- **Description:** Subtle dotted pattern background matching widget styling
+- **Page:** `/dashboard/chat`
+- **Components:** `src/app/dashboard/chat/page.tsx`
+- **Session:** v1.1-2
+
+### File Upload for Extraction
+- **Description:** Support for .docx and .pdf file uploads in transcript extraction
+- **Page:** `/dashboard/knowledge/extract`
+- **Lib Modules:** `src/lib/files/parse.ts`
+- **Dependencies:** mammoth, pdf-parse v1.1.1
+- **Session:** v1.1-2
+
+### AI Conversation Summaries
+- **Description:** Auto-generated summaries with topics, sentiment, and action items
+- **Page:** `/dashboard/sessions`
+- **API Route:** `src/app/api/sessions/summarize/route.ts` — POST
+- **Components:** IntentCard in sessions list/detail
+- **Lib Modules:** `src/lib/chat/summarize.ts`
+- **DB Tables:** `chat_sessions.summary`
+- **Session:** v1.1-2
