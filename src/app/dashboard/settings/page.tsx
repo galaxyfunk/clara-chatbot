@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Loader2, Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader2, Save, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { SettingsTabs } from '@/components/settings/settings-tabs';
 import { ContentTab } from '@/components/settings/content-tab';
 import { StyleTab } from '@/components/settings/style-tab';
 import { AITab } from '@/components/settings/ai-tab';
 import { ApiKeysTab } from '@/components/settings/api-keys-tab';
 import { EmbedTab } from '@/components/settings/embed-tab';
+import { SettingsPreview } from '@/components/settings/settings-preview';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { DEFAULT_WORKSPACE_SETTINGS } from '@/types/workspace';
 
@@ -25,6 +26,7 @@ export default function SettingsPage() {
   const [hasChanges, setHasChanges] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(true);
 
   // Fetch workspace on mount
   useEffect(() => {
@@ -81,6 +83,9 @@ export default function SettingsPage() {
     }
   };
 
+  // Show preview for visual tabs only
+  const showPreviewPanel = activeTab === 'content' || activeTab === 'style' || activeTab === 'ai';
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -101,30 +106,61 @@ export default function SettingsPage() {
     <div className="space-y-6">
       {/* Header with save button */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ce-text">Settings</h1>
-          <p className="mt-1 text-sm text-ce-text-muted">
-            Configure your chatbot
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-ce-text">Settings</h1>
+            <p className="mt-1 text-sm text-ce-text-muted">
+              Configure your chatbot
+            </p>
+          </div>
+          {/* Unsaved changes indicator */}
+          {hasChanges && (
+            <span className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-full">
+              <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+              Unsaved changes
+            </span>
+          )}
         </div>
 
-        {/* Save button - only show for tabs that modify workspace settings */}
-        {activeTab !== 'api-keys' && activeTab !== 'embed' && (
-          <button
-            onClick={handleSave}
-            disabled={saving || !hasChanges}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ce-navy rounded-lg hover:bg-ce-navy/90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : saveStatus === 'success' ? (
-              <CheckCircle className="w-4 h-4" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            {saving ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : 'Save Changes'}
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Preview toggle - tablet only */}
+          {showPreviewPanel && (
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="hidden md:flex lg:hidden items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
+            >
+              {showPreview ? (
+                <>
+                  <EyeOff className="w-4 h-4" />
+                  Hide Preview
+                </>
+              ) : (
+                <>
+                  <Eye className="w-4 h-4" />
+                  Show Preview
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Save button - only show for tabs that modify workspace settings */}
+          {activeTab !== 'api-keys' && activeTab !== 'embed' && (
+            <button
+              onClick={handleSave}
+              disabled={saving || !hasChanges}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-ce-navy rounded-lg hover:bg-ce-navy/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : saveStatus === 'success' ? (
+                <CheckCircle className="w-4 h-4" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {saving ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : 'Save Changes'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Error message */}
@@ -135,27 +171,44 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Settings content */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        {/* Tabs */}
-        <SettingsTabs activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* Split layout: Settings form + Preview */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Settings form */}
+        <div className={`${showPreviewPanel ? 'lg:w-3/5' : 'w-full'}`}>
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            {/* Tabs */}
+            <SettingsTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* Tab content */}
-        <div className="mt-6">
-          {activeTab === 'content' && (
-            <ContentTab settings={settings} onChange={handleSettingsChange} />
-          )}
-          {activeTab === 'style' && (
-            <StyleTab settings={settings} onChange={handleSettingsChange} />
-          )}
-          {activeTab === 'ai' && (
-            <AITab settings={settings} onChange={handleSettingsChange} />
-          )}
-          {activeTab === 'api-keys' && <ApiKeysTab />}
-          {activeTab === 'embed' && workspace && (
-            <EmbedTab workspaceId={workspace.id} />
-          )}
+            {/* Tab content */}
+            <div className="mt-6">
+              {activeTab === 'content' && (
+                <ContentTab settings={settings} onChange={handleSettingsChange} />
+              )}
+              {activeTab === 'style' && (
+                <StyleTab settings={settings} onChange={handleSettingsChange} />
+              )}
+              {activeTab === 'ai' && (
+                <AITab settings={settings} onChange={handleSettingsChange} />
+              )}
+              {activeTab === 'api-keys' && <ApiKeysTab />}
+              {activeTab === 'embed' && workspace && (
+                <EmbedTab workspaceId={workspace.id} />
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Preview panel - hidden on mobile, collapsible on tablet, always visible on desktop */}
+        {showPreviewPanel && (
+          <div className={`hidden ${showPreview ? 'md:block' : ''} lg:block lg:w-2/5`}>
+            <div className="sticky top-6">
+              <SettingsPreview
+                settings={settings}
+                hasUnsavedChanges={hasChanges}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
