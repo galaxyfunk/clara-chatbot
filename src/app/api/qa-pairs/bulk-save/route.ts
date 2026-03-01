@@ -1,4 +1,4 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createAuthClient } from '@/lib/supabase/auth-server';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
@@ -87,18 +87,18 @@ export async function POST(request: Request) {
       }
     }
 
-    // Auto-resolve gaps in the background after response is sent
+    // Auto-resolve gaps after importing new Q&A pairs
+    let autoResolved = 0;
     if (imported > 0) {
-      after(async () => {
-        try {
-          await autoResolveGaps(workspaceId);
-        } catch {
-          // Silently fail - this is background work
-        }
-      });
+      try {
+        const resolveResult = await autoResolveGaps(workspaceId);
+        autoResolved = resolveResult.resolved;
+      } catch {
+        // Continue even if auto-resolve fails
+      }
     }
 
-    return NextResponse.json({ success: true, imported, errors });
+    return NextResponse.json({ success: true, imported, auto_resolved: autoResolved, errors });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ success: false, error: message }, { status: 500 });

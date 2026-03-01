@@ -75,7 +75,8 @@ async function parseDocx(buffer: Buffer): Promise<ParseResult> {
  */
 async function parsePdf(buffer: Buffer): Promise<ParseResult> {
   try {
-    const pdf = (await import('pdf-parse')).default;
+    // Import from lib path to bypass pdf-parse's test file check
+    const pdf = (await import('pdf-parse/lib/pdf-parse.js')).default;
     const data = await pdf(buffer);
     const text = data.text.trim();
 

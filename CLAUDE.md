@@ -8,7 +8,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 **Tagline:** "Your AI-Powered Chatbot, Built in Minutes"
 
 ## Current Version
-**v1.1: IN PROGRESS** — Session 2 of 3 complete (Feb 28, 2026)
+**v1.1: IN PROGRESS** — Session 2 + Polish complete (Mar 1, 2026). Session 3 (UX Polish + Integrations) is next.
 
 **v1.0: DEPLOYED** — Live at https://chatbot.jakevibes.dev (Feb 23, 2026)
 - Dashboard app at chatbot.jakevibes.dev
@@ -63,8 +63,10 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | /api/workspace | GET/PATCH | Auth | Read/update workspace settings |
 | /api/upload | POST | Auth | Avatar/icon image upload |
 | /api/gaps | GET | Auth | Gap review queue |
+| /api/gaps/bulk | PATCH | Auth | Bulk dismiss/delete gaps |
 | /api/gaps/resolve | POST | Auth | Promote gap → Q&A pair |
 | /api/gaps/dismiss | POST | Auth | Dismiss gap |
+| /api/gaps/interview-guide | POST | Auth | AI interview guide generation |
 | /api/sessions | GET | Auth | Chat session browser |
 | /api/sessions/summarize | POST | Auth | Generate AI summary for a session |
 | /api/dashboard/stats | GET | Auth | Dashboard aggregate stats |
@@ -143,6 +145,9 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 2. Gap auto-resolution on bulk save — 0.85 threshold, after() background processing
 3. AI conversation summaries — ConversationSummary type, summarize lib, auto-trigger after 6 messages
 4. Visitor intent cards on sessions page — IntentCard component, session list/detail integration
+5. Sessions bug fix + UI polish
+6. Flagged Questions rename (from Gaps) + bulk operations + URL update to /dashboard/gaps
+7. Interview Guide Export — AI-powered founder interview guide with KB cross-referencing, xlsx export
 
 ## Deployment Info
 - **Production URL:** https://chatbot.jakevibes.dev

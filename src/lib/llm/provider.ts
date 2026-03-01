@@ -32,7 +32,7 @@ export async function chatCompletion(
 }
 
 async function callAnthropic(model: string, apiKey: string, messages: LLMMessage[], maxTokens: number, temperature: number): Promise<LLMResponse> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: 120000 });
   const systemMessage = messages.find(m => m.role === 'system');
   const chatMessages = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
   const response = await client.messages.create({ model, max_tokens: maxTokens, temperature, system: systemMessage?.content || '', messages: chatMessages });

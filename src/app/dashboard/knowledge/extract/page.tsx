@@ -20,6 +20,7 @@ export default function TranscriptExtractPage() {
   const [improvingIndex, setImprovingIndex] = useState<number | null>(null);
   const [stats, setStats] = useState({ totalFound: 0, newCount: 0, overlapCount: 0 });
   const [savedCount, setSavedCount] = useState(0);
+  const [autoResolvedCount, setAutoResolvedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const canExtract = inputMode === 'paste'
@@ -103,6 +104,7 @@ export default function TranscriptExtractPage() {
       }
 
       setSavedCount(data.imported || 0);
+      setAutoResolvedCount(data.auto_resolved || 0);
       setStep('done');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
@@ -167,6 +169,8 @@ export default function TranscriptExtractPage() {
     setPairs([]);
     setSelectedIndices(new Set());
     setStats({ totalFound: 0, newCount: 0, overlapCount: 0 });
+    setSavedCount(0);
+    setAutoResolvedCount(0);
     setError(null);
   };
 
@@ -370,6 +374,17 @@ export default function TranscriptExtractPage() {
           <p className="text-sm text-ce-text-muted mt-2">
             Your knowledge base has been updated.
           </p>
+          {autoResolvedCount > 0 && (
+            <p className="text-sm text-ce-text-muted mt-2">
+              {autoResolvedCount} flagged question{autoResolvedCount === 1 ? ' was' : 's were'} automatically resolved.{' '}
+              <Link
+                href="/dashboard/gaps?status=resolved"
+                className="text-ce-teal hover:underline"
+              >
+                View resolved
+              </Link>
+            </p>
+          )}
           <div className="mt-6 flex items-center gap-4">
             <Link
               href="/dashboard/knowledge"

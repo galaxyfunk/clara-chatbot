@@ -23,4 +23,12 @@ Public chat route built at `/chat/[workspaceId]` for iframe embedding and direct
 
 ---
 
+## v1.1 Session 2 + Polish
+**Status:** ✅ COMPLETE
+**Date:** March 1, 2026
+
+Intelligence features (docx/pdf upload, gap auto-resolution, conversation summaries, visitor intent cards), sessions bug fix, expandable knowledge base rows, Flagged Questions rename + bulk operations + URL update, chat playground dotted background, auto-resolve notification on extraction, and Interview Guide Export feature (AI-powered founder interview guide generation with knowledge base cross-referencing).
+
+---
+
 **v1.0 Complete.** Clara is live at https://chatbot.jakevibes.dev

@@ -18,6 +18,9 @@ interface GapCardProps {
   gap: Gap;
   onResolve: (gap: Gap) => void;
   onDismiss: (gapId: string) => void;
+  showCheckbox?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (gapId: string) => void;
 }
 
 function formatRelativeTime(dateString: string): string {
@@ -35,69 +38,83 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString();
 }
 
-export function GapCard({ gap, onResolve, onDismiss }: GapCardProps) {
+export function GapCard({ gap, onResolve, onDismiss, showCheckbox, selected, onToggleSelect }: GapCardProps) {
   const [expanded, setExpanded] = useState(false);
   const isOpen = gap.status === 'open';
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
-      {/* Question */}
-      <p className="text-lg font-medium text-ce-text">{gap.question}</p>
-
-      {/* Meta info */}
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-ce-text-muted">
-        <span>{formatRelativeTime(gap.created_at)}</span>
-        {gap.bestMatchQuestion && gap.similarity_score !== null && (
-          <span>
-            Closest match: {gap.bestMatchQuestion.substring(0, 40)}... ({Math.round(gap.similarity_score * 100)}%)
-          </span>
+    <div className={`bg-white rounded-lg shadow-sm p-6 ${selected ? 'ring-2 ring-ce-teal' : ''}`}>
+      <div className="flex items-start gap-3">
+        {/* Checkbox */}
+        {showCheckbox && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect?.(gap.id)}
+            className="mt-1 w-4 h-4 rounded border-ce-border text-ce-teal focus:ring-ce-teal flex-shrink-0"
+          />
         )}
-      </div>
 
-      {/* AI Answer toggle */}
-      {gap.ai_answer && (
-        <div className="mt-4">
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1 text-sm text-ce-teal hover:text-ce-teal/80"
-          >
-            {expanded ? (
-              <>
-                Hide AI answer <ChevronUp className="w-4 h-4" />
-              </>
-            ) : (
-              <>
-                Show AI answer <ChevronDown className="w-4 h-4" />
-              </>
+        <div className="flex-1 min-w-0">
+          {/* Question */}
+          <p className="text-lg font-medium text-ce-text">{gap.question}</p>
+
+          {/* Meta info */}
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-ce-text-muted">
+            <span>{formatRelativeTime(gap.created_at)}</span>
+            {gap.bestMatchQuestion && gap.similarity_score !== null && (
+              <span>
+                Closest match: {gap.bestMatchQuestion.substring(0, 40)}... ({Math.round(gap.similarity_score * 100)}%)
+              </span>
             )}
-          </button>
-          {expanded && (
-            <div className="mt-2 p-3 bg-ce-muted rounded-lg">
-              <p className="text-sm text-ce-text-muted">{gap.ai_answer}</p>
+          </div>
+
+          {/* AI Answer toggle */}
+          {gap.ai_answer && (
+            <div className="mt-4">
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="flex items-center gap-1 text-sm text-ce-teal hover:text-ce-teal/80"
+              >
+                {expanded ? (
+                  <>
+                    Hide AI answer <ChevronUp className="w-4 h-4" />
+                  </>
+                ) : (
+                  <>
+                    Show AI answer <ChevronDown className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+              {expanded && (
+                <div className="mt-2 p-3 bg-ce-muted rounded-lg">
+                  <p className="text-sm text-ce-text-muted">{gap.ai_answer}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Actions - only for open gaps */}
+          {isOpen && (
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                onClick={() => onResolve(gap)}
+                className="px-3 py-2 bg-ce-teal text-white text-sm font-medium rounded-lg hover:bg-ce-teal/90 flex items-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Resolve
+              </button>
+              <button
+                onClick={() => onDismiss(gap.id)}
+                className="px-3 py-2 text-ce-text-muted border border-ce-border text-sm font-medium rounded-lg hover:bg-ce-muted flex items-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                Dismiss
+              </button>
             </div>
           )}
         </div>
-      )}
-
-      {/* Actions - only for open gaps */}
-      {isOpen && (
-        <div className="mt-4 flex items-center gap-2">
-          <button
-            onClick={() => onResolve(gap)}
-            className="px-3 py-2 bg-ce-teal text-white text-sm font-medium rounded-lg hover:bg-ce-teal/90 flex items-center gap-2"
-          >
-            <CheckCircle className="w-4 h-4" />
-            Resolve
-          </button>
-          <button
-            onClick={() => onDismiss(gap.id)}
-            className="px-3 py-2 text-ce-text-muted border border-ce-border text-sm font-medium rounded-lg hover:bg-ce-muted flex items-center gap-2"
-          >
-            <X className="w-4 h-4" />
-            Dismiss
-          </button>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
