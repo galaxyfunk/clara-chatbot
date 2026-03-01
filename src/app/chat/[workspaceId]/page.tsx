@@ -125,6 +125,7 @@ export default function PublicChatPage() {
     personality_prompt: '',
     confidence_threshold: 0.78,
     custom_categories: [],
+    onboarding_completed_steps: [],
   };
 
   return (

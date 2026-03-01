@@ -7,6 +7,15 @@ export interface Workspace {
   updatedAt: string;
 }
 
+// Onboarding
+export type OnboardingStep = 'name_bot' | 'add_knowledge' | 'connect_ai' | 'preview';
+
+export interface OnboardingStepRecord {
+  step: OnboardingStep;
+  status: 'completed' | 'skipped';
+  completed_at: string;
+}
+
 export interface WorkspaceSettings {
   // Content
   display_name: string;
@@ -35,6 +44,9 @@ export interface WorkspaceSettings {
 
   // Knowledge Base
   custom_categories: string[];
+
+  // Onboarding
+  onboarding_completed_steps: OnboardingStepRecord[];
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
@@ -64,4 +76,5 @@ You are a friendly and knowledgeable virtual assistant. Your primary role is to 
   escalation_enabled: true,
   powered_by_clara: true,
   custom_categories: [],
+  onboarding_completed_steps: [],
 };

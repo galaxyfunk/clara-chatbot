@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createAuthClient } from '@/lib/supabase/auth-server';
 import { ensureWorkspace } from '@/lib/workspace';
 import { DashboardShell } from '@/components/dashboard-shell';
+import { OnboardingGate } from '@/components/onboarding/onboarding-gate';
 
 export default async function DashboardLayout({
   children,
@@ -24,7 +25,9 @@ export default async function DashboardLayout({
 
   return (
     <DashboardShell userEmail={userEmail}>
-      {children}
+      <OnboardingGate>
+        {children}
+      </OnboardingGate>
     </DashboardShell>
   );
 }
