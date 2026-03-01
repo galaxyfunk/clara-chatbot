@@ -49,7 +49,7 @@ interface ChatContext {
   fallbackChips?: string[];
 }
 
-async function prepareChatContext(request: ChatRequest): Promise<ChatContext> {
+async function prepareChatContext(request: ChatRequest, streaming: boolean = false): Promise<ChatContext> {
   const supabase = createServerClient();
 
   // 1. Rate limit check
@@ -162,7 +162,7 @@ async function prepareChatContext(request: ChatRequest): Promise<ChatContext> {
   }
 
   // 9. Build LLM messages
-  const llmMessages = buildChatPrompt(settings, request.message, matchedPairs, previousMessages, isConfident);
+  const llmMessages = buildChatPrompt(settings, request.message, matchedPairs, previousMessages, isConfident, streaming);
 
   return {
     settings,
@@ -293,7 +293,7 @@ export interface StreamingChatResult {
 
 export async function processChatStream(request: ChatRequest): Promise<StreamingChatResult> {
   const encoder = new TextEncoder();
-  const context = await prepareChatContext(request);
+  const context = await prepareChatContext(request, true); // streaming = true
 
   // Handle fallback cases (rate limit, zero QA, idempotent hit)
   if (context.fallbackAnswer !== undefined) {
@@ -341,16 +341,22 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           );
         }
 
-        // Stream complete — get full text and parse for metadata
-        const fullText = await getFullResponse();
-        const parsed = parseLLMResponse(fullText, context.settings);
+        // Stream complete — generate suggestion chips from matched pairs
+        // (LLM response is plain text in streaming mode, not JSON)
+        const suggestionChips = context.matchedPairs
+          .filter(pair => pair.question.toLowerCase().trim() !== request.message.toLowerCase().trim())
+          .slice(0, context.settings.max_suggestion_chips)
+          .map(pair => pair.question);
+
+        // Use context-based escalation for streaming mode
+        const escalationOffered = !context.isConfident && context.settings.escalation_enabled;
 
         // Send final metadata event
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
           type: 'done',
-          suggestion_chips: parsed.suggestion_chips,
-          escalation_offered: parsed.escalation_offered,
-          booking_url: parsed.escalation_offered
+          suggestion_chips: suggestionChips,
+          escalation_offered: escalationOffered,
+          booking_url: escalationOffered
             ? appendUtmParams(context.settings.booking_url)
             : null,
         })}\n\n`));
@@ -365,15 +371,21 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
     },
   });
 
+  // Generate chips and escalation once for use in postProcess
+  const streamingSuggestionChips = context.matchedPairs
+    .filter(pair => pair.question.toLowerCase().trim() !== request.message.toLowerCase().trim())
+    .slice(0, context.settings.max_suggestion_chips)
+    .map(pair => pair.question);
+  const streamingEscalation = !context.isConfident && context.settings.escalation_enabled;
+
   // Return stream + a postProcess function for after()
   return {
     stream: sseStream,
     postProcess: async () => {
       const supabase = createServerClient();
 
-      // Wait for full response text
+      // Wait for full response text (plain text in streaming mode)
       const fullText = await getFullResponse();
-      const parsed = parseLLMResponse(fullText, context.settings);
 
       // Gap detection (same logic as non-streaming)
       if (!context.isConfident) {
@@ -389,7 +401,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           await supabase.from('qa_gaps').insert({
             workspace_id: request.workspace_id,
             question: request.message,
-            ai_answer: parsed.answer,
+            ai_answer: fullText, // Plain text answer
             best_match_id: context.topMatch?.id ?? null,
             similarity_score: context.confidence,
             session_id: context.existingSession?.id ?? null,
@@ -408,13 +420,13 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       const assistantMessage: ChatMessage = {
         message_id: uuidv4(),
         role: 'assistant',
-        content: parsed.answer,
+        content: fullText, // Plain text answer
         timestamp: new Date().toISOString(),
-        suggestion_chips: parsed.suggestion_chips,
+        suggestion_chips: streamingSuggestionChips,
         gap_detected: !context.isConfident,
         matched_qa_ids: context.matchedPairs.map(m => m.id),
         confidence: context.confidence,
-        escalation_offered: parsed.escalation_offered,
+        escalation_offered: streamingEscalation,
       };
 
       const updatedMessages = [...context.previousMessages, userMessage, assistantMessage];
@@ -423,8 +435,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         workspace_id: request.workspace_id,
         session_token: request.session_token,
         messages: updatedMessages,
-        escalated: parsed.escalation_offered || context.existingSession?.escalated || false,
-        escalated_at: parsed.escalation_offered
+        escalated: streamingEscalation || context.existingSession?.escalated || false,
+        escalated_at: streamingEscalation
           ? new Date().toISOString()
           : context.existingSession?.escalated_at ?? null,
       }, { onConflict: 'workspace_id,session_token' });
@@ -442,7 +454,7 @@ function appendUtmParams(url: string | null): string | null {
 
 function buildChatPrompt(
   settings: WorkspaceSettings, userMessage: string, matchedPairs: MatchedPair[],
-  previousMessages: ChatMessage[], _isConfident: boolean
+  previousMessages: ChatMessage[], _isConfident: boolean, streaming: boolean = false
 ): LLMMessage[] {
   const contextBlock = matchedPairs.length > 0
     ? matchedPairs.map((m, i) =>
@@ -450,17 +462,13 @@ function buildChatPrompt(
       ).join('\n\n')
     : 'No relevant Q&A pairs found in the knowledge base.';
 
-  const systemPrompt = `${settings.personality_prompt}
-
-## Knowledge Base Context
-${contextBlock}
-
-## Response Rules
-1. Answer the user's question using ONLY the knowledge base context above. Do not make up information.
-2. If the context doesn't fully answer the question, be honest: provide what you can and acknowledge what you don't know.
-3. Keep responses concise and conversational — 2-4 sentences for simple questions, more for complex ones.
-
-## Suggestion Chip Rules
+  // Different response format for streaming vs non-streaming
+  const responseFormatSection = streaming
+    ? `## Response Format
+Respond naturally and conversationally. Do not use JSON format. Just write your answer as plain text.
+Keep responses concise — 2-4 sentences for simple questions, more for complex ones.
+${settings.escalation_enabled && settings.booking_url ? `If the user shows buying intent, naturally suggest booking a call.` : ''}`
+    : `## Suggestion Chip Rules
 Generate exactly ${settings.max_suggestion_chips} suggestion chips. These are NOT generic follow-ups. Each chip should do ONE of:
 (a) Help the visitor clarify their specific needs
 (b) Surface high-value information from the knowledge base that's related to their question
@@ -478,6 +486,18 @@ Respond in this exact JSON format (no markdown fences, raw JSON only):
 }
 
 ${settings.escalation_enabled && settings.booking_url ? `When escalation_offered is true, naturally weave a booking suggestion into your answer.` : ''}`;
+
+  const systemPrompt = `${settings.personality_prompt}
+
+## Knowledge Base Context
+${contextBlock}
+
+## Response Rules
+1. Answer the user's question using ONLY the knowledge base context above. Do not make up information.
+2. If the context doesn't fully answer the question, be honest: provide what you can and acknowledge what you don't know.
+3. Keep responses concise and conversational — 2-4 sentences for simple questions, more for complex ones.
+
+${responseFormatSection}`;
 
   const messages: LLMMessage[] = [{ role: 'system', content: systemPrompt }];
 
