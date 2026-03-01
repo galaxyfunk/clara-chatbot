@@ -1,6 +1,6 @@
 'use client';
 
-import { User, Target, FileText, MessageCircle, TrendingUp, Building, CheckSquare } from 'lucide-react';
+import { User, Target, FileText, MessageCircle, Building, CheckSquare } from 'lucide-react';
 import type { ConversationSummary } from '@/types/chat';
 
 interface IntentCardProps {
@@ -10,7 +10,7 @@ interface IntentCardProps {
 
 const sentimentColors: Record<string, string> = {
   positive: 'bg-green-100 text-green-700',
-  neutral: 'bg-gray-100 text-gray-700',
+  neutral: 'bg-amber-100 text-amber-700',
   negative: 'bg-red-100 text-red-700',
 };
 
@@ -77,17 +77,24 @@ export function IntentCard({ summary, compact = false }: IntentCardProps) {
       {summary.visitor_intent && (
         <div className="flex items-center gap-2">
           <Target className="w-4 h-4 text-ce-text-muted" />
+          <span className="text-sm font-medium text-ce-text-muted">Intent:</span>
           <span className="text-sm text-ce-text">{summary.visitor_intent}</span>
         </div>
       )}
 
-      {/* Sentiment and buying stage badges */}
+      {/* Sentiment */}
       <div className="flex items-center gap-2">
         <MessageCircle className="w-4 h-4 text-ce-text-muted" />
+        <span className="text-sm font-medium text-ce-text-muted">Sentiment:</span>
         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${sentimentColors[summary.sentiment]}`}>
           {formatLabel(summary.sentiment)}
         </span>
-        <TrendingUp className="w-4 h-4 text-ce-text-muted ml-2" />
+      </div>
+
+      {/* Buying stage */}
+      <div className="flex items-center gap-2">
+        <span className="w-4 h-4 text-ce-text-muted text-center text-xs">▼</span>
+        <span className="text-sm font-medium text-ce-text-muted">Stage:</span>
         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${buyingStageColors[summary.buying_stage]}`}>
           {formatLabel(summary.buying_stage)}
         </span>

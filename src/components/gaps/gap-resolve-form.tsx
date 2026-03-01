@@ -80,7 +80,7 @@ export function GapResolveForm({ gap, categories, onSave, onCancel, onNewCategor
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to resolve gap');
+        throw new Error(data.error || 'Failed to resolve question');
       }
 
       onSave();
@@ -100,7 +100,7 @@ export function GapResolveForm({ gap, categories, onSave, onCancel, onNewCategor
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-ce-border">
           <h2 className="text-lg font-semibold text-ce-text">
-            Resolve Gap
+            Resolve Question
           </h2>
           <button
             onClick={onCancel}

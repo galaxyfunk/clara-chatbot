@@ -160,12 +160,20 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
   const updatedMessages = [...previousMessages, userMessage, assistantMessage];
 
-  const { data: upsertedSession } = await supabase.from('chat_sessions').upsert({
+  const { data: upsertedSession, error: sessionError } = await supabase.from('chat_sessions').upsert({
     workspace_id: request.workspace_id, session_token: request.session_token,
     messages: updatedMessages,
     escalated: parsed.escalation_offered || existingSession?.escalated || false,
     escalated_at: parsed.escalation_offered ? new Date().toISOString() : existingSession?.escalated_at ?? null,
-  }, { onConflict: 'chat_sessions_workspace_token_unique' }).select('id').single();
+  }, { onConflict: 'workspace_id,session_token' }).select('id').single();
+
+  // DEBUG: Log session upsert result
+  if (sessionError) {
+    console.error('[Session Upsert Error]', sessionError);
+    console.error('[Session Upsert Debug] workspace_id:', request.workspace_id, 'session_token:', request.session_token);
+  } else {
+    console.log('[Session Upsert Success] Session ID:', upsertedSession?.id);
+  }
 
   // 13. Return response
   return {

@@ -105,7 +105,7 @@ export default function SessionsPage() {
       {/* Master-detail layout */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         {/* Desktop layout */}
-        <div className="hidden md:grid md:grid-cols-3 h-[600px]">
+        <div className="hidden md:grid md:grid-cols-4 h-[calc(100vh-220px)] min-h-[500px]">
           {/* List */}
           <div className="border-r border-ce-border overflow-y-auto">
             {loading ? (
@@ -120,7 +120,7 @@ export default function SessionsPage() {
           </div>
 
           {/* Detail */}
-          <div className="col-span-2">
+          <div className="col-span-3 overflow-hidden">
             {selectedSession ? (
               <SessionDetail session={selectedSession} />
             ) : (

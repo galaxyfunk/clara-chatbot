@@ -23,6 +23,24 @@ export async function GET(request: Request) {
     }
     const workspaceId = workspace.id;
 
+    // DEBUG: Log workspace ID from owner lookup
+    console.log('[Sessions Debug] User ID:', user.id);
+    console.log('[Sessions Debug] Workspace ID from owner_id lookup:', workspaceId);
+
+    // DEBUG: Query distinct workspace_ids from sessions to compare
+    const { data: distinctWorkspaceIds } = await supabase
+      .from('chat_sessions')
+      .select('workspace_id')
+      .limit(10);
+    console.log('[Sessions Debug] Workspace IDs in chat_sessions table:',
+      distinctWorkspaceIds?.map(r => r.workspace_id) || 'none');
+
+    // DEBUG: Count total sessions in DB
+    const { count: totalSessions } = await supabase
+      .from('chat_sessions')
+      .select('*', { count: 'exact', head: true });
+    console.log('[Sessions Debug] Total sessions in DB:', totalSessions);
+
     // 3. Parse search param
     const url = new URL(request.url);
     const searchParam = url.searchParams.get('search')?.trim();

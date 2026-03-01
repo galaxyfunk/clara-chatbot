@@ -15,7 +15,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
   const cards = [
     { label: 'Q&A Pairs', value: stats.totalPairs, icon: Database },
     { label: 'Sessions', value: stats.totalSessions, icon: MessageSquare },
-    { label: 'Open Gaps', value: stats.openGaps, icon: AlertCircle },
+    { label: 'Flagged Questions', value: stats.openGaps, icon: AlertCircle },
     { label: 'Escalations', value: stats.escalations, icon: PhoneForwarded },
   ];
 

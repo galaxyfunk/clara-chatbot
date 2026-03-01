@@ -1,6 +1,7 @@
 'use client';
 
-import { Pencil, Sparkles, Trash2, Undo2, FlaskConical } from 'lucide-react';
+import { useState } from 'react';
+import { Pencil, Sparkles, Trash2, Undo2, FlaskConical, ChevronRight } from 'lucide-react';
 import type { QAPair } from '@/types/qa';
 
 interface QAPairsTableProps {
@@ -64,6 +65,21 @@ export function QAPairsTable({
   onToggleSelect,
   onToggleSelectAll,
 }: QAPairsTableProps) {
+  // Track expanded rows
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (pairId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(pairId)) {
+        next.delete(pairId);
+      } else {
+        next.add(pairId);
+      }
+      return next;
+    });
+  };
+
   // Filter pairs
   const filteredPairs = pairs.filter((pair) => {
     const matchesSearch =
@@ -106,6 +122,7 @@ export function QAPairsTable({
         <table className="w-full">
           <thead className="bg-ce-muted">
             <tr>
+              <th className="px-2 py-3 w-8"></th>
               {onToggleSelectAll && (
                 <th className="px-4 py-3 w-12">
                   <input
@@ -135,157 +152,225 @@ export function QAPairsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-ce-border">
-            {filteredPairs.map((pair) => (
-              <tr key={pair.id} className={`hover:bg-ce-muted/50 ${selectedIds.has(pair.id) ? 'bg-ce-teal/5' : ''}`}>
-                {onToggleSelect && (
-                  <td className="px-4 py-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(pair.id)}
-                      onChange={() => onToggleSelect(pair.id)}
-                      className="w-4 h-4 rounded border-ce-border text-ce-teal focus:ring-ce-teal"
-                    />
+            {filteredPairs.map((pair) => {
+              const isExpanded = expandedIds.has(pair.id);
+              return (
+                <tr
+                  key={pair.id}
+                  className={`transition-colors ${
+                    isExpanded
+                      ? 'bg-ce-teal/5 border-l-2 border-l-ce-teal'
+                      : selectedIds.has(pair.id)
+                      ? 'bg-ce-teal/5'
+                      : 'hover:bg-ce-muted/50'
+                  }`}
+                >
+                  {/* Expand chevron */}
+                  <td className="px-2 py-4">
+                    <button
+                      onClick={() => toggleExpand(pair.id)}
+                      className="p-1 text-ce-text-muted hover:text-ce-text rounded transition-transform"
+                    >
+                      <ChevronRight
+                        className={`w-4 h-4 transition-transform duration-200 ${
+                          isExpanded ? 'rotate-90' : ''
+                        }`}
+                      />
+                    </button>
                   </td>
-                )}
-                <td className="px-4 py-4 text-sm text-ce-text max-w-xs">
-                  {truncateText(pair.question, 60)}
-                </td>
-                <td className="px-4 py-4 text-sm text-ce-text-muted max-w-sm">
-                  {truncateText(pair.answer, 100)}
-                </td>
-                <td className="px-4 py-4">
-                  <span
-                    className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                      categoryColors[pair.category] || categoryColors.general
-                    }`}
+                  {onToggleSelect && (
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(pair.id)}
+                        onChange={() => onToggleSelect(pair.id)}
+                        className="w-4 h-4 rounded border-ce-border text-ce-teal focus:ring-ce-teal"
+                      />
+                    </td>
+                  )}
+                  <td
+                    className="px-4 py-4 text-sm text-ce-text max-w-xs cursor-pointer"
+                    onClick={() => toggleExpand(pair.id)}
                   >
-                    {pair.category}
-                  </span>
-                </td>
-                <td className="px-4 py-4">
-                  <span
-                    className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                      sourceColors[pair.source] || sourceColors.manual
-                    }`}
+                    {isExpanded ? (
+                      <div className="space-y-2">
+                        <p className="font-medium">{pair.question}</p>
+                      </div>
+                    ) : (
+                      truncateText(pair.question, 60)
+                    )}
+                  </td>
+                  <td
+                    className="px-4 py-4 text-sm text-ce-text-muted max-w-sm cursor-pointer"
+                    onClick={() => toggleExpand(pair.id)}
                   >
-                    {sourceLabels[pair.source] || pair.source}
-                  </span>
-                </td>
-                <td className="px-4 py-4 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button
-                      onClick={() => onEdit(pair)}
-                      className="p-2 text-ce-text-muted hover:text-ce-text hover:bg-ce-muted rounded-lg transition-colors"
-                      title="Edit"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onImprove(pair)}
-                      className="p-2 text-ce-text-muted hover:text-ce-teal hover:bg-ce-teal/10 rounded-lg transition-colors"
-                      title="Improve with AI"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                    </button>
-                    {onTest && (
-                      <button
-                        onClick={() => onTest(pair)}
-                        className="p-2 text-ce-text-muted hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                        title="Test match"
-                      >
-                        <FlaskConical className="w-4 h-4" />
-                      </button>
+                    {isExpanded ? (
+                      <div className="space-y-2">
+                        <p className="whitespace-pre-wrap">{pair.answer}</p>
+                      </div>
+                    ) : (
+                      truncateText(pair.answer, 100)
                     )}
-                    {hasOriginal(pair) && onRevert && (
-                      <button
-                        onClick={() => onRevert(pair.id)}
-                        className="p-2 text-ce-text-muted hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                        title="Revert to original"
-                      >
-                        <Undo2 className="w-4 h-4" />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => onDelete(pair.id)}
-                      className="p-2 text-ce-text-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete"
+                  </td>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                        categoryColors[pair.category] || categoryColors.general
+                      }`}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {pair.category}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                        sourceColors[pair.source] || sourceColors.manual
+                      }`}
+                    >
+                      {sourceLabels[pair.source] || pair.source}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => onEdit(pair)}
+                        className="p-2 text-ce-text-muted hover:text-ce-text hover:bg-ce-muted rounded-lg transition-colors"
+                        title="Edit"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onImprove(pair)}
+                        className="p-2 text-ce-text-muted hover:text-ce-teal hover:bg-ce-teal/10 rounded-lg transition-colors"
+                        title="Improve with AI"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                      </button>
+                      {onTest && (
+                        <button
+                          onClick={() => onTest(pair)}
+                          className="p-2 text-ce-text-muted hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                          title="Test match"
+                        >
+                          <FlaskConical className="w-4 h-4" />
+                        </button>
+                      )}
+                      {hasOriginal(pair) && onRevert && (
+                        <button
+                          onClick={() => onRevert(pair.id)}
+                          className="p-2 text-ce-text-muted hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                          title="Revert to original"
+                        >
+                          <Undo2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onDelete(pair.id)}
+                        className="p-2 text-ce-text-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* Mobile Cards */}
       <div className="md:hidden space-y-4">
-        {filteredPairs.map((pair) => (
-          <div key={pair.id} className="bg-white rounded-lg shadow-sm p-4">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <p className="text-sm font-medium text-ce-text flex-1">
-                {truncateText(pair.question, 100)}
-              </p>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={() => onEdit(pair)}
-                  className="p-1.5 text-ce-text-muted hover:text-ce-text rounded transition-colors"
+        {filteredPairs.map((pair) => {
+          const isExpanded = expandedIds.has(pair.id);
+          return (
+            <div
+              key={pair.id}
+              className={`bg-white rounded-lg shadow-sm p-4 transition-colors ${
+                isExpanded ? 'ring-2 ring-ce-teal/20 bg-ce-teal/5' : ''
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div
+                  className="flex items-start gap-2 flex-1 cursor-pointer"
+                  onClick={() => toggleExpand(pair.id)}
                 >
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => onImprove(pair)}
-                  className="p-1.5 text-ce-text-muted hover:text-ce-teal rounded transition-colors"
-                >
-                  <Sparkles className="w-4 h-4" />
-                </button>
-                {onTest && (
+                  <ChevronRight
+                    className={`w-4 h-4 mt-0.5 text-ce-text-muted flex-shrink-0 transition-transform duration-200 ${
+                      isExpanded ? 'rotate-90' : ''
+                    }`}
+                  />
+                  <p className="text-sm font-medium text-ce-text">
+                    {isExpanded ? pair.question : truncateText(pair.question, 100)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
                   <button
-                    onClick={() => onTest(pair)}
-                    className="p-1.5 text-ce-text-muted hover:text-purple-600 rounded transition-colors"
+                    onClick={() => onEdit(pair)}
+                    className="p-1.5 text-ce-text-muted hover:text-ce-text rounded transition-colors"
                   >
-                    <FlaskConical className="w-4 h-4" />
+                    <Pencil className="w-4 h-4" />
                   </button>
-                )}
-                {hasOriginal(pair) && onRevert && (
                   <button
-                    onClick={() => onRevert(pair.id)}
-                    className="p-1.5 text-ce-text-muted hover:text-orange-600 rounded transition-colors"
+                    onClick={() => onImprove(pair)}
+                    className="p-1.5 text-ce-text-muted hover:text-ce-teal rounded transition-colors"
                   >
-                    <Undo2 className="w-4 h-4" />
+                    <Sparkles className="w-4 h-4" />
                   </button>
+                  {onTest && (
+                    <button
+                      onClick={() => onTest(pair)}
+                      className="p-1.5 text-ce-text-muted hover:text-purple-600 rounded transition-colors"
+                    >
+                      <FlaskConical className="w-4 h-4" />
+                    </button>
+                  )}
+                  {hasOriginal(pair) && onRevert && (
+                    <button
+                      onClick={() => onRevert(pair.id)}
+                      className="p-1.5 text-ce-text-muted hover:text-orange-600 rounded transition-colors"
+                    >
+                      <Undo2 className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onDelete(pair.id)}
+                    className="p-1.5 text-ce-text-muted hover:text-red-600 rounded transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div
+                className="text-sm text-ce-text-muted mb-3 cursor-pointer ml-6"
+                onClick={() => toggleExpand(pair.id)}
+              >
+                {isExpanded ? (
+                  <p className="whitespace-pre-wrap">{pair.answer}</p>
+                ) : (
+                  truncateText(pair.answer, 150)
                 )}
-                <button
-                  onClick={() => onDelete(pair.id)}
-                  className="p-1.5 text-ce-text-muted hover:text-red-600 rounded transition-colors"
+              </div>
+              <div className="flex items-center gap-2 ml-6">
+                <span
+                  className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                    categoryColors[pair.category] || categoryColors.general
+                  }`}
                 >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                  {pair.category}
+                </span>
+                <span
+                  className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                    sourceColors[pair.source] || sourceColors.manual
+                  }`}
+                >
+                  {sourceLabels[pair.source] || pair.source}
+                </span>
               </div>
             </div>
-            <p className="text-sm text-ce-text-muted mb-3">
-              {truncateText(pair.answer, 150)}
-            </p>
-            <div className="flex items-center gap-2">
-              <span
-                className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                  categoryColors[pair.category] || categoryColors.general
-                }`}
-              >
-                {pair.category}
-              </span>
-              <span
-                className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                  sourceColors[pair.source] || sourceColors.manual
-                }`}
-              >
-                {sourceLabels[pair.source] || pair.source}
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

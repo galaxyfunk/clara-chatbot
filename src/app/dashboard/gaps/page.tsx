@@ -69,7 +69,7 @@ export default function GapsPage() {
   }, []);
 
   const handleDismiss = async (gapId: string) => {
-    if (!window.confirm("Dismiss this gap? It won't create a Q&A pair.")) return;
+    if (!window.confirm("Dismiss this question? It won't be added to your knowledge base.")) return;
 
     try {
       await fetch('/api/gaps/dismiss', {
@@ -149,9 +149,9 @@ export default function GapsPage() {
   ];
 
   const emptyMessages: Record<GapStatus, string> = {
-    open: "No open gaps. When visitors ask questions your knowledge base can't answer, they'll appear here for review.",
-    resolved: 'No resolved gaps yet. Resolved gaps create new Q&A pairs for your knowledge base.',
-    dismissed: 'No dismissed gaps. Dismissed gaps are questions you chose not to add to your knowledge base.',
+    open: "No flagged questions. When visitors ask questions your chatbot can't confidently answer, they'll appear here for review.",
+    resolved: 'No resolved questions yet. Resolved questions create new Q&A pairs for your knowledge base.',
+    dismissed: 'No dismissed questions. Dismissed questions are ones you chose not to add to your knowledge base.',
   };
 
   return (
@@ -159,9 +159,9 @@ export default function GapsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-ce-text">Gap Review</h1>
+          <h1 className="text-2xl font-bold text-ce-text">Flagged Questions</h1>
           <p className="mt-1 text-sm text-ce-text-muted">
-            Review unanswered questions and add them to your knowledge base
+            Questions your chatbot couldn&apos;t confidently answer. Review them, write an answer, and add it to your knowledge base to make your chatbot smarter.
           </p>
         </div>
         {gaps.length > 0 && (

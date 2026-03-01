@@ -40,7 +40,7 @@ export function RecentGaps({ gaps }: RecentGapsProps) {
   return (
     <div className="bg-white rounded-lg shadow-sm p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-ce-text">Recent Gaps</h2>
+        <h2 className="text-lg font-semibold text-ce-text">Flagged Questions</h2>
         <Link
           href="/dashboard/gaps"
           className="text-sm text-ce-teal hover:text-ce-teal/80 flex items-center gap-1"
