@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
-import { chatCompletion, type LLMMessage } from '@/lib/llm/provider';
+import { chatCompletion, chatCompletionStream, type LLMMessage } from '@/lib/llm/provider';
 import { decrypt } from '@/lib/encryption';
 import type { ChatRequest, ChatResponse, ChatMessage } from '@/types/chat';
 import type { WorkspaceSettings } from '@/types/workspace';
@@ -32,15 +32,41 @@ function checkRateLimit(sessionToken: string): boolean {
   return true;
 }
 
-export async function processChat(request: ChatRequest): Promise<ChatResponse> {
+// ─── Chat Context (Shared Pre-LLM Logic) ────────────────────────────
+
+interface ChatContext {
+  settings: WorkspaceSettings;
+  apiKeyRow: { provider: string; model: string; encrypted_key: string };
+  rawApiKey: string;
+  matchedPairs: MatchedPair[];
+  isConfident: boolean;
+  confidence: number;
+  topMatch: MatchedPair | null;
+  previousMessages: ChatMessage[];
+  existingSession: { id: string; escalated: boolean; escalated_at: string | null } | null;
+  llmMessages: LLMMessage[];
+  fallbackAnswer?: string;
+  fallbackChips?: string[];
+}
+
+async function prepareChatContext(request: ChatRequest): Promise<ChatContext> {
   const supabase = createServerClient();
 
-  // 1. Rate limit
+  // 1. Rate limit check
   if (!checkRateLimit(request.session_token)) {
     return {
-      answer: "You've sent a lot of messages! Please wait a bit before sending more.",
-      suggestion_chips: [], confidence: 0, gap_detected: false,
-      escalation_offered: false, booking_url: null, matched_pairs: [],
+      settings: {} as WorkspaceSettings,
+      apiKeyRow: { provider: '', model: '', encrypted_key: '' },
+      rawApiKey: '',
+      matchedPairs: [],
+      isConfident: false,
+      confidence: 0,
+      topMatch: null,
+      previousMessages: [],
+      existingSession: null,
+      llmMessages: [],
+      fallbackAnswer: "You've sent a lot of messages! Please wait a bit before sending more.",
+      fallbackChips: [],
     };
   }
 
@@ -59,9 +85,18 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
   if (count === 0) {
     return {
-      answer: `I'm not set up yet! My knowledge base is empty — add some Q&A pairs in the dashboard to get ${settings.display_name} started.`,
-      suggestion_chips: [], confidence: 0, gap_detected: false,
-      escalation_offered: false, booking_url: null, matched_pairs: [],
+      settings,
+      apiKeyRow: { provider: '', model: '', encrypted_key: '' },
+      rawApiKey: '',
+      matchedPairs: [],
+      isConfident: false,
+      confidence: 0,
+      topMatch: null,
+      previousMessages: [],
+      existingSession: null,
+      llmMessages: [],
+      fallbackAnswer: `I'm not set up yet! My knowledge base is empty — add some Q&A pairs in the dashboard to get ${settings.display_name} started.`,
+      fallbackChips: [],
     };
   }
 
@@ -87,7 +122,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
   if (searchError) throw new Error(`Search failed: ${searchError.message}`);
 
   const matchedPairs: MatchedPair[] = (matches ?? []) as MatchedPair[];
-  const topMatch = matchedPairs[0];
+  const topMatch = matchedPairs[0] ?? null;
   const confidence = topMatch?.similarity ?? 0;
   const isConfident = confidence >= settings.confidence_threshold;
 
@@ -100,34 +135,87 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
   const previousMessages: ChatMessage[] = existingSession?.messages ?? [];
 
-  // Idempotency check
+  // 8. Idempotency check
   if (request.message_id && previousMessages.some(m => m.message_id === request.message_id)) {
     const msgIndex = previousMessages.findIndex(m => m.message_id === request.message_id);
     const existingResponse = previousMessages[msgIndex + 1];
     if (existingResponse && existingResponse.role === 'assistant') {
       return {
-        answer: existingResponse.content,
-        suggestion_chips: existingResponse.suggestion_chips ?? [],
-        confidence: existingResponse.confidence ?? 0,
-        gap_detected: existingResponse.gap_detected ?? false,
-        escalation_offered: existingResponse.escalation_offered ?? false,
-        booking_url: existingResponse.escalation_offered ? appendUtmParams(settings.booking_url) : null,
-        matched_pairs: [],
+        settings,
+        apiKeyRow,
+        rawApiKey,
+        matchedPairs,
+        isConfident,
+        confidence,
+        topMatch,
+        previousMessages,
+        existingSession: existingSession ? {
+          id: existingSession.id,
+          escalated: existingSession.escalated,
+          escalated_at: existingSession.escalated_at,
+        } : null,
+        llmMessages: [],
+        fallbackAnswer: existingResponse.content,
+        fallbackChips: existingResponse.suggestion_chips ?? [],
       };
     }
   }
 
-  // 8. Build LLM messages (sliding window: last 10)
+  // 9. Build LLM messages
   const llmMessages = buildChatPrompt(settings, request.message, matchedPairs, previousMessages, isConfident);
 
-  // 9. Call LLM
-  const llmResponse = await chatCompletion(apiKeyRow.provider, apiKeyRow.model, rawApiKey, llmMessages, { maxTokens: 1024, temperature: 0.7 });
+  return {
+    settings,
+    apiKeyRow,
+    rawApiKey,
+    matchedPairs,
+    isConfident,
+    confidence,
+    topMatch,
+    previousMessages,
+    existingSession: existingSession ? {
+      id: existingSession.id,
+      escalated: existingSession.escalated,
+      escalated_at: existingSession.escalated_at,
+    } : null,
+    llmMessages,
+  };
+}
 
-  // 10. Parse response
-  const parsed = parseLLMResponse(llmResponse.content, settings);
+// ─── Non-Streaming Chat (Original) ──────────────────────────────────
 
-  // 11. Gap detection with dedup
-  const gapDetected = !isConfident;
+export async function processChat(request: ChatRequest): Promise<ChatResponse> {
+  const context = await prepareChatContext(request);
+
+  // Handle fallback cases (rate limit, zero QA, idempotent hit)
+  if (context.fallbackAnswer !== undefined) {
+    return {
+      answer: context.fallbackAnswer,
+      suggestion_chips: context.fallbackChips ?? [],
+      confidence: context.confidence,
+      gap_detected: false,
+      escalation_offered: false,
+      booking_url: null,
+      matched_pairs: [],
+    };
+  }
+
+  const supabase = createServerClient();
+
+  // Call LLM
+  const llmResponse = await chatCompletion(
+    context.apiKeyRow.provider,
+    context.apiKeyRow.model,
+    context.rawApiKey,
+    context.llmMessages,
+    { maxTokens: 1024, temperature: 0.7 }
+  );
+
+  // Parse response
+  const parsed = parseLLMResponse(llmResponse.content, context.settings);
+
+  // Gap detection with dedup
+  const gapDetected = !context.isConfident;
   if (gapDetected) {
     const { data: existingGaps } = await supabase
       .from('qa_gaps').select('id, question')
@@ -139,52 +227,212 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
     if (!isDuplicateGap) {
       await supabase.from('qa_gaps').insert({
-        workspace_id: request.workspace_id, question: request.message,
-        ai_answer: parsed.answer, best_match_id: topMatch?.id ?? null,
-        similarity_score: confidence, session_id: existingSession?.id ?? null, status: 'open',
+        workspace_id: request.workspace_id,
+        question: request.message,
+        ai_answer: parsed.answer,
+        best_match_id: context.topMatch?.id ?? null,
+        similarity_score: context.confidence,
+        session_id: context.existingSession?.id ?? null,
+        status: 'open',
       });
     }
   }
 
-  // 12. Upsert chat session
+  // Upsert chat session
   const userMessage: ChatMessage = {
-    message_id: request.message_id || uuidv4(), role: 'user',
-    content: request.message, timestamp: new Date().toISOString(),
+    message_id: request.message_id || uuidv4(),
+    role: 'user',
+    content: request.message,
+    timestamp: new Date().toISOString(),
   };
   const assistantMessage: ChatMessage = {
-    message_id: uuidv4(), role: 'assistant', content: parsed.answer,
-    timestamp: new Date().toISOString(), suggestion_chips: parsed.suggestion_chips,
-    gap_detected: gapDetected, matched_qa_ids: matchedPairs.map(m => m.id),
-    confidence, escalation_offered: parsed.escalation_offered,
+    message_id: uuidv4(),
+    role: 'assistant',
+    content: parsed.answer,
+    timestamp: new Date().toISOString(),
+    suggestion_chips: parsed.suggestion_chips,
+    gap_detected: gapDetected,
+    matched_qa_ids: context.matchedPairs.map(m => m.id),
+    confidence: context.confidence,
+    escalation_offered: parsed.escalation_offered,
   };
 
-  const updatedMessages = [...previousMessages, userMessage, assistantMessage];
+  const updatedMessages = [...context.previousMessages, userMessage, assistantMessage];
 
   const { data: upsertedSession, error: sessionError } = await supabase.from('chat_sessions').upsert({
-    workspace_id: request.workspace_id, session_token: request.session_token,
+    workspace_id: request.workspace_id,
+    session_token: request.session_token,
     messages: updatedMessages,
-    escalated: parsed.escalation_offered || existingSession?.escalated || false,
-    escalated_at: parsed.escalation_offered ? new Date().toISOString() : existingSession?.escalated_at ?? null,
+    escalated: parsed.escalation_offered || context.existingSession?.escalated || false,
+    escalated_at: parsed.escalation_offered ? new Date().toISOString() : context.existingSession?.escalated_at ?? null,
   }, { onConflict: 'workspace_id,session_token' }).select('id').single();
 
-  // DEBUG: Log session upsert result
   if (sessionError) {
     console.error('[Session Upsert Error]', sessionError);
-    console.error('[Session Upsert Debug] workspace_id:', request.workspace_id, 'session_token:', request.session_token);
-  } else {
-    console.log('[Session Upsert Success] Session ID:', upsertedSession?.id);
   }
 
-  // 13. Return response
   return {
-    answer: parsed.answer, suggestion_chips: parsed.suggestion_chips, confidence,
-    gap_detected: gapDetected, escalation_offered: parsed.escalation_offered,
-    booking_url: parsed.escalation_offered ? appendUtmParams(settings.booking_url) : null,
-    matched_pairs: matchedPairs.map(m => ({ id: m.id, question: m.question, similarity: m.similarity })),
-    session_id: upsertedSession?.id || existingSession?.id,
+    answer: parsed.answer,
+    suggestion_chips: parsed.suggestion_chips,
+    confidence: context.confidence,
+    gap_detected: gapDetected,
+    escalation_offered: parsed.escalation_offered,
+    booking_url: parsed.escalation_offered ? appendUtmParams(context.settings.booking_url) : null,
+    matched_pairs: context.matchedPairs.map(m => ({ id: m.id, question: m.question, similarity: m.similarity })),
+    session_id: upsertedSession?.id || context.existingSession?.id,
     message_count: updatedMessages.length,
   };
 }
+
+// ─── Streaming Chat (SSE) ───────────────────────────────────────────
+
+export interface StreamingChatResult {
+  stream: ReadableStream<Uint8Array>;
+  postProcess: () => Promise<void>;
+}
+
+export async function processChatStream(request: ChatRequest): Promise<StreamingChatResult> {
+  const encoder = new TextEncoder();
+  const context = await prepareChatContext(request);
+
+  // Handle fallback cases (rate limit, zero QA, idempotent hit)
+  if (context.fallbackAnswer !== undefined) {
+    const fallbackStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(
+          `data: ${JSON.stringify({ type: 'token', content: context.fallbackAnswer })}\n\n`
+        ));
+        controller.enqueue(encoder.encode(
+          `data: ${JSON.stringify({
+            type: 'done',
+            suggestion_chips: context.fallbackChips ?? [],
+            escalation_offered: false,
+            booking_url: null,
+          })}\n\n`
+        ));
+        controller.close();
+      },
+    });
+    return {
+      stream: fallbackStream,
+      postProcess: async () => {},
+    };
+  }
+
+  // Stream from LLM
+  const { stream: llmStream, getFullResponse } = await chatCompletionStream(
+    context.apiKeyRow.provider,
+    context.apiKeyRow.model,
+    context.rawApiKey,
+    context.llmMessages,
+    { maxTokens: 1024, temperature: 0.7 }
+  );
+
+  // Create SSE stream that wraps LLM tokens
+  const sseStream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = llmStream.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'token', content: value })}\n\n`)
+          );
+        }
+
+        // Stream complete — get full text and parse for metadata
+        const fullText = await getFullResponse();
+        const parsed = parseLLMResponse(fullText, context.settings);
+
+        // Send final metadata event
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          type: 'done',
+          suggestion_chips: parsed.suggestion_chips,
+          escalation_offered: parsed.escalation_offered,
+          booking_url: parsed.escalation_offered
+            ? appendUtmParams(context.settings.booking_url)
+            : null,
+        })}\n\n`));
+
+        controller.close();
+      } catch (error) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: 'error', message: 'Stream interrupted' })}\n\n`)
+        );
+        controller.close();
+      }
+    },
+  });
+
+  // Return stream + a postProcess function for after()
+  return {
+    stream: sseStream,
+    postProcess: async () => {
+      const supabase = createServerClient();
+
+      // Wait for full response text
+      const fullText = await getFullResponse();
+      const parsed = parseLLMResponse(fullText, context.settings);
+
+      // Gap detection (same logic as non-streaming)
+      if (!context.isConfident) {
+        const { data: existingGaps } = await supabase
+          .from('qa_gaps').select('id, question')
+          .eq('workspace_id', request.workspace_id).eq('status', 'open');
+
+        const isDuplicateGap = (existingGaps ?? []).some(g =>
+          g.question.toLowerCase().trim() === request.message.toLowerCase().trim()
+        );
+
+        if (!isDuplicateGap) {
+          await supabase.from('qa_gaps').insert({
+            workspace_id: request.workspace_id,
+            question: request.message,
+            ai_answer: parsed.answer,
+            best_match_id: context.topMatch?.id ?? null,
+            similarity_score: context.confidence,
+            session_id: context.existingSession?.id ?? null,
+            status: 'open',
+          });
+        }
+      }
+
+      // Session upsert
+      const userMessage: ChatMessage = {
+        message_id: request.message_id || uuidv4(),
+        role: 'user',
+        content: request.message,
+        timestamp: new Date().toISOString(),
+      };
+      const assistantMessage: ChatMessage = {
+        message_id: uuidv4(),
+        role: 'assistant',
+        content: parsed.answer,
+        timestamp: new Date().toISOString(),
+        suggestion_chips: parsed.suggestion_chips,
+        gap_detected: !context.isConfident,
+        matched_qa_ids: context.matchedPairs.map(m => m.id),
+        confidence: context.confidence,
+        escalation_offered: parsed.escalation_offered,
+      };
+
+      const updatedMessages = [...context.previousMessages, userMessage, assistantMessage];
+
+      await supabase.from('chat_sessions').upsert({
+        workspace_id: request.workspace_id,
+        session_token: request.session_token,
+        messages: updatedMessages,
+        escalated: parsed.escalation_offered || context.existingSession?.escalated || false,
+        escalated_at: parsed.escalation_offered
+          ? new Date().toISOString()
+          : context.existingSession?.escalated_at ?? null,
+      }, { onConflict: 'workspace_id,session_token' });
+    },
+  };
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
 
 function appendUtmParams(url: string | null): string | null {
   if (!url) return null;

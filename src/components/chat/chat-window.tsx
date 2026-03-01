@@ -5,7 +5,6 @@ import { Send, Loader2 } from 'lucide-react';
 import { MessageBubble } from './message-bubble';
 import { SuggestionChips } from './suggestion-chips';
 import type { WorkspaceSettings } from '@/types/workspace';
-import type { ChatResponse } from '@/types/chat';
 
 interface Message {
   id: string;
@@ -15,6 +14,7 @@ interface Message {
   escalation_offered?: boolean;
   booking_url?: string | null;
   suggestion_chips?: string[];
+  isStreaming?: boolean;
 }
 
 interface ChatWindowProps {
@@ -31,6 +31,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [sessionToken] = useState(() => generateId());
   const [showInitialChips, setShowInitialChips] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -47,7 +48,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
   }, []);
 
   const sendMessage = async (content: string) => {
-    if (!content.trim() || isLoading) return;
+    if (!content.trim() || isLoading || isStreaming) return;
 
     const userMessage: Message = {
       id: generateId(),
@@ -69,31 +70,100 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
           session_token: sessionToken,
           message: content.trim(),
           message_id: userMessage.id,
+          stream: true,
         }),
       });
 
-      const data = await res.json();
-
-      if (data.success) {
-        const response = data as { success: true } & ChatResponse;
-        const assistantMessage: Message = {
-          id: generateId(),
-          role: 'assistant',
-          content: response.answer,
-          gap_detected: response.gap_detected,
-          escalation_offered: response.escalation_offered,
-          booking_url: response.booking_url,
-          suggestion_chips: response.suggestion_chips,
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-      } else {
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
         const errorMessage: Message = {
           id: generateId(),
           role: 'assistant',
-          content: data.error || 'Sorry, something went wrong. Please try again.',
+          content: errorData.error || 'Sorry, something went wrong. Please try again.',
         };
         setMessages((prev) => [...prev, errorMessage]);
+        setIsLoading(false);
+        return;
       }
+
+      // Create placeholder assistant message
+      const assistantId = generateId();
+      const assistantMessage: Message = {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        suggestion_chips: [],
+        isStreaming: true,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+      setIsLoading(false);
+      setIsStreaming(true);
+
+      // Read SSE stream
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'token') {
+              fullContent += data.content;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, content: fullContent } : m
+                )
+              );
+            }
+
+            if (data.type === 'done') {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content: fullContent,
+                        suggestion_chips: data.suggestion_chips || [],
+                        escalation_offered: data.escalation_offered || false,
+                        booking_url: data.booking_url || null,
+                        isStreaming: false,
+                      }
+                    : m
+                )
+              );
+            }
+
+            if (data.type === 'error') {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        content: fullContent || 'Sorry, something went wrong. Please try again.',
+                        isStreaming: false,
+                      }
+                    : m
+                )
+              );
+            }
+          } catch {
+            // Malformed SSE line — skip
+          }
+        }
+      }
+
+      setIsStreaming(false);
     } catch {
       const errorMessage: Message = {
         id: generateId(),
@@ -101,8 +171,8 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
         content: 'Sorry, I could not connect. Please try again.',
       };
       setMessages((prev) => [...prev, errorMessage]);
-    } finally {
       setIsLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -116,10 +186,12 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
   };
 
   // Get suggestion chips - either from last assistant message or initial chips
-  const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant');
+  const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
   const currentChips = showInitialChips
     ? settings.suggested_messages.slice(0, settings.max_suggestion_chips)
     : lastAssistantMessage?.suggestion_chips || [];
+
+  const isDisabled = isLoading || isStreaming;
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -171,7 +243,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
           />
         ))}
 
-        {/* Typing indicator */}
+        {/* Typing indicator - show when loading (before stream starts) */}
         {isLoading && (
           <div className="flex items-center gap-2 text-gray-500">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -182,8 +254,8 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggestion chips */}
-      {currentChips.length > 0 && !isLoading && (
+      {/* Suggestion chips - hide while streaming */}
+      {currentChips.length > 0 && !isDisabled && (
         <div className="flex-shrink-0 px-4 pb-2">
           <SuggestionChips
             chips={currentChips}
@@ -202,13 +274,13 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={settings.placeholder_text}
-            disabled={isLoading}
+            disabled={isDisabled}
             className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:opacity-50"
             style={{ '--tw-ring-color': settings.primary_color } as React.CSSProperties}
           />
           <button
             type="submit"
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isDisabled}
             className="p-2 rounded-full text-white disabled:opacity-50 transition-opacity"
             style={{ backgroundColor: settings.primary_color }}
           >

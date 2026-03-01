@@ -1,5 +1,5 @@
 import { NextResponse, after } from 'next/server';
-import { processChat } from '@/lib/chat/engine';
+import { processChat, processChatStream } from '@/lib/chat/engine';
 import { summarizeConversation } from '@/lib/chat/summarize';
 import { createServerClient } from '@/lib/supabase/server';
 import type { ChatRequest, ChatMessage } from '@/types/chat';
@@ -9,7 +9,7 @@ const SUMMARY_THRESHOLD = 6;
 
 export async function POST(request: Request) {
   try {
-    const body: ChatRequest = await request.json();
+    const body: ChatRequest & { stream?: boolean } = await request.json();
 
     if (!body.workspace_id || !body.session_token || !body.message) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
@@ -19,6 +19,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Message too long (max 2000 characters)' }, { status: 400 });
     }
 
+    // Detect if client wants streaming
+    const wantsStream = body.stream === true
+      || request.headers.get('accept')?.includes('text/event-stream');
+
+    if (wantsStream) {
+      const { stream, postProcess } = await processChatStream(body);
+
+      // Post-processing (gap detection + session upsert) runs after response is sent
+      after(postProcess);
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // Non-streaming path (existing behavior)
     const response = await processChat(body);
 
     // Trigger summary generation in background after enough messages
