@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createAuthClient } from '@/lib/supabase/auth-server';
 import { createServerClient } from '@/lib/supabase/server';
 import { checkForDuplicate } from '@/lib/chat/dedup';
 import { generateEmbedding } from '@/lib/embed';
+import { autoResolveGaps } from '@/lib/chat/auto-resolve-gaps';
 
 export async function GET(request: Request) {
   try {
@@ -127,6 +128,15 @@ export async function POST(request: Request) {
     if (error) {
       throw new Error(`Failed to create Q&A pair: ${error.message}`);
     }
+
+    // Auto-resolve gaps in background
+    after(async () => {
+      try {
+        await autoResolveGaps(workspaceId);
+      } catch (err) {
+        console.error('Auto-resolve gaps failed:', err);
+      }
+    });
 
     return NextResponse.json({ success: true, pair: data, created: true });
   } catch (error) {
