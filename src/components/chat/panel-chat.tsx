@@ -229,10 +229,31 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
         'What roles can you hire through CE?',
         'How is Cloud Employee different?',
       ];
+
+  // Fallback chips for when API returns empty (after conversation starts)
+  const conversationFallbackChips = [
+    'Tell me more about your services',
+    'How does pricing work?',
+    'Can I book a call with your team?',
+  ];
+
   const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
-  const bottomChips = showInitialChips && messages.length === 0
-    ? defaultChips.slice(0, settings.max_suggestion_chips)
-    : (lastAssistantMessage?.suggestion_chips || []).slice(0, settings.max_suggestion_chips);
+  const apiChips = (lastAssistantMessage?.suggestion_chips || []).slice(0, settings.max_suggestion_chips);
+
+  // Determine which chips to show
+  let bottomChips: string[];
+  if (showInitialChips && messages.length === 0) {
+    // Initial state — show default/configured chips
+    bottomChips = defaultChips.slice(0, settings.max_suggestion_chips);
+  } else if (apiChips.length > 0) {
+    // API returned chips — use them
+    bottomChips = apiChips;
+  } else if (messages.length > 0) {
+    // API returned empty but we have conversation — use fallback
+    bottomChips = conversationFallbackChips.slice(0, settings.max_suggestion_chips);
+  } else {
+    bottomChips = [];
+  }
 
   const isDisabled = isLoading || isStreaming;
   const hasInput = input.trim().length > 0;

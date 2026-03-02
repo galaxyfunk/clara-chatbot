@@ -5,6 +5,7 @@ import { decrypt } from '@/lib/encryption';
 import type { ChatRequest, ChatResponse, ChatMessage } from '@/types/chat';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { v4 as uuidv4 } from 'uuid';
+import Anthropic from '@anthropic-ai/sdk';
 
 interface MatchedPair {
   id: string;
@@ -30,6 +31,57 @@ function checkRateLimit(sessionToken: string): boolean {
   if (entry.count >= maxMessages) return false;
   entry.count++;
   return true;
+}
+
+// ─── Follow-up Chip Generation (App-Level Key) ──────────────────────
+
+const FOLLOWUP_SYSTEM_PROMPT = `You generate follow-up questions for a customer support chatbot. Based on the conversation below, suggest exactly 3 brief follow-up questions the user might ask next. Return ONLY a valid JSON array of 3 strings. No markdown, no backticks, no explanation. Each question must be under 60 characters.`;
+
+async function generateFollowUpChips(
+  userQuestion: string,
+  assistantAnswer: string,
+  maxChips: number
+): Promise<string[] | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  // 3 second timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+  try {
+    const client = new Anthropic({ apiKey });
+    const truncatedAnswer = assistantAnswer.slice(0, 500);
+
+    const response = await client.messages.create(
+      {
+        model: 'claude-haiku-4-5-20250514',
+        max_tokens: 150,
+        temperature: 0.7,
+        system: FOLLOWUP_SYSTEM_PROMPT,
+        messages: [{
+          role: 'user',
+          content: `User asked: ${userQuestion}\n\nAssistant answered: ${truncatedAnswer}`,
+        }],
+      },
+      { signal: controller.signal }
+    );
+
+    clearTimeout(timeoutId);
+
+    const textContent = response.content.find((c) => c.type === 'text');
+    const text = textContent?.text || '';
+
+    // Parse JSON array
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed.every((s) => typeof s === 'string')) {
+      return parsed.slice(0, maxChips);
+    }
+    return null;
+  } catch {
+    clearTimeout(timeoutId);
+    return null; // Timeout, parse error, or API error — caller will use fallback
+  }
 }
 
 // ─── Chat Context (Shared Pre-LLM Logic) ────────────────────────────
@@ -328,6 +380,9 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
     { maxTokens: 1024, temperature: 0.7 }
   );
 
+  // Shared state for chips (used by both SSE stream and postProcess)
+  let resolvedChips: string[] = [];
+
   // Create SSE stream that wraps LLM tokens
   const sseStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -341,12 +396,25 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           );
         }
 
-        // Stream complete — generate suggestion chips from matched pairs
-        // (LLM response is plain text in streaming mode, not JSON)
-        const suggestionChips = context.matchedPairs
-          .filter(pair => pair.question.toLowerCase().trim() !== request.message.toLowerCase().trim())
-          .slice(0, context.settings.max_suggestion_chips)
-          .map(pair => pair.question);
+        // Stream complete — get full response text for chip generation
+        const fullText = await getFullResponse();
+
+        // Try LLM-generated contextual chips first, fall back to matchedPairs
+        const llmChips = await generateFollowUpChips(
+          request.message,
+          fullText,
+          context.settings.max_suggestion_chips
+        );
+
+        if (llmChips && llmChips.length > 0) {
+          resolvedChips = llmChips;
+        } else {
+          // Fallback: use matched Q&A pair questions
+          resolvedChips = context.matchedPairs
+            .filter(pair => pair.question.toLowerCase().trim() !== request.message.toLowerCase().trim())
+            .slice(0, context.settings.max_suggestion_chips)
+            .map(pair => pair.question);
+        }
 
         // Use context-based escalation for streaming mode
         const escalationOffered = !context.isConfident && context.settings.escalation_enabled;
@@ -354,7 +422,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         // Send final metadata event
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
           type: 'done',
-          suggestion_chips: suggestionChips,
+          suggestion_chips: resolvedChips,
           escalation_offered: escalationOffered,
           booking_url: escalationOffered
             ? appendUtmParams(context.settings.booking_url)
@@ -371,11 +439,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
     },
   });
 
-  // Generate chips and escalation once for use in postProcess
-  const streamingSuggestionChips = context.matchedPairs
-    .filter(pair => pair.question.toLowerCase().trim() !== request.message.toLowerCase().trim())
-    .slice(0, context.settings.max_suggestion_chips)
-    .map(pair => pair.question);
+  // Escalation flag for use in postProcess
   const streamingEscalation = !context.isConfident && context.settings.escalation_enabled;
 
   // Return stream + a postProcess function for after()
@@ -422,7 +486,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         role: 'assistant',
         content: fullText, // Plain text answer
         timestamp: new Date().toISOString(),
-        suggestion_chips: streamingSuggestionChips,
+        suggestion_chips: resolvedChips, // LLM-generated or matchedPairs fallback
         gap_detected: !context.isConfident,
         matched_qa_ids: context.matchedPairs.map(m => m.id),
         confidence: context.confidence,
