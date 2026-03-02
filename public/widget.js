@@ -110,7 +110,7 @@
       '.clara-trigger-whisper:hover{width:46px;box-shadow:-3px 0 16px rgba(0,0,0,0.15);}\n' +
       '.clara-trigger-whisper .whisper-icon{width:18px;height:18px;color:rgba(255,255,255,0.95);flex-shrink:0;}\n' +
       '.clara-trigger-whisper .whisper-text{writing-mode:vertical-rl;text-orientation:mixed;font-size:9px;font-weight:600;letter-spacing:1.2px;color:rgba(255,255,255,0.95);text-transform:uppercase;flex-shrink:0;}\n' +
-      '.clara-trigger-whisper .whisper-dot{width:5px;height:5px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;flex-shrink:0;}\n' +
+      '.clara-trigger-whisper .whisper-dot{width:4px;height:4px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;flex-shrink:0;}\n' +
       '.clara-frame-panel{top:0;right:0;bottom:0;width:380px;border-radius:0;box-shadow:-4px 0 24px rgba(0,0,0,0.15);transform:translateX(100%);}\n' +
       '.clara-frame-panel.open{transform:translateX(0);}\n' +
 
