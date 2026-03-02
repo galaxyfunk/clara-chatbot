@@ -33,8 +33,6 @@ export interface WorkspaceSettings {
 
   // Style — Widget Layouts
   widget_layout: 'classic' | 'command_bar' | 'side_whisper';
-  header_text_color: string;
-  chat_background: string;
   trigger_text: string | null;
   status_messages: string[] | null;
   hint_messages: string[] | null;
@@ -69,8 +67,6 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   avatar_url: null,
   chat_icon_url: null,
   widget_layout: 'classic',
-  header_text_color: '#ffffff',
-  chat_background: '#ffffff',
   trigger_text: null,
   status_messages: null,
   hint_messages: null,
