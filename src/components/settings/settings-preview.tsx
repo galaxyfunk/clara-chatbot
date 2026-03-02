@@ -273,50 +273,6 @@ function CommandBarPreview({ settings, isDarkBg }: { settings: WorkspaceSettings
   );
 }
 
-// Terminal Layout
-function TerminalPreview({ settings, isDarkBg }: { settings: WorkspaceSettings; isDarkBg: boolean }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const statusMessage = settings.status_messages?.[0] || 'Online';
-
-  return (
-    <div className="relative w-full h-full overflow-hidden rounded-lg border border-gray-200 bg-[#0B1A2E]">
-      {/* Dimmed host content */}
-      <div className="absolute inset-0 opacity-20 p-3">
-        <div className="w-16 h-2 bg-gray-500 rounded mb-3" />
-        <div className="w-24 h-3 bg-gray-600 rounded mb-2" />
-        <div className="w-full h-2 bg-gray-600 rounded mb-1.5" />
-        <div className="w-4/5 h-2 bg-gray-600 rounded" />
-      </div>
-
-      {/* Terminal bar trigger */}
-      {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          className="absolute bottom-0 left-0 right-0 flex items-center gap-2 px-3 py-2 bg-[#0a0f14]/95 border-t border-white/5 font-mono"
-        >
-          <span className="text-[10px]" style={{ color: settings.primary_color }}>◆</span>
-          <span className="text-[10px]" style={{ color: settings.primary_color }}>
-            {settings.display_name.toLowerCase()}
-          </span>
-          <span className="text-[10px] text-gray-600 mx-1">→</span>
-          <span className="text-[10px] text-gray-500 flex-1 truncate">{statusMessage}</span>
-          <span className="text-[8px] text-gray-600">click to chat</span>
-        </button>
-      )}
-
-      {/* Modal with traffic lights */}
-      {isOpen && (
-        <>
-          <div className="absolute inset-0 bg-black/50" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[85%] h-[70%] shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <ChatPanel settings={settings} isDarkBg={isDarkBg} showTrafficLights />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 // Side Whisper Layout
 function SideWhisperPreview({ settings, isDarkBg }: { settings: WorkspaceSettings; isDarkBg: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -367,8 +323,6 @@ export function SettingsPreview({ settings, hasUnsavedChanges }: SettingsPreview
     switch (settings.widget_layout) {
       case 'command_bar':
         return <CommandBarPreview settings={settings} isDarkBg={isDarkBg} />;
-      case 'terminal':
-        return <TerminalPreview settings={settings} isDarkBg={isDarkBg} />;
       case 'side_whisper':
         return <SideWhisperPreview settings={settings} isDarkBg={isDarkBg} />;
       default:

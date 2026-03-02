@@ -32,7 +32,7 @@ export interface WorkspaceSettings {
   chat_icon_url: string | null;
 
   // Style — Widget Layouts
-  widget_layout: 'classic' | 'command_bar' | 'terminal' | 'side_whisper';
+  widget_layout: 'classic' | 'command_bar' | 'side_whisper';
   header_text_color: string;
   chat_background: string;
   trigger_text: string | null;
@@ -96,7 +96,6 @@ You are a friendly and knowledgeable virtual assistant. Your primary role is to 
 export const WIDGET_LAYOUTS = [
   { id: 'classic', name: 'Classic Bubble', description: 'Floating bubble in the corner' },
   { id: 'command_bar', name: 'Command Bar', description: 'Centered search overlay' },
-  { id: 'terminal', name: 'Terminal', description: 'CLI status bar at the bottom' },
   { id: 'side_whisper', name: 'Side Whisper', description: 'Slim edge panel' },
 ] as const;
 

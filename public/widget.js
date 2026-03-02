@@ -1,6 +1,6 @@
 /**
  * Clara Chatbot Widget
- * Supports 4 layouts: classic, command_bar, terminal, side_whisper
+ * Supports 3 layouts: classic, command_bar, side_whisper
  *
  * Usage:
  * <script src="https://your-domain.com/widget.js" data-workspace-id="YOUR_WORKSPACE_ID"></script>
@@ -105,14 +105,6 @@
       '.clara-trigger-command .text{color:#888;font-size:13px;max-width:200px;overflow:hidden;white-space:nowrap;}\n' +
       '.clara-trigger-command .kbd{padding:2px 6px;background:rgba(255,255,255,0.08);border-radius:4px;font-size:10px;color:#555;font-family:monospace;}\n' +
 
-      '/* Terminal */\n' +
-      '.clara-trigger-terminal{bottom:0;left:0;right:0;padding:8px 16px;background:rgba(10,15,20,0.95);border-top:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:8px;cursor:pointer;font-family:monospace;opacity:0;animation:claraFadeIn 0.4s ease 2s forwards;}\n' +
-      '.clara-trigger-terminal .icon{font-size:10px;}\n' +
-      '.clara-trigger-terminal .name{font-size:12px;}\n' +
-      '.clara-trigger-terminal .sep{color:#334;margin:0 4px;}\n' +
-      '.clara-trigger-terminal .status{color:#667;font-size:12px;flex:1;}\n' +
-      '.clara-trigger-terminal .hint{color:#445;font-size:10px;}\n' +
-
       '/* Side Whisper */\n' +
       '.clara-trigger-whisper{top:50%;right:0;transform:translateY(-50%);width:38px;height:130px;border-radius:12px 0 0 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px 0;cursor:pointer;box-shadow:-2px 0 8px rgba(0,0,0,0.1);transition:width 0.2s ease,box-shadow 0.2s ease;opacity:0;animation:claraFadeIn 0.4s ease 1.5s forwards;}\n' +
       '.clara-trigger-whisper:hover{width:46px;box-shadow:-3px 0 16px rgba(0,0,0,0.15);}\n' +
@@ -122,7 +114,7 @@
       '.clara-frame-panel{top:0;right:0;bottom:0;width:380px;border-radius:0;box-shadow:-4px 0 24px rgba(0,0,0,0.15);transform:translateX(100%);}\n' +
       '.clara-frame-panel.open{transform:translateX(0);}\n' +
 
-      '/* Modal (command_bar + terminal) */\n' +
+      '/* Modal (command_bar) */\n' +
       '.clara-frame-modal{top:50%;left:50%;transform:translate(-50%,-50%) scale(0.95);width:90%;max-width:560px;height:70vh;max-height:600px;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}\n' +
       '.clara-frame-modal.open{transform:translate(-50%,-50%) scale(1);}\n' +
 
@@ -281,61 +273,6 @@
     document.body.appendChild(triggerEl);
   }
 
-  function createTerminalTrigger(s) {
-    triggerEl = document.createElement('div');
-    triggerEl.id = 'clara-widget-trigger';
-    triggerEl.className = 'clara-widget-trigger clara-trigger-terminal';
-
-    // Icon
-    var icon = document.createElement('span');
-    icon.className = 'icon';
-    icon.style.color = s.primary_color;
-    icon.textContent = '\u25C6';
-    triggerEl.appendChild(icon);
-
-    // Name
-    var name = document.createElement('span');
-    name.className = 'name';
-    name.style.color = s.primary_color;
-    name.textContent = (s.display_name || 'clara').toLowerCase();
-    triggerEl.appendChild(name);
-
-    // Separator
-    var sep = document.createElement('span');
-    sep.className = 'sep';
-    sep.textContent = '\u2192';
-    triggerEl.appendChild(sep);
-
-    // Status (rotating messages)
-    var status = document.createElement('span');
-    status.className = 'status';
-    triggerEl.appendChild(status);
-
-    var messages = s.status_messages || ['Online', 'Ready to help', 'Ask me anything'];
-    setTimeout(function() {
-      rotateMessages(status, messages, 5000);
-    }, 2000);
-
-    // Hint
-    var hint = document.createElement('span');
-    hint.className = 'hint';
-    hint.textContent = 'click to chat';
-    triggerEl.appendChild(hint);
-
-    triggerEl.addEventListener('click', function() {
-      if (isOpen) closeChat();
-      else openChat(isMobile() ? 'overlay' : 'modal');
-    });
-
-    // ESC to close
-    keyboardHandler = function(e) {
-      if (e.key === 'Escape' && isOpen) closeChat();
-    };
-    document.addEventListener('keydown', keyboardHandler);
-
-    document.body.appendChild(triggerEl);
-  }
-
   function createSideWhisperTrigger(s) {
     triggerEl = document.createElement('div');
     triggerEl.id = 'clara-widget-trigger';
@@ -416,9 +353,6 @@
       switch (layout) {
         case 'command_bar':
           createCommandBarTrigger(s);
-          break;
-        case 'terminal':
-          createTerminalTrigger(s);
           break;
         case 'side_whisper':
           createSideWhisperTrigger(s);

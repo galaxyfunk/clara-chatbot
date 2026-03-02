@@ -36,19 +36,6 @@ function CommandBarIcon({ color, active }: { color: string; active: boolean }) {
   );
 }
 
-function TerminalIcon({ color, active }: { color: string; active: boolean }) {
-  return (
-    <svg width="56" height="44" viewBox="0 0 56 44" fill="none">
-      <rect x="2" y="2" width="52" height="36" rx="4" fill={active ? '#f0f0f8' : '#f5f5f5'} stroke={active ? color : '#ddd'} strokeWidth="1" />
-      <rect x="8" y="8" width="22" height="3" rx="1.5" fill="#ddd" />
-      <rect x="8" y="14" width="30" height="2" rx="1" fill="#e8e8e8" />
-      <rect x="2" y="30" width="52" height="8" rx="2" fill={active ? '#0a0f14' : '#2a2a2a'} />
-      <rect x="8" y="33" width="3" height="2" rx="1" fill={active ? color : '#666'} />
-      <rect x="14" y="33" width="18" height="2" rx="1" fill="#555" />
-    </svg>
-  );
-}
-
 function SideWhisperIcon({ color, active }: { color: string; active: boolean }) {
   return (
     <svg width="56" height="44" viewBox="0 0 56 44" fill="none">
@@ -64,7 +51,6 @@ function SideWhisperIcon({ color, active }: { color: string; active: boolean }) 
 const LAYOUT_ICONS: Record<string, React.FC<{ color: string; active: boolean }>> = {
   classic: ClassicIcon,
   command_bar: CommandBarIcon,
-  terminal: TerminalIcon,
   side_whisper: SideWhisperIcon,
 };
 
@@ -82,18 +68,11 @@ export function StyleTab({ settings, onChange, workspaceId }: StyleTabProps) {
   const iconInputRef = useRef<HTMLInputElement>(null);
 
   // Local state for textarea fields (converted from arrays)
-  const [statusText, setStatusText] = useState(
-    (settings.status_messages || []).join('\n')
-  );
   const [hintText, setHintText] = useState(
     (settings.hint_messages || []).join('\n')
   );
 
   // Sync local state when settings change externally
-  useEffect(() => {
-    setStatusText((settings.status_messages || []).join('\n'));
-  }, [settings.status_messages]);
-
   useEffect(() => {
     setHintText((settings.hint_messages || []).join('\n'));
   }, [settings.hint_messages]);
@@ -151,12 +130,6 @@ export function StyleTab({ settings, onChange, workspaceId }: StyleTabProps) {
     if (iconInputRef.current) {
       iconInputRef.current.value = '';
     }
-  };
-
-  const handleStatusMessagesChange = (value: string) => {
-    setStatusText(value);
-    const arr = value.split('\n').map(s => s.trim()).filter(Boolean);
-    onChange({ status_messages: arr.length > 0 ? arr : null });
   };
 
   const handleHintMessagesChange = (value: string) => {
@@ -424,24 +397,6 @@ export function StyleTab({ settings, onChange, workspaceId }: StyleTabProps) {
           />
           <p className="mt-1 text-xs text-ce-text-muted">
             Typewriter text shown before users click to open
-          </p>
-        </div>
-      )}
-
-      {settings.widget_layout === 'terminal' && (
-        <div>
-          <label className="block text-sm font-medium text-ce-text mb-1">
-            Status Messages
-          </label>
-          <textarea
-            value={statusText}
-            onChange={(e) => handleStatusMessagesChange(e.target.value)}
-            rows={3}
-            placeholder="Online&#10;Ready to help&#10;Ask me anything"
-            className="w-full px-3 py-2 border border-ce-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ce-navy text-sm font-mono resize-y"
-          />
-          <p className="mt-1 text-xs text-ce-text-muted">
-            Rotating messages in the status bar — one per line
           </p>
         </div>
       )}

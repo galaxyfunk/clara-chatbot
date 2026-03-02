@@ -20,8 +20,8 @@ interface PublicSettings {
   max_suggestion_chips: number;
   escalation_enabled: boolean;
   powered_by_clara: boolean;
-  // Widget layouts
-  widget_layout: 'classic' | 'command_bar' | 'terminal' | 'side_whisper';
+  // Widget layouts (may include legacy 'terminal' from database)
+  widget_layout: string;
   header_text_color: string;
   chat_background: string;
   trigger_text: string | null;
@@ -128,8 +128,10 @@ export default function PublicChatPage() {
     max_suggestion_chips: settings.max_suggestion_chips,
     escalation_enabled: settings.escalation_enabled,
     powered_by_clara: settings.powered_by_clara,
-    // Widget layouts
-    widget_layout: settings.widget_layout ?? 'classic',
+    // Widget layouts - normalize legacy 'terminal' to 'classic'
+    widget_layout: (['classic', 'command_bar', 'side_whisper'].includes(settings.widget_layout)
+      ? settings.widget_layout as WorkspaceSettings['widget_layout']
+      : 'classic'),
     header_text_color: settings.header_text_color ?? '#ffffff',
     chat_background: settings.chat_background ?? '#ffffff',
     trigger_text: settings.trigger_text ?? null,
