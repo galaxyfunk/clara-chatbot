@@ -3,7 +3,17 @@
 import { Send } from 'lucide-react';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { WIDGET_LAYOUTS } from '@/types/workspace';
-import { isDark } from '@/lib/color-utils';
+
+// Simple isDark check - returns true if background appears dark
+function isDark(color: string): boolean {
+  const hex = color.replace('#', '');
+  if (hex.length !== 6) return false;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance < 0.5;
+}
 
 interface SettingsPreviewProps {
   settings: WorkspaceSettings;
@@ -11,7 +21,10 @@ interface SettingsPreviewProps {
 }
 
 export function SettingsPreview({ settings, hasUnsavedChanges }: SettingsPreviewProps) {
-  const isDarkBg = isDark(settings.chat_background);
+  // Classic preview uses white background with header text
+  const chatBackground = '#ffffff';
+  const headerTextColor = '#ffffff';
+  const isDarkBg = isDark(chatBackground);
   const currentLayout = WIDGET_LAYOUTS.find(l => l.id === settings.widget_layout) || WIDGET_LAYOUTS[0];
 
   return (
@@ -38,7 +51,7 @@ export function SettingsPreview({ settings, hasUnsavedChanges }: SettingsPreview
           <div
             className="flex flex-col h-full rounded-lg overflow-hidden"
             style={{
-              backgroundColor: settings.chat_background,
+              backgroundColor: chatBackground,
               border: `1px solid ${isDarkBg ? 'rgba(255,255,255,0.1)' : '#e5e7eb'}`,
             }}
           >
@@ -56,14 +69,14 @@ export function SettingsPreview({ settings, hasUnsavedChanges }: SettingsPreview
               ) : (
                 <div
                   className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: settings.header_text_color }}
+                  style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: headerTextColor }}
                 >
                   {settings.display_name.charAt(0).toUpperCase()}
                 </div>
               )}
               <span
                 className="text-sm font-medium"
-                style={{ color: settings.header_text_color }}
+                style={{ color: headerTextColor }}
               >
                 {settings.display_name}
               </span>
@@ -75,7 +88,7 @@ export function SettingsPreview({ settings, hasUnsavedChanges }: SettingsPreview
               <div className="flex items-start gap-1.5">
                 <div
                   className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]"
-                  style={{ backgroundColor: settings.primary_color, color: settings.header_text_color }}
+                  style={{ backgroundColor: settings.primary_color, color: headerTextColor }}
                 >
                   {settings.display_name.charAt(0).toUpperCase()}
                 </div>
@@ -95,7 +108,7 @@ export function SettingsPreview({ settings, hasUnsavedChanges }: SettingsPreview
               <div className="flex justify-end">
                 <div
                   className="rounded-lg px-2.5 py-1.5 text-xs max-w-[85%]"
-                  style={{ backgroundColor: settings.primary_color, color: settings.header_text_color }}
+                  style={{ backgroundColor: settings.primary_color, color: headerTextColor }}
                 >
                   What services do you offer?
                 </div>
@@ -105,7 +118,7 @@ export function SettingsPreview({ settings, hasUnsavedChanges }: SettingsPreview
               <div className="flex items-start gap-1.5">
                 <div
                   className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px]"
-                  style={{ backgroundColor: settings.primary_color, color: settings.header_text_color }}
+                  style={{ backgroundColor: settings.primary_color, color: headerTextColor }}
                 >
                   {settings.display_name.charAt(0).toUpperCase()}
                 </div>
@@ -166,7 +179,7 @@ export function SettingsPreview({ settings, hasUnsavedChanges }: SettingsPreview
                   className="w-6 h-6 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: settings.primary_color }}
                 >
-                  <Send className="w-3 h-3" style={{ color: settings.header_text_color }} />
+                  <Send className="w-3 h-3" style={{ color: headerTextColor }} />
                 </div>
               </div>
               {settings.powered_by_clara && (

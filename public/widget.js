@@ -350,6 +350,13 @@
   function init() {
     if (document.getElementById('clara-widget-styles')) return;
 
+    // Listen for close message from iframe (panel-chat.tsx sends this)
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'clara-close') {
+        closeChat();
+      }
+    });
+
     fetchSettings(WORKSPACE_ID).then(function(s) {
       if (!s) return;
       settings = s;

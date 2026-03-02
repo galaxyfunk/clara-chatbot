@@ -5,7 +5,6 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ChatWindow } from '@/components/chat/chat-window';
 import { PanelChat } from '@/components/chat/panel-chat';
-import { CommandChat } from '@/components/chat/command-chat';
 import type { WorkspaceSettings } from '@/types/workspace';
 
 interface PublicSettings {
@@ -24,8 +23,6 @@ interface PublicSettings {
   powered_by_clara: boolean;
   // Widget layouts (may include legacy 'terminal' from database)
   widget_layout: string;
-  header_text_color: string;
-  chat_background: string;
   trigger_text: string | null;
   status_messages: string[] | null;
   hint_messages: string[] | null;
@@ -136,8 +133,6 @@ export default function PublicChatPage() {
     widget_layout: (['classic', 'command_bar', 'side_whisper'].includes(settings.widget_layout)
       ? settings.widget_layout as WorkspaceSettings['widget_layout']
       : 'classic'),
-    header_text_color: settings.header_text_color ?? '#ffffff',
-    chat_background: settings.chat_background ?? '#ffffff',
     trigger_text: settings.trigger_text ?? null,
     status_messages: settings.status_messages ?? null,
     hint_messages: settings.hint_messages ?? null,
@@ -159,10 +154,12 @@ export default function PublicChatPage() {
           />
         );
       case 'command':
+        // Command bar mode - parked for future session
         return (
-          <CommandChat
+          <ChatWindow
             workspaceId={workspaceId}
             settings={fullSettings}
+            isPlayground={false}
           />
         );
       default:

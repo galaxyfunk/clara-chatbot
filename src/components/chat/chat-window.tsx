@@ -5,7 +5,17 @@ import { Send, Loader2 } from 'lucide-react';
 import { MessageBubble } from './message-bubble';
 import { SuggestionChips } from './suggestion-chips';
 import type { WorkspaceSettings } from '@/types/workspace';
-import { isDark } from '@/lib/color-utils';
+
+// Simple isDark check - returns true if background appears dark
+function isDark(color: string): boolean {
+  const hex = color.replace('#', '');
+  if (hex.length !== 6) return false;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance < 0.5;
+}
 
 interface Message {
   id: string;
@@ -194,13 +204,15 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
 
   const isDisabled = isLoading || isStreaming;
 
-  // Compute dark/light mode for chat background
-  const isDarkBg = isDark(settings.chat_background);
+  // Classic chat uses white background
+  const chatBackground = '#ffffff';
+  const headerTextColor = '#ffffff';
+  const isDarkBg = isDark(chatBackground);
 
   return (
     <div
       className="flex flex-col h-full"
-      style={{ backgroundColor: settings.chat_background }}
+      style={{ backgroundColor: chatBackground }}
     >
       {/* Header */}
       <div
@@ -215,17 +227,17 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
           />
         ) : (
           <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-medium"
-            style={{ color: settings.header_text_color }}
+            style={{ color: headerTextColor }}
           >
             {settings.display_name.charAt(0).toUpperCase()}
           </div>
         )}
         <div>
-          <h2 className="font-medium" style={{ color: settings.header_text_color }}>
+          <h2 className="font-medium" style={{ color: headerTextColor }}>
             {settings.display_name}
           </h2>
           {isPlayground && (
-            <p className="text-xs" style={{ color: settings.header_text_color, opacity: 0.7 }}>
+            <p className="text-xs" style={{ color: headerTextColor, opacity: 0.7 }}>
               Playground Mode
             </p>
           )}
@@ -241,7 +253,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             content: settings.welcome_message,
           }}
           primaryColor={settings.primary_color}
-          headerTextColor={settings.header_text_color}
+          headerTextColor={headerTextColor}
           avatarUrl={settings.avatar_url}
           displayName={settings.display_name}
           isDarkBg={isDarkBg}
@@ -253,7 +265,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             key={message.id}
             message={message}
             primaryColor={settings.primary_color}
-            headerTextColor={settings.header_text_color}
+            headerTextColor={headerTextColor}
             avatarUrl={settings.avatar_url}
             displayName={settings.display_name}
             isDarkBg={isDarkBg}
@@ -317,7 +329,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             className="p-2 rounded-full disabled:opacity-50 transition-opacity"
             style={{
               backgroundColor: settings.primary_color,
-              color: settings.header_text_color,
+              color: headerTextColor,
             }}
           >
             <Send className="w-5 h-5" />

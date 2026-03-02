@@ -54,13 +54,6 @@ const LAYOUT_ICONS: Record<string, React.FC<{ color: string; active: boolean }>>
   side_whisper: SideWhisperIcon,
 };
 
-const BG_PRESETS = [
-  { color: '#ffffff', label: 'White' },
-  { color: '#e5e7eb', label: 'Grey' },
-  { color: '#0B1A2E', label: 'Navy' },
-  { color: '#000000', label: 'Black' },
-];
-
 export function StyleTab({ settings, onChange, workspaceId }: StyleTabProps) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingIcon, setUploadingIcon] = useState(false);
@@ -211,79 +204,6 @@ export function StyleTab({ settings, onChange, workspaceId }: StyleTabProps) {
         </div>
         <p className="mt-1 text-xs text-ce-text-muted">
           Used for header, buttons, and user message bubbles
-        </p>
-      </div>
-
-      {/* Header Text Color */}
-      <div>
-        <label className="block text-sm font-medium text-ce-text mb-1">
-          Header Text Color
-        </label>
-        <div className="flex items-center gap-3">
-          <input
-            type="color"
-            value={settings.header_text_color}
-            onChange={(e) => onChange({ header_text_color: e.target.value })}
-            className="w-12 h-10 rounded border border-ce-border cursor-pointer"
-          />
-          <input
-            type="text"
-            value={settings.header_text_color}
-            onChange={(e) => onChange({ header_text_color: e.target.value })}
-            className="w-28 px-3 py-2 border border-ce-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ce-navy font-mono text-sm"
-          />
-        </div>
-        <p className="mt-1 text-xs text-ce-text-muted">
-          Text color on the header and primary-colored surfaces
-        </p>
-      </div>
-
-      {/* Chat Background */}
-      <div>
-        <label className="block text-sm font-medium text-ce-text mb-1">
-          Chat Background
-        </label>
-        <div className="flex items-center gap-3 mb-2">
-          <input
-            type="color"
-            value={settings.chat_background}
-            onChange={(e) => onChange({ chat_background: e.target.value })}
-            className="w-12 h-10 rounded border border-ce-border cursor-pointer"
-          />
-          <input
-            type="text"
-            value={settings.chat_background}
-            onChange={(e) => onChange({ chat_background: e.target.value })}
-            className="w-28 px-3 py-2 border border-ce-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ce-navy font-mono text-sm"
-          />
-        </div>
-        <div className="flex gap-2">
-          {BG_PRESETS.map((preset) => (
-            <button
-              key={preset.color}
-              onClick={() => onChange({ chat_background: preset.color })}
-              className={`flex flex-col items-center gap-1 p-1.5 rounded-lg border transition-colors ${
-                settings.chat_background === preset.color
-                  ? 'border-ce-navy'
-                  : 'border-transparent hover:border-gray-200'
-              }`}
-            >
-              <div
-                className="w-7 h-7 rounded-md border border-gray-300"
-                style={{ backgroundColor: preset.color }}
-              />
-              <span className={`text-[10px] ${
-                settings.chat_background === preset.color
-                  ? 'text-ce-navy font-medium'
-                  : 'text-gray-500'
-              }`}>
-                {preset.label}
-              </span>
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-ce-text-muted">
-          Background color of the chat panel
         </p>
       </div>
 
