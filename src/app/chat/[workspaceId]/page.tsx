@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ChatWindow } from '@/components/chat/chat-window';
+import { PanelChat } from '@/components/chat/panel-chat';
+import { CommandChat } from '@/components/chat/command-chat';
 import type { WorkspaceSettings } from '@/types/workspace';
 
 interface PublicSettings {
@@ -31,7 +33,9 @@ interface PublicSettings {
 
 export default function PublicChatPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const workspaceId = params.workspaceId as string;
+  const mode = searchParams.get('mode') || 'default';
 
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,13 +148,37 @@ export default function PublicChatPage() {
     onboarding_completed_steps: [],
   };
 
+  // Render based on mode
+  const renderChat = () => {
+    switch (mode) {
+      case 'panel':
+        return (
+          <PanelChat
+            workspaceId={workspaceId}
+            settings={fullSettings}
+          />
+        );
+      case 'command':
+        return (
+          <CommandChat
+            workspaceId={workspaceId}
+            settings={fullSettings}
+          />
+        );
+      default:
+        return (
+          <ChatWindow
+            workspaceId={workspaceId}
+            settings={fullSettings}
+            isPlayground={false}
+          />
+        );
+    }
+  };
+
   return (
     <div className="h-screen w-full">
-      <ChatWindow
-        workspaceId={workspaceId}
-        settings={fullSettings}
-        isPlayground={false}
-      />
+      {renderChat()}
     </div>
   );
 }
