@@ -165,9 +165,15 @@
     closeBtn.addEventListener('click', closeChat);
     frameEl.appendChild(closeBtn);
 
-    // Iframe
+    // Iframe — add mode param based on layout
     var iframe = document.createElement('iframe');
-    iframe.src = BASE_URL + '/chat/' + WORKSPACE_ID;
+    var chatUrl = BASE_URL + '/chat/' + WORKSPACE_ID;
+    if (type === 'panel') {
+      chatUrl += '?mode=panel';
+    } else if (type === 'modal') {
+      chatUrl += '?mode=command';
+    }
+    iframe.src = chatUrl;
     iframe.title = 'Chat with ' + settings.display_name;
     iframe.setAttribute('loading', 'lazy');
     frameEl.appendChild(iframe);
