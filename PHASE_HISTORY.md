@@ -495,3 +495,107 @@ Modified:
 1. `feat: sessions bug fix, UI polish, rename Gaps to Flagged Questions`
 2. `fix: use dynamic import for pdf-parse to resolve Turbopack ESM issue`
 3. `feat: Interview Guide Export + v1.1 Session 2 polish complete`
+
+---
+
+## v1.1 Session 7A — UX Polish
+**Date:** March 2, 2026
+**Status:** ✅ Complete
+
+### Features Built
+
+1. **Streaming Chat Responses (SSE)**
+   - Real-time token streaming via Server-Sent Events
+   - `chatCompletionStream()` in `src/lib/llm/provider.ts` — supports Anthropic + OpenAI streaming
+   - `processChatStream()` in `src/lib/chat/engine.ts` — wraps LLM stream in SSE format
+   - `prepareChatContext()` helper extracted for shared pre-LLM logic
+   - Frontend SSE handling in `src/components/chat/chat-window.tsx`
+   - SSE events: `token` (content chunks), `done` (metadata), `error` (failures)
+   - `after()` for post-processing (gap detection, session upsert)
+   - Non-streaming fallback preserved for backward compatibility
+
+2. **Settings Live Preview Panel**
+   - `src/components/settings/settings-preview.tsx` — mini widget preview component
+   - Real-time updates as settings change (no save required to see preview)
+   - Shows avatar, display_name, primary_color, bubble_color, welcome_message, suggested_messages
+   - Sample conversation with user/assistant messages
+   - "Unsaved" badge when hasUnsavedChanges is true
+   - Responsive layout:
+     - Desktop (lg+): 60/40 split layout, preview always visible
+     - Tablet (md-lg): Collapsible via eye icon toggle
+     - Mobile: Preview hidden
+   - Preview hidden for non-visual tabs (API Keys, Embed)
+
+3. **Onboarding Wizard**
+   - `OnboardingStepRecord` type added to `src/types/workspace.ts`
+   - `onboarding_completed_steps` field in WorkspaceSettings
+   - `src/components/onboarding/onboarding-wizard.tsx` — full-screen 4-step wizard
+   - `src/components/onboarding/onboarding-gate.tsx` — conditional wrapper
+   - Integrated in `src/app/dashboard/layout.tsx`
+   - **Step 1 (Name Bot):** display_name + welcome_message
+   - **Step 2 (Add Knowledge):** CSV upload, transcript extraction, or manual Q&A
+   - **Step 3 (Connect AI):** Provider selection cards, API key input, test button
+   - **Step 4 (Preview):** Mini chat window to test the bot
+   - Progress bar with step indicators
+   - Skip functionality per step (marks as 'skipped' vs 'completed')
+   - Resumes at first incomplete step on reload
+   - z-index 50+ to overlay entire dashboard
+   - Branded header with CE colors (#213D66)
+
+4. **Auto-Resolve Gaps on Individual Q&A Add**
+   - Updated `src/app/api/qa-pairs/route.ts` POST handler
+   - Calls `autoResolveGaps(workspaceId)` via `after()` after successful insert
+   - Same behavior as bulk-save — checks all open gaps against all active pairs
+   - Background processing doesn't block API response
+
+### Files Created
+
+```
+src/components/onboarding/
+├── onboarding-wizard.tsx      (930 lines)
+└── onboarding-gate.tsx        (79 lines)
+
+src/components/settings/
+└── settings-preview.tsx       (170 lines)
+```
+
+### Files Modified
+
+```
+src/lib/llm/provider.ts        — Added chatCompletionStream(), streamAnthropic(), streamOpenAI()
+src/lib/chat/engine.ts         — Added processChatStream(), prepareChatContext()
+src/app/api/chat/route.ts      — SSE streaming support with after() post-processing
+src/app/api/qa-pairs/route.ts  — after() call to autoResolveGaps on POST
+src/components/chat/chat-window.tsx — Frontend SSE handling
+src/app/dashboard/settings/page.tsx — Split layout, preview integration
+src/app/dashboard/layout.tsx   — OnboardingGate wrapper
+src/types/workspace.ts         — OnboardingStepRecord, onboarding_completed_steps
+```
+
+### Key Patterns Established
+
+1. **SSE Streaming Pattern:**
+   - Return `{ stream, postProcess }` from engine
+   - `stream` is `ReadableStream<Uint8Array>` with SSE-formatted chunks
+   - `postProcess` is async closure for background work
+   - API route calls `after(postProcess)` before returning stream response
+
+2. **Onboarding Gate Pattern:**
+   - Wrapper component fetches workspace on mount
+   - Checks if all 4 steps completed/skipped
+   - Renders wizard overlay if incomplete, children if done
+   - Full-screen overlay with z-50 to cover sidebar
+
+3. **Settings Preview Pattern:**
+   - Preview receives current (unsaved) settings as props
+   - Updates instantly as user changes form inputs
+   - Hidden for non-visual tabs
+   - Responsive visibility via Tailwind breakpoints
+
+### Git Commits
+1. `feat: streaming chat responses via Server-Sent Events`
+2. `feat: settings live preview panel with unsaved state indicator`
+3. `feat: onboarding wizard for new users`
+4. `fix: auto-resolve gaps on individual Q&A add`
+5. `fix: streaming chat shows plain text instead of raw JSON`
+6. `feat: onboarding wizard UX polish — branded header, provider cards, better layout`

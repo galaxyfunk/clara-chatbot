@@ -23,6 +23,14 @@ Public chat route built at `/chat/[workspaceId]` for iframe embedding and direct
 
 ---
 
+## v1.1 Session 7A — UX Polish
+**Status:** ✅ COMPLETE
+**Date:** March 2, 2026
+
+Streaming chat responses via Server-Sent Events — tokens now appear in real-time instead of waiting for full LLM response. Added `chatCompletionStream()` for both Anthropic and OpenAI, `processChatStream()` in chat engine, and frontend SSE handling. Settings live preview panel shows widget changes in real-time without saving — 60/40 split layout on desktop, collapsible on tablet, hidden on mobile. Onboarding wizard guides new users through 4 steps: name bot, add knowledge, connect AI provider, preview chat. Full-screen overlay with progress tracking, skip functionality, and resume on reload. Auto-resolve gaps now triggers on individual Q&A add (not just bulk save) via `after()` background processing. Fixed streaming chat showing raw JSON instead of plain text.
+
+---
+
 ## v1.1 Session 2 + Polish
 **Status:** ✅ COMPLETE
 **Date:** March 1, 2026
@@ -31,4 +39,4 @@ Intelligence features (docx/pdf upload, gap auto-resolution, conversation summar
 
 ---
 
-**v1.0 Complete.** Clara is live at https://chatbot.jakevibes.dev
+**v1.1 Session 7A Complete.** Clara is live at https://chatbot.jakevibes.dev

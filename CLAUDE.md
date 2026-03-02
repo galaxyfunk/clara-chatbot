@@ -8,7 +8,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 **Tagline:** "Your AI-Powered Chatbot, Built in Minutes"
 
 ## Current Version
-**v1.1: IN PROGRESS** — Session 2 + Polish complete (Mar 1, 2026). Session 3 (UX Polish + Integrations) is next.
+**v1.1: IN PROGRESS** — Session 7A complete (Mar 2, 2026). All UX polish done; Session 7B (Integrations) is next.
 
 **v1.0: DEPLOYED** — Live at https://chatbot.jakevibes.dev (Feb 23, 2026)
 - Dashboard app at chatbot.jakevibes.dev
@@ -108,7 +108,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | Version | Focus | Status |
 |---------|-------|--------|
 | v1.0 | Core Product + Widget + Deploy | **✅ SHIPPED — Feb 23, 2026** |
-| v1.1 | Polish + Intelligence + Integrations (18 features, 3 sessions) | **IN PROGRESS — 2/3 sessions complete** |
+| v1.1 | Polish + Intelligence + UX (21 features, 4 sessions) | **IN PROGRESS — 3/4 sessions complete** |
 | v1.2 | Channel Integrations (Slack, Telegram, WhatsApp) | Future |
 | v1.3 | Analytics + Reporting | Future |
 | Bridge | Insights Bank one-way API push | Future |
@@ -125,8 +125,9 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | Session | Focus | Features | Status |
 |---------|-------|----------|--------|
 | 5 (v1.1-1) | Quick Wins + Infrastructure | 10 features | **✅ COMPLETE — Feb 28, 2026** |
-| 6 (v1.1-2) | Intelligence | 4 features | **✅ COMPLETE — Feb 28, 2026** |
-| 7 (v1.1-3) | Integrations | TBD | Pending |
+| 6 (v1.1-2) | Intelligence | 7 features | **✅ COMPLETE — Mar 1, 2026** |
+| 7A (v1.1-3a) | UX Polish | 4 features | **✅ COMPLETE — Mar 2, 2026** |
+| 7B (v1.1-3b) | Integrations | TBD | Pending |
 
 ## v1.1 Session 1 Features (Complete)
 1. Deploy fixes — remotePatterns + maxDuration
@@ -148,6 +149,12 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 5. Sessions bug fix + UI polish
 6. Flagged Questions rename (from Gaps) + bulk operations + URL update to /dashboard/gaps
 7. Interview Guide Export — AI-powered founder interview guide with KB cross-referencing, xlsx export
+
+## v1.1 Session 7A Features (Complete)
+1. Streaming chat responses (SSE) — Real-time token streaming via Server-Sent Events, chatCompletionStream in provider.ts, processChatStream in engine.ts, frontend SSE handling in chat-window.tsx
+2. Settings live preview panel — Real-time widget preview as settings change, 60/40 split layout on desktop, collapsible on tablet, hidden on mobile
+3. Onboarding wizard — 4-step full-screen wizard for new users (name bot, add knowledge, connect AI, preview), OnboardingGate wrapper in dashboard layout, progress tracking in workspace settings
+4. Auto-resolve gaps on individual Q&A add — Triggers autoResolveGaps() via after() when single Q&A pair is created (not just bulk save)
 
 ## Deployment Info
 - **Production URL:** https://chatbot.jakevibes.dev

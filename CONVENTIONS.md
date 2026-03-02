@@ -474,6 +474,116 @@ const modelToUse = isCustomModel ? form.customModel : form.model;
 
 ---
 
+## SSE Streaming Pattern
+
+For real-time chat responses, use Server-Sent Events:
+
+**Engine returns stream + postProcess:**
+```typescript
+export async function processChatStream(request: ChatRequest): Promise<{
+  stream: ReadableStream<Uint8Array>;
+  postProcess: () => Promise<void>;
+}> {
+  // ... build SSE stream
+  return {
+    stream: sseStream,
+    postProcess: async () => {
+      // Gap detection, session upsert — runs after response sent
+    },
+  };
+}
+```
+
+**API route uses after() for background work:**
+```typescript
+import { after } from 'next/server';
+
+if (wantsStream) {
+  const { stream, postProcess } = await processChatStream(body);
+  after(postProcess);  // Runs after response is sent
+  return new Response(stream, {
+    headers: { 'Content-Type': 'text/event-stream', ... },
+  });
+}
+```
+
+**Frontend reads SSE stream:**
+```typescript
+const reader = res.body!.getReader();
+const decoder = new TextDecoder();
+let buffer = '';
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += decoder.decode(value, { stream: true });
+  // Parse SSE lines: data: {...}\n\n
+}
+```
+
+**SSE Event Format:**
+- `{ type: 'token', content: 'chunk' }` — streamed content
+- `{ type: 'done', suggestion_chips: [...], escalation_offered: bool }` — final metadata
+- `{ type: 'error', message: 'reason' }` — error state
+
+---
+
+## Onboarding Gate Pattern
+
+Wrap dashboard children with a conditional gate that shows onboarding for new users:
+
+```typescript
+// src/components/onboarding/onboarding-gate.tsx
+export function OnboardingGate({ children }: { children: React.ReactNode }) {
+  const [showWizard, setShowWizard] = useState(false);
+
+  useEffect(() => {
+    // Fetch workspace, check onboarding_completed_steps
+    // If incomplete, setShowWizard(true)
+  }, []);
+
+  if (showWizard) {
+    return <OnboardingWizard onComplete={() => setShowWizard(false)} />;
+  }
+  return <>{children}</>;
+}
+
+// In dashboard/layout.tsx:
+<OnboardingGate>
+  {children}
+</OnboardingGate>
+```
+
+**Rules:**
+- Wizard is full-screen overlay with z-50 (above sidebar)
+- Track progress via `onboarding_completed_steps` in workspace settings
+- Each step can be 'completed' or 'skipped'
+- Resume at first incomplete step on reload
+
+---
+
+## Settings Live Preview Pattern
+
+For real-time settings preview without saving:
+
+```typescript
+// Settings page lifts state
+const [settings, setSettings] = useState<WorkspaceSettings>(initialSettings);
+const [hasChanges, setHasChanges] = useState(false);
+
+// Preview receives current (unsaved) state
+<SettingsPreview settings={settings} hasUnsavedChanges={hasChanges} />
+```
+
+**Rules:**
+- Preview updates instantly as form inputs change
+- No API calls for preview — purely client-side
+- Show "Unsaved" indicator when hasChanges is true
+- Hide preview for non-visual tabs (API Keys, Embed)
+- Responsive: visible on desktop, collapsible on tablet, hidden on mobile
+
+---
+
 ## Version History
 
 | Version | Status | Key Patterns Established |
@@ -481,4 +591,7 @@ const modelToUse = isCustomModel ? form.customModel : form.model;
 | v1.0 Session 1 | Complete | File structure, Supabase clients, encryption, LLM provider abstraction, workspace isolation, idempotency, dedup, type definitions, lib function structure |
 | v1.0 Session 2 | Complete | Auth helper pattern, API route pattern, API key validation, settings merge, soft/hard delete, maxDuration exports |
 | v1.0 Session 3 | Complete | Component patterns, settings tabs, skeleton variants, flexible input detection, custom model option, dynamic suggestion chips |
-| v1.0 Session 4 | Next | Widget embed system, public chat page |
+| v1.0 Session 4 | Complete | Widget embed system, public chat page, iframe detection |
+| v1.1 Session 1 | Complete | Bulk operations, test-match pattern, iframe-responsive layout |
+| v1.1 Session 2 | Complete | File parsing (mammoth, pdf-parse), auto-resolve gaps, AI summaries, interview guide export |
+| v1.1 Session 7A | Complete | SSE streaming, onboarding gate, settings live preview, after() background processing |

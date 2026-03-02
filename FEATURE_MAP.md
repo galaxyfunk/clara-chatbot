@@ -306,3 +306,44 @@ Maps every feature to its owning files. Organized by feature area.
 - **Lib Modules:** `src/lib/chat/summarize.ts`
 - **DB Tables:** `chat_sessions.summary`
 - **Session:** v1.1-2
+
+---
+
+## v1.1 Session 7A Features ✅ Complete
+
+### Streaming Chat Responses (SSE)
+- **Description:** Real-time token streaming via Server-Sent Events for instant feedback
+- **Page:** `/dashboard/chat`, `/chat/[workspaceId]`
+- **API Route:** `src/app/api/chat/route.ts` — POST (supports both streaming and non-streaming)
+- **Components:** `src/components/chat/chat-window.tsx` (SSE client handling)
+- **Lib Modules:** `src/lib/llm/provider.ts` (chatCompletionStream), `src/lib/chat/engine.ts` (processChatStream, prepareChatContext)
+- **DB Tables:** `chat_sessions`, `qa_gaps`
+- **Session:** v1.1-7A
+
+### Settings Live Preview Panel
+- **Description:** Real-time widget preview showing settings changes before saving
+- **Page:** `/dashboard/settings`
+- **API Route:** N/A (client-side preview)
+- **Components:** `src/components/settings/settings-preview.tsx`
+- **Lib Modules:** N/A
+- **DB Tables:** N/A (preview only, uses in-memory state)
+- **Session:** v1.1-7A
+
+### Onboarding Wizard
+- **Description:** 4-step full-screen wizard guiding new users through setup
+- **Page:** `/dashboard/*` (overlay on all dashboard pages)
+- **API Route:** `src/app/api/workspace` (PATCH for saving progress), `src/app/api/qa-pairs`, `src/app/api/api-keys`, `src/app/api/chat`
+- **Components:** `src/components/onboarding/onboarding-wizard.tsx`, `src/components/onboarding/onboarding-gate.tsx`
+- **Lib Modules:** N/A
+- **DB Tables:** `workspaces.settings.onboarding_completed_steps`
+- **Types:** `OnboardingStepRecord` in `src/types/workspace.ts`
+- **Session:** v1.1-7A
+
+### Auto-Resolve Gaps on Individual Q&A Add
+- **Description:** Triggers gap auto-resolution when a single Q&A pair is added (not just bulk save)
+- **Page:** N/A (background process)
+- **API Route:** `src/app/api/qa-pairs/route.ts` — POST (calls autoResolveGaps via after())
+- **Components:** N/A
+- **Lib Modules:** `src/lib/chat/auto-resolve-gaps.ts`
+- **DB Tables:** `qa_gaps`, `qa_pairs`
+- **Session:** v1.1-7A
