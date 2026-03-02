@@ -157,13 +157,15 @@
       type === 'panel' ? 'clara-frame-panel' : ''
     );
 
-    // Close button
-    var closeBtn = document.createElement('button');
-    closeBtn.className = 'clara-widget-close';
-    closeBtn.innerHTML = closeIcon;
-    closeBtn.setAttribute('aria-label', 'Close chat');
-    closeBtn.addEventListener('click', closeChat);
-    frameEl.appendChild(closeBtn);
+    // Close button — only for overlay/modal, not panel (panel-chat.tsx has its own)
+    if (type !== 'panel') {
+      var closeBtn = document.createElement('button');
+      closeBtn.className = 'clara-widget-close';
+      closeBtn.innerHTML = closeIcon;
+      closeBtn.setAttribute('aria-label', 'Close chat');
+      closeBtn.addEventListener('click', closeChat);
+      frameEl.appendChild(closeBtn);
+    }
 
     // Iframe — add mode param based on layout
     var iframe = document.createElement('iframe');

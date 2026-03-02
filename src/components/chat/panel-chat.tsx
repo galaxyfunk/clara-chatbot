@@ -220,10 +220,18 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
     window.parent.postMessage({ type: 'clara-close' }, '*');
   };
 
-  // Get suggestion chips
+  // Get suggestion chips — use fallback defaults if workspace has none configured
+  const defaultChips = settings.suggested_messages?.length > 0
+    ? settings.suggested_messages
+    : [
+        'What services does Cloud Employee offer?',
+        'How does your pricing work?',
+        'What roles can you hire through CE?',
+        'How is Cloud Employee different?',
+      ];
   const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
   const bottomChips = showInitialChips && messages.length === 0
-    ? settings.suggested_messages.slice(0, settings.max_suggestion_chips)
+    ? defaultChips.slice(0, settings.max_suggestion_chips)
     : (lastAssistantMessage?.suggestion_chips || []).slice(0, settings.max_suggestion_chips);
 
   const isDisabled = isLoading || isStreaming;
