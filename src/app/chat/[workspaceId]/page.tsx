@@ -20,6 +20,13 @@ interface PublicSettings {
   max_suggestion_chips: number;
   escalation_enabled: boolean;
   powered_by_clara: boolean;
+  // Widget layouts
+  widget_layout: 'classic' | 'command_bar' | 'terminal' | 'side_whisper';
+  header_text_color: string;
+  chat_background: string;
+  trigger_text: string | null;
+  status_messages: string[] | null;
+  hint_messages: string[] | null;
 }
 
 export default function PublicChatPage() {
@@ -121,6 +128,13 @@ export default function PublicChatPage() {
     max_suggestion_chips: settings.max_suggestion_chips,
     escalation_enabled: settings.escalation_enabled,
     powered_by_clara: settings.powered_by_clara,
+    // Widget layouts
+    widget_layout: settings.widget_layout ?? 'classic',
+    header_text_color: settings.header_text_color ?? '#ffffff',
+    chat_background: settings.chat_background ?? '#ffffff',
+    trigger_text: settings.trigger_text ?? null,
+    status_messages: settings.status_messages ?? null,
+    hint_messages: settings.hint_messages ?? null,
     // These fields aren't used in the public chat, but required by type
     personality_prompt: '',
     confidence_threshold: 0.78,

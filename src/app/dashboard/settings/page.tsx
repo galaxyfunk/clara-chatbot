@@ -184,15 +184,15 @@ export default function SettingsPage() {
               {activeTab === 'content' && (
                 <ContentTab settings={settings} onChange={handleSettingsChange} />
               )}
-              {activeTab === 'style' && (
-                <StyleTab settings={settings} onChange={handleSettingsChange} />
+              {activeTab === 'style' && workspace && (
+                <StyleTab settings={settings} onChange={handleSettingsChange} workspaceId={workspace.id} />
               )}
               {activeTab === 'ai' && (
                 <AITab settings={settings} onChange={handleSettingsChange} />
               )}
               {activeTab === 'api-keys' && <ApiKeysTab />}
               {activeTab === 'embed' && workspace && (
-                <EmbedTab workspaceId={workspace.id} />
+                <EmbedTab workspaceId={workspace.id} settings={settings} />
               )}
             </div>
           </div>

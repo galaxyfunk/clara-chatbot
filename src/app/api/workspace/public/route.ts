@@ -48,6 +48,13 @@ export async function GET(request: Request) {
       max_suggestion_chips: settings.max_suggestion_chips || 3,
       escalation_enabled: settings.escalation_enabled ?? true,
       powered_by_clara: settings.powered_by_clara ?? true,
+      // Widget layouts
+      widget_layout: settings.widget_layout ?? 'classic',
+      header_text_color: settings.header_text_color ?? '#ffffff',
+      chat_background: settings.chat_background ?? '#ffffff',
+      trigger_text: settings.trigger_text ?? null,
+      status_messages: settings.status_messages ?? null,
+      hint_messages: settings.hint_messages ?? null,
     };
 
     return NextResponse.json({

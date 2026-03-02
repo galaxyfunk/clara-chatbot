@@ -1,18 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Check, ExternalLink, Code, MessageSquare, Link } from 'lucide-react';
+import { Copy, Check, ExternalLink, Code, MessageSquare, Link, Info } from 'lucide-react';
+import type { WorkspaceSettings } from '@/types/workspace';
+import { WIDGET_LAYOUTS } from '@/types/workspace';
 
 interface EmbedTabProps {
   workspaceId: string;
+  settings: WorkspaceSettings;
 }
 
 type CopiedState = 'script' | 'iframe' | 'link' | null;
 
-export function EmbedTab({ workspaceId }: EmbedTabProps) {
+export function EmbedTab({ workspaceId, settings }: EmbedTabProps) {
   const [copied, setCopied] = useState<CopiedState>(null);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const layoutName = WIDGET_LAYOUTS.find(l => l.id === settings.widget_layout)?.name || 'Classic Bubble';
+  const isNonClassic = settings.widget_layout !== 'classic';
 
   const scriptCode = `<script src="${baseUrl}/widget.js" data-workspace-id="${workspaceId}"></script>`;
   const iframeCode = `<iframe
@@ -76,6 +81,16 @@ export function EmbedTab({ workspaceId }: EmbedTabProps) {
             )}
           </button>
         </div>
+        {isNonClassic && (
+          <div className="flex items-start gap-2 p-3 bg-blue-50 text-blue-700 rounded-lg text-sm">
+            <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div>
+              Your <span className="font-medium">{layoutName}</span> trigger is included automatically with the script tag.
+              The iframe and direct link show just the chat panel without the trigger.
+              Do not add <code className="px-1 py-0.5 bg-blue-100 rounded text-xs">async</code> or <code className="px-1 py-0.5 bg-blue-100 rounded text-xs">defer</code> to the script tag.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Option 2: Iframe Embed */}

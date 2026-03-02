@@ -5,6 +5,7 @@ import { Send, Loader2 } from 'lucide-react';
 import { MessageBubble } from './message-bubble';
 import { SuggestionChips } from './suggestion-chips';
 import type { WorkspaceSettings } from '@/types/workspace';
+import { isDark } from '@/lib/color-utils';
 
 interface Message {
   id: string;
@@ -193,8 +194,14 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
 
   const isDisabled = isLoading || isStreaming;
 
+  // Compute dark/light mode for chat background
+  const isDarkBg = isDark(settings.chat_background);
+
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div
+      className="flex flex-col h-full"
+      style={{ backgroundColor: settings.chat_background }}
+    >
       {/* Header */}
       <div
         className="flex-shrink-0 flex items-center gap-3 px-4 py-3"
@@ -207,14 +214,20 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             className="w-10 h-10 rounded-full object-cover border-2 border-white/20"
           />
         ) : (
-          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-medium">
+          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-medium"
+            style={{ color: settings.header_text_color }}
+          >
             {settings.display_name.charAt(0).toUpperCase()}
           </div>
         )}
         <div>
-          <h2 className="text-white font-medium">{settings.display_name}</h2>
+          <h2 className="font-medium" style={{ color: settings.header_text_color }}>
+            {settings.display_name}
+          </h2>
           {isPlayground && (
-            <p className="text-white/70 text-xs">Playground Mode</p>
+            <p className="text-xs" style={{ color: settings.header_text_color, opacity: 0.7 }}>
+              Playground Mode
+            </p>
           )}
         </div>
       </div>
@@ -228,8 +241,10 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             content: settings.welcome_message,
           }}
           primaryColor={settings.primary_color}
+          headerTextColor={settings.header_text_color}
           avatarUrl={settings.avatar_url}
           displayName={settings.display_name}
+          isDarkBg={isDarkBg}
         />
 
         {/* Conversation messages */}
@@ -238,14 +253,19 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             key={message.id}
             message={message}
             primaryColor={settings.primary_color}
+            headerTextColor={settings.header_text_color}
             avatarUrl={settings.avatar_url}
             displayName={settings.display_name}
+            isDarkBg={isDarkBg}
           />
         ))}
 
         {/* Typing indicator - show when loading (before stream starts) */}
         {isLoading && (
-          <div className="flex items-center gap-2 text-gray-500">
+          <div
+            className="flex items-center gap-2"
+            style={{ color: isDarkBg ? '#9ca3af' : '#6b7280' }}
+          >
             <Loader2 className="w-4 h-4 animate-spin" />
             <span className="text-sm">{settings.display_name} is typing...</span>
           </div>
@@ -261,12 +281,20 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             chips={currentChips}
             onChipClick={handleChipClick}
             primaryColor={settings.primary_color}
+            isDarkBg={isDarkBg}
           />
         </div>
       )}
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="flex-shrink-0 p-4 bg-white border-t border-gray-200">
+      <form
+        onSubmit={handleSubmit}
+        className="flex-shrink-0 p-4"
+        style={{
+          backgroundColor: isDarkBg ? 'rgba(255,255,255,0.03)' : 'white',
+          borderTop: `1px solid ${isDarkBg ? 'rgba(255,255,255,0.06)' : '#e5e7eb'}`,
+        }}
+      >
         <div className="flex items-center gap-2">
           <input
             ref={inputRef}
@@ -275,14 +303,22 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             onChange={(e) => setInput(e.target.value)}
             placeholder={settings.placeholder_text}
             disabled={isDisabled}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:opacity-50"
-            style={{ '--tw-ring-color': settings.primary_color } as React.CSSProperties}
+            className="flex-1 px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:opacity-50"
+            style={{
+              backgroundColor: isDarkBg ? 'rgba(255,255,255,0.06)' : 'white',
+              border: `1px solid ${isDarkBg ? 'rgba(255,255,255,0.1)' : '#d1d5db'}`,
+              color: isDarkBg ? '#e5e7eb' : '#1f2937',
+              '--tw-ring-color': settings.primary_color,
+            } as React.CSSProperties}
           />
           <button
             type="submit"
             disabled={!input.trim() || isDisabled}
-            className="p-2 rounded-full text-white disabled:opacity-50 transition-opacity"
-            style={{ backgroundColor: settings.primary_color }}
+            className="p-2 rounded-full disabled:opacity-50 transition-opacity"
+            style={{
+              backgroundColor: settings.primary_color,
+              color: settings.header_text_color,
+            }}
           >
             <Send className="w-5 h-5" />
           </button>
@@ -290,7 +326,10 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
 
         {/* Powered by Clara */}
         {settings.powered_by_clara && (
-          <p className="mt-2 text-center text-xs text-gray-400">
+          <p
+            className="mt-2 text-center text-xs"
+            style={{ color: isDarkBg ? '#4b5563' : '#9ca3af' }}
+          >
             Powered by Clara
           </p>
         )}

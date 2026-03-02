@@ -11,15 +11,19 @@ interface MessageBubbleProps {
     booking_url?: string | null;
   };
   primaryColor: string;
+  headerTextColor: string;
   avatarUrl: string | null;
   displayName: string;
+  isDarkBg: boolean;
 }
 
 export function MessageBubble({
   message,
   primaryColor,
+  headerTextColor,
   avatarUrl,
   displayName,
+  isDarkBg,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
@@ -53,8 +57,12 @@ export function MessageBubble({
           }`}
           style={
             isUser
-              ? { backgroundColor: primaryColor, color: 'white' }
-              : { backgroundColor: 'white', border: '1px solid #E5E7EB' }
+              ? { backgroundColor: primaryColor, color: headerTextColor }
+              : {
+                  backgroundColor: isDarkBg ? 'rgba(255,255,255,0.08)' : 'white',
+                  border: isDarkBg ? '1px solid rgba(255,255,255,0.1)' : '1px solid #E5E7EB',
+                  color: isDarkBg ? '#e5e7eb' : '#1f2937',
+                }
           }
         >
           <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -74,8 +82,8 @@ export function MessageBubble({
             href={message.booking_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
-            style={{ backgroundColor: primaryColor }}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
+            style={{ backgroundColor: primaryColor, color: headerTextColor }}
           >
             <span>Book a Call</span>
             <ExternalLink className="w-4 h-4" />

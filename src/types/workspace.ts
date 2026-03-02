@@ -31,6 +31,14 @@ export interface WorkspaceSettings {
   avatar_url: string | null;
   chat_icon_url: string | null;
 
+  // Style — Widget Layouts
+  widget_layout: 'classic' | 'command_bar' | 'terminal' | 'side_whisper';
+  header_text_color: string;
+  chat_background: string;
+  trigger_text: string | null;
+  status_messages: string[] | null;
+  hint_messages: string[] | null;
+
   // AI
   personality_prompt: string;
   confidence_threshold: number;
@@ -60,6 +68,12 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   bubble_position: 'right',
   avatar_url: null,
   chat_icon_url: null,
+  widget_layout: 'classic',
+  header_text_color: '#ffffff',
+  chat_background: '#ffffff',
+  trigger_text: null,
+  status_messages: null,
+  hint_messages: null,
   personality_prompt: `### Business Context
 Describe what your company does, your key services, and your target audience.
 
@@ -78,3 +92,12 @@ You are a friendly and knowledgeable virtual assistant. Your primary role is to 
   custom_categories: [],
   onboarding_completed_steps: [],
 };
+
+export const WIDGET_LAYOUTS = [
+  { id: 'classic', name: 'Classic Bubble', description: 'Floating bubble in the corner' },
+  { id: 'command_bar', name: 'Command Bar', description: 'Centered search overlay' },
+  { id: 'terminal', name: 'Terminal', description: 'CLI status bar at the bottom' },
+  { id: 'side_whisper', name: 'Side Whisper', description: 'Slim edge panel' },
+] as const;
+
+export type WidgetLayout = typeof WIDGET_LAYOUTS[number]['id'];

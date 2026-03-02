@@ -82,7 +82,7 @@ export function OnboardingWizard({
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [transcript, setTranscript] = useState('');
-  const [qaAdded, setQaAdded] = useState(false);
+  const [qaCount, setQaCount] = useState(0);
   const [extracting, setExtracting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -109,7 +109,7 @@ export function OnboardingWizard({
         const res = await fetch('/api/qa-pairs');
         const data = await res.json();
         if (data.success && data.pairs && data.pairs.length > 0) {
-          setQaAdded(true);
+          setQaCount(data.pairs.length);
         }
       } catch {
         // Ignore
@@ -224,7 +224,7 @@ export function OnboardingWizard({
       });
       const data = await res.json();
       if (data.success) {
-        setQaAdded(true);
+        setQaCount((prev) => prev + 1);
         setQuestion('');
         setAnswer('');
       }
@@ -258,7 +258,7 @@ export function OnboardingWizard({
         });
         const saveData = await saveRes.json();
         if (saveData.success) {
-          setQaAdded(true);
+          setQaCount((prev) => prev + (saveData.saved || data.pairs.length));
         }
       }
     } catch {
@@ -291,7 +291,7 @@ export function OnboardingWizard({
         });
         const saveData = await saveRes.json();
         if (saveData.success) {
-          setQaAdded(true);
+          setQaCount((prev) => prev + (saveData.saved || data.pairs.length));
           setTranscript('');
         }
       }
@@ -328,7 +328,7 @@ export function OnboardingWizard({
         body: JSON.stringify({
           provider,
           model,
-          key: apiKey,
+          api_key: apiKey,
           label: 'Default Key',
           is_default: true,
         }),
@@ -385,7 +385,7 @@ export function OnboardingWizard({
       case 'name_bot':
         return displayName.trim().length > 0;
       case 'add_knowledge':
-        return qaAdded;
+        return qaCount > 0;
       case 'connect_ai':
         return keyTested;
       case 'preview':
@@ -515,17 +515,21 @@ export function OnboardingWizard({
                   </p>
                 </div>
 
-                {qaAdded ? (
+                {qaCount > 0 && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
                     <CheckCircle className="w-6 h-6 text-green-500 flex-shrink-0" />
                     <div>
-                      <p className="font-medium text-green-800">Knowledge added!</p>
+                      <p className="font-medium text-green-800">
+                        {qaCount} Q&A pair{qaCount !== 1 ? 's' : ''} added!
+                      </p>
                       <p className="text-sm text-green-600">
-                        You can add more Q&A pairs in the dashboard later.
+                        Add more below or continue to the next step.
                       </p>
                     </div>
                   </div>
-                ) : knowledgeMode === null ? (
+                )}
+
+                {knowledgeMode === null ? (
                   <div className="space-y-3">
                     {/* CSV Upload - Primary/Largest */}
                     <input
