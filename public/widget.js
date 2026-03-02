@@ -436,6 +436,1025 @@
   }
 
   // ============================================================
+  // LAYOUT: COMMAND BAR — Shadow DOM Spotlight Overlay
+  // ============================================================
+
+  function createCommandBar() {
+    var s = settings;
+    var sessionToken = generateUUID();
+    var isSending = false;
+    var hasConversation = false;
+
+    // Create shadow DOM host
+    var host = document.createElement('div');
+    host.id = 'clara-shadow-host';
+    host.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483647;pointer-events:none;';
+    document.body.appendChild(host);
+
+    var shadow = host.attachShadow({ mode: 'open' });
+
+    // Build avatar HTML once (used in header + assistant messages)
+    var avatarHTML = s.avatar_url
+      ? '<img src="' + s.avatar_url + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">'
+      : '<svg viewBox="0 0 100 100" fill="none"><circle cx="50" cy="50" r="50" fill="#213D66"/><path d="M30 50c0-8.5 6-15 14-15 5 0 9 2.5 11.5 6.5" stroke="white" stroke-width="5.5" stroke-linecap="round" fill="none"/><path d="M70 50c0 8.5-6 15-14 15-5 0-9-2.5-11.5-6.5" stroke="white" stroke-width="5.5" stroke-linecap="round" fill="none"/><path d="M44 43c3-2 7-2 10 0 4 2.5 6 7 6 12" stroke="white" stroke-width="5.5" stroke-linecap="round" fill="none"/><path d="M56 57c-3 2-7 2-10 0-4-2.5-6-7-6-12" stroke="white" stroke-width="5.5" stroke-linecap="round" fill="none"/></svg>';
+
+    // Inject CSS
+    var styleEl = document.createElement('style');
+    styleEl.textContent = '\n' +
+      ':host {\n' +
+      '  --ce-navy: #213D66;\n' +
+      '  --ce-navy-dark: #1a2d4d;\n' +
+      '  --ce-teal: #2A7F7F;\n' +
+      '  --ce-lime: #C5E84D;\n' +
+      '  --ce-white: #FFFFFF;\n' +
+      '  --ce-offwhite: #f8f9fb;\n' +
+      '  --ce-gray100: #eef1f5;\n' +
+      '  --ce-gray200: #dde2ea;\n' +
+      '  --ce-gray300: #c4cbd8;\n' +
+      '  --ce-gray400: #9aa3b4;\n' +
+      '  --ce-gray500: #6b7588;\n' +
+      '  --ce-gray600: #4a5468;\n' +
+      '  --ce-text: #1a2332;\n' +
+      '  --ce-text-muted: #5a6577;\n' +
+      '  --ce-border: rgba(33, 61, 102, 0.1);\n' +
+      '  --glass-bg: rgba(255, 255, 255, 0.78);\n' +
+      '  --glass-bg-solid: rgba(255, 255, 255, 0.88);\n' +
+      '  --glass-blur: blur(40px) saturate(180%);\n' +
+      '  --glass-outer-border: 1px solid rgba(255, 255, 255, 0.5);\n' +
+      '  --glass-modal-shadow: 0 32px 80px rgba(33,61,102,0.2), 0 12px 40px rgba(33,61,102,0.1), inset 0 1px 0 rgba(255,255,255,0.6);\n' +
+      '  --glass-pill-shadow: 0 4px 24px rgba(33,61,102,0.12), 0 1px 4px rgba(33,61,102,0.06), inset 0 1px 0 rgba(255,255,255,0.7);\n' +
+      '  --glass-chip-bg: rgba(255, 255, 255, 0.55);\n' +
+      '  --glass-chip-bg-hover: rgba(42, 127, 127, 0.06);\n' +
+      '  --glass-chip-border: rgba(33, 61, 102, 0.09);\n' +
+      '  --glass-chip-border-hover: rgba(42, 127, 127, 0.3);\n' +
+      '  --glass-input-bg: rgba(255, 255, 255, 0.5);\n' +
+      '  --glass-input-border: rgba(33, 61, 102, 0.1);\n' +
+      '  --glass-backdrop: rgba(15, 23, 42, 0.3);\n' +
+      '}\n' +
+      '.cb-pill, .cb-modal {\n' +
+      '  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;\n' +
+      '}\n' +
+      '.cb-pill {\n' +
+      '  position: fixed;\n' +
+      '  bottom: 28px;\n' +
+      '  left: 50%;\n' +
+      '  transform: translateX(-50%);\n' +
+      '  display: flex;\n' +
+      '  align-items: center;\n' +
+      '  gap: 12px;\n' +
+      '  padding: 11px 14px 11px 16px;\n' +
+      '  background: var(--glass-bg);\n' +
+      '  backdrop-filter: var(--glass-blur);\n' +
+      '  -webkit-backdrop-filter: var(--glass-blur);\n' +
+      '  border: var(--glass-outer-border);\n' +
+      '  border-radius: 14px;\n' +
+      '  box-shadow: var(--glass-pill-shadow);\n' +
+      '  cursor: pointer;\n' +
+      '  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);\n' +
+      '  white-space: nowrap;\n' +
+      '  pointer-events: auto;\n' +
+      '  min-width: 320px;\n' +
+      '}\n' +
+      '.cb-pill:hover {\n' +
+      '  box-shadow: 0 8px 32px rgba(33,61,102,0.16), 0 2px 8px rgba(33,61,102,0.08), inset 0 1px 0 rgba(255,255,255,0.7);\n' +
+      '  transform: translateX(-50%) translateY(-2px);\n' +
+      '}\n' +
+      '.cb-pill.hidden { display: none; }\n' +
+      '.cb-pill-icon {\n' +
+      '  flex-shrink: 0;\n' +
+      '  color: var(--ce-gray400);\n' +
+      '}\n' +
+      '.cb-pill-body {\n' +
+      '  display: flex;\n' +
+      '  align-items: center;\n' +
+      '  gap: 10px;\n' +
+      '  flex: 1;\n' +
+      '}\n' +
+      '.cb-pill-dot {\n' +
+      '  position: relative;\n' +
+      '  width: 6px;\n' +
+      '  height: 6px;\n' +
+      '  flex-shrink: 0;\n' +
+      '}\n' +
+      '.cb-pill-dot-core {\n' +
+      '  position: absolute;\n' +
+      '  inset: 0;\n' +
+      '  border-radius: 50%;\n' +
+      '  background: var(--ce-teal);\n' +
+      '  animation: cbPulseGlow 3s ease-in-out infinite;\n' +
+      '}\n' +
+      '.cb-pill-dot-ring {\n' +
+      '  position: absolute;\n' +
+      '  inset: -3px;\n' +
+      '  border-radius: 50%;\n' +
+      '  background: var(--ce-teal);\n' +
+      '  opacity: 0;\n' +
+      '  animation: cbPulseRing 3s ease-in-out infinite;\n' +
+      '}\n' +
+      '.cb-pill-text {\n' +
+      '  font-size: 14px;\n' +
+      '  color: var(--ce-gray400);\n' +
+      '  font-weight: 400;\n' +
+      '}\n' +
+      '.cb-pill-divider {\n' +
+      '  height: 16px;\n' +
+      '  width: 1px;\n' +
+      '  background: var(--ce-gray200);\n' +
+      '  flex-shrink: 0;\n' +
+      '}\n' +
+      '.cb-pill-kbd {\n' +
+      '  padding: 2px 7px;\n' +
+      '  border-radius: 6px;\n' +
+      '  background: rgba(33,61,102,0.05);\n' +
+      '  border: 1px solid rgba(33,61,102,0.1);\n' +
+      '  font-size: 11px;\n' +
+      '  font-family: inherit;\n' +
+      '  color: var(--ce-gray400);\n' +
+      '  line-height: 18px;\n' +
+      '}\n' +
+      '@media (max-width: 768px) {\n' +
+      '  .cb-pill-kbd { display: none; }\n' +
+      '  .cb-pill-divider { display: none; }\n' +
+      '  .cb-pill { min-width: auto; }\n' +
+      '}\n' +
+      '@keyframes cbPulseGlow {\n' +
+      '  0%, 100% { opacity: 0.4; transform: scale(0.85); }\n' +
+      '  50% { opacity: 1; transform: scale(1); }\n' +
+      '}\n' +
+      '@keyframes cbPulseRing {\n' +
+      '  0%, 100% { opacity: 0; transform: scale(0.5); }\n' +
+      '  50% { opacity: 0.18; transform: scale(1.8); }\n' +
+      '}\n' +
+      '.cb-backdrop {\n' +
+      '  position: fixed;\n' +
+      '  inset: 0;\n' +
+      '  background: var(--glass-backdrop);\n' +
+      '  backdrop-filter: blur(4px);\n' +
+      '  -webkit-backdrop-filter: blur(4px);\n' +
+      '  pointer-events: auto;\n' +
+      '  opacity: 0;\n' +
+      '  visibility: hidden;\n' +
+      '  transition: opacity 0.15s ease, visibility 0.15s ease;\n' +
+      '}\n' +
+      '.cb-backdrop.open {\n' +
+      '  opacity: 1;\n' +
+      '  visibility: visible;\n' +
+      '}\n' +
+      '.cb-modal {\n' +
+      '  position: fixed;\n' +
+      '  top: 50%;\n' +
+      '  left: 50%;\n' +
+      '  transform: translate(-50%, -48%) scale(0.97);\n' +
+      '  width: 660px;\n' +
+      '  max-width: calc(100vw - 32px);\n' +
+      '  max-height: calc(100vh - 64px);\n' +
+      '  background: var(--glass-bg);\n' +
+      '  backdrop-filter: var(--glass-blur);\n' +
+      '  -webkit-backdrop-filter: var(--glass-blur);\n' +
+      '  border: var(--glass-outer-border);\n' +
+      '  border-radius: 18px;\n' +
+      '  box-shadow: var(--glass-modal-shadow);\n' +
+      '  display: flex;\n' +
+      '  flex-direction: column;\n' +
+      '  overflow: hidden;\n' +
+      '  pointer-events: auto;\n' +
+      '  opacity: 0;\n' +
+      '  visibility: hidden;\n' +
+      '  transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);\n' +
+      '}\n' +
+      '.cb-modal.open {\n' +
+      '  opacity: 1;\n' +
+      '  visibility: visible;\n' +
+      '  transform: translate(-50%, -50%) scale(1);\n' +
+      '}\n' +
+      '.cb-modal.compact {\n' +
+      '  height: auto;\n' +
+      '}\n' +
+      '.cb-modal.expanded {\n' +
+      '  height: 540px;\n' +
+      '}\n' +
+      '.cb-modal::before {\n' +
+      '  content: \'\';\n' +
+      '  position: absolute;\n' +
+      '  top: 0;\n' +
+      '  left: 18px;\n' +
+      '  right: 18px;\n' +
+      '  height: 3px;\n' +
+      '  background: linear-gradient(90deg, var(--ce-lime) 0%, var(--ce-teal) 40%, var(--ce-navy) 100%);\n' +
+      '  z-index: 1;\n' +
+      '  border-radius: 0 0 3px 3px;\n' +
+      '}\n' +
+      '.cb-header {\n' +
+      '  padding: 14px 16px 12px;\n' +
+      '  border-bottom: 1px solid var(--ce-border);\n' +
+      '  background: var(--glass-bg-solid);\n' +
+      '  display: flex;\n' +
+      '  justify-content: space-between;\n' +
+      '  align-items: center;\n' +
+      '  flex-shrink: 0;\n' +
+      '  border-radius: 18px 18px 0 0;\n' +
+      '}\n' +
+      '.cb-header-left {\n' +
+      '  display: flex;\n' +
+      '  align-items: center;\n' +
+      '  gap: 10px;\n' +
+      '}\n' +
+      '.cb-avatar {\n' +
+      '  width: 30px;\n' +
+      '  height: 30px;\n' +
+      '  border-radius: 50%;\n' +
+      '  overflow: hidden;\n' +
+      '  flex-shrink: 0;\n' +
+      '  box-shadow: 0 1px 4px rgba(33,61,102,0.12);\n' +
+      '}\n' +
+      '.cb-avatar img {\n' +
+      '  width: 100%;\n' +
+      '  height: 100%;\n' +
+      '  object-fit: cover;\n' +
+      '  display: block;\n' +
+      '}\n' +
+      '.cb-avatar svg {\n' +
+      '  width: 100%;\n' +
+      '  height: 100%;\n' +
+      '}\n' +
+      '.cb-title {\n' +
+      '  font-size: 14px;\n' +
+      '  font-weight: 700;\n' +
+      '  color: var(--ce-navy);\n' +
+      '}\n' +
+      '.cb-subtitle {\n' +
+      '  font-size: 12px;\n' +
+      '  font-weight: 500;\n' +
+      '  color: var(--ce-teal);\n' +
+      '  margin-left: 8px;\n' +
+      '}\n' +
+      '.cb-header-right {\n' +
+      '  display: flex;\n' +
+      '  align-items: center;\n' +
+      '  gap: 6px;\n' +
+      '}\n' +
+      '.cb-new-chat {\n' +
+      '  background: none;\n' +
+      '  border: none;\n' +
+      '  font-size: 12px;\n' +
+      '  color: var(--ce-gray400);\n' +
+      '  cursor: pointer;\n' +
+      '  padding: 5px 10px;\n' +
+      '  border-radius: 6px;\n' +
+      '  font-family: inherit;\n' +
+      '  transition: all 0.15s ease;\n' +
+      '  display: none;\n' +
+      '}\n' +
+      '.cb-new-chat.visible { display: inline-block; }\n' +
+      '.cb-new-chat:hover {\n' +
+      '  background: rgba(33,61,102,0.06);\n' +
+      '  color: var(--ce-gray600);\n' +
+      '}\n' +
+      '.cb-close {\n' +
+      '  background: none;\n' +
+      '  border: none;\n' +
+      '  color: var(--ce-gray400);\n' +
+      '  cursor: pointer;\n' +
+      '  font-size: 15px;\n' +
+      '  border-radius: 7px;\n' +
+      '  width: 28px;\n' +
+      '  height: 28px;\n' +
+      '  display: flex;\n' +
+      '  align-items: center;\n' +
+      '  justify-content: center;\n' +
+      '  transition: all 0.15s ease;\n' +
+      '}\n' +
+      '.cb-close:hover {\n' +
+      '  background: rgba(33,61,102,0.06);\n' +
+      '  color: var(--ce-gray600);\n' +
+      '}\n' +
+      '.cb-body {\n' +
+      '  flex: 1;\n' +
+      '  overflow-y: auto;\n' +
+      '  display: flex;\n' +
+      '  flex-direction: column;\n' +
+      '}\n' +
+      '.cb-welcome-zone {\n' +
+      '  padding: 14px 10px 0;\n' +
+      '}\n' +
+      '.cb-welcome-text {\n' +
+      '  padding: 0 4px 12px;\n' +
+      '  color: var(--ce-text-muted);\n' +
+      '  font-size: 14px;\n' +
+      '  line-height: 1.6;\n' +
+      '}\n' +
+      '.cb-suggestions-label {\n' +
+      '  padding: 6px 4px 4px;\n' +
+      '  font-size: 11px;\n' +
+      '  font-weight: 600;\n' +
+      '  color: var(--ce-gray400);\n' +
+      '  text-transform: uppercase;\n' +
+      '  letter-spacing: 0.5px;\n' +
+      '}\n' +
+      '.cb-suggestion {\n' +
+      '  width: 100%;\n' +
+      '  text-align: left;\n' +
+      '  padding: 10px 12px;\n' +
+      '  background: transparent;\n' +
+      '  border: none;\n' +
+      '  border-radius: 9px;\n' +
+      '  color: var(--ce-text);\n' +
+      '  font-size: 14px;\n' +
+      '  line-height: 1.4;\n' +
+      '  cursor: pointer;\n' +
+      '  transition: all 0.15s ease;\n' +
+      '  display: flex;\n' +
+      '  align-items: center;\n' +
+      '  gap: 10px;\n' +
+      '  font-family: inherit;\n' +
+      '}\n' +
+      '.cb-suggestion:hover {\n' +
+      '  background: rgba(42, 127, 127, 0.06);\n' +
+      '}\n' +
+      '.cb-suggestion-icon {\n' +
+      '  flex-shrink: 0;\n' +
+      '  opacity: 0.5;\n' +
+      '  color: var(--ce-teal);\n' +
+      '}\n' +
+      '.cb-suggestion-text {\n' +
+      '  flex: 1;\n' +
+      '}\n' +
+      '.cb-suggestion-arrow {\n' +
+      '  margin-left: auto;\n' +
+      '  color: var(--ce-gray300);\n' +
+      '  font-size: 13px;\n' +
+      '}\n' +
+      '.cb-messages {\n' +
+      '  padding: 18px 22px;\n' +
+      '  display: flex;\n' +
+      '  flex-direction: column;\n' +
+      '  gap: 12px;\n' +
+      '}\n' +
+      '.cb-msg-row {\n' +
+      '  display: flex;\n' +
+      '  align-items: flex-start;\n' +
+      '  gap: 10px;\n' +
+      '}\n' +
+      '.cb-msg-avatar {\n' +
+      '  width: 22px;\n' +
+      '  height: 22px;\n' +
+      '  border-radius: 50%;\n' +
+      '  flex-shrink: 0;\n' +
+      '  margin-top: 1px;\n' +
+      '  overflow: hidden;\n' +
+      '}\n' +
+      '.cb-msg-avatar svg {\n' +
+      '  width: 100%;\n' +
+      '  height: 100%;\n' +
+      '}\n' +
+      '.cb-msg-avatar-user {\n' +
+      '  background: var(--ce-navy);\n' +
+      '  display: flex;\n' +
+      '  align-items: center;\n' +
+      '  justify-content: center;\n' +
+      '}\n' +
+      '.cb-msg-content {\n' +
+      '  flex: 1;\n' +
+      '}\n' +
+      '.cb-msg-text {\n' +
+      '  font-size: 14px;\n' +
+      '  line-height: 1.55;\n' +
+      '}\n' +
+      '.cb-msg-text.user { color: var(--ce-text); }\n' +
+      '.cb-msg-text.assistant { color: var(--ce-text-muted); line-height: 1.65; }\n' +
+      '.cb-followup-chips {\n' +
+      '  display: flex;\n' +
+      '  flex-wrap: wrap;\n' +
+      '  gap: 6px;\n' +
+      '  margin-top: 10px;\n' +
+      '}\n' +
+      '.cb-followup-chip {\n' +
+      '  padding: 6px 13px;\n' +
+      '  background: var(--glass-chip-bg);\n' +
+      '  border: 1px solid var(--glass-chip-border);\n' +
+      '  border-radius: 8px;\n' +
+      '  color: var(--ce-text);\n' +
+      '  font-size: 12.5px;\n' +
+      '  cursor: pointer;\n' +
+      '  transition: all 0.15s ease;\n' +
+      '  font-family: inherit;\n' +
+      '}\n' +
+      '.cb-followup-chip:hover {\n' +
+      '  border-color: var(--glass-chip-border-hover);\n' +
+      '  background: var(--glass-chip-bg-hover);\n' +
+      '}\n' +
+      '.cb-typing {\n' +
+      '  display: flex;\n' +
+      '  gap: 5px;\n' +
+      '  padding: 6px 0;\n' +
+      '}\n' +
+      '.cb-dot {\n' +
+      '  width: 6px;\n' +
+      '  height: 6px;\n' +
+      '  border-radius: 50%;\n' +
+      '  background: var(--ce-gray400);\n' +
+      '  animation: cbDotBounce 1.2s infinite;\n' +
+      '}\n' +
+      '.cb-dot:nth-child(2) { animation-delay: 0.15s; }\n' +
+      '.cb-dot:nth-child(3) { animation-delay: 0.3s; }\n' +
+      '@keyframes cbDotBounce {\n' +
+      '  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }\n' +
+      '  30% { transform: translateY(-5px); opacity: 1; }\n' +
+      '}\n' +
+      '.cb-bottom {\n' +
+      '  border-top: 1px solid var(--ce-border);\n' +
+      '  background: var(--glass-bg-solid);\n' +
+      '  flex-shrink: 0;\n' +
+      '  border-radius: 0 0 18px 18px;\n' +
+      '}\n' +
+      '.cb-input-wrap {\n' +
+      '  padding: 10px 14px 8px;\n' +
+      '}\n' +
+      '.cb-input-bar {\n' +
+      '  display: flex;\n' +
+      '  align-items: center;\n' +
+      '  gap: 10px;\n' +
+      '  background: var(--glass-input-bg);\n' +
+      '  border: 1px solid var(--glass-input-border);\n' +
+      '  border-radius: 11px;\n' +
+      '  padding: 4px 4px 4px 14px;\n' +
+      '}\n' +
+      '.cb-input {\n' +
+      '  flex: 1;\n' +
+      '  background: none;\n' +
+      '  border: none;\n' +
+      '  outline: none;\n' +
+      '  color: var(--ce-text);\n' +
+      '  font-size: 14px;\n' +
+      '  font-family: inherit;\n' +
+      '  padding: 8px 0;\n' +
+      '}\n' +
+      '.cb-input::placeholder {\n' +
+      '  color: var(--ce-gray400);\n' +
+      '}\n' +
+      '.cb-send {\n' +
+      '  width: 34px;\n' +
+      '  height: 34px;\n' +
+      '  border-radius: 8px;\n' +
+      '  border: none;\n' +
+      '  display: flex;\n' +
+      '  align-items: center;\n' +
+      '  justify-content: center;\n' +
+      '  transition: all 0.2s ease;\n' +
+      '  flex-shrink: 0;\n' +
+      '}\n' +
+      '.cb-send.active {\n' +
+      '  background: var(--ce-teal);\n' +
+      '  color: white;\n' +
+      '  cursor: pointer;\n' +
+      '}\n' +
+      '.cb-send.inactive {\n' +
+      '  background: transparent;\n' +
+      '  cursor: default;\n' +
+      '}\n' +
+      '.cb-esc-badge {\n' +
+      '  display: flex;\n' +
+      '  gap: 4px;\n' +
+      '  margin-right: 6px;\n' +
+      '}\n' +
+      '.cb-esc-kbd {\n' +
+      '  padding: 2px 7px;\n' +
+      '  border-radius: 5px;\n' +
+      '  background: rgba(33,61,102,0.05);\n' +
+      '  border: 1px solid rgba(33,61,102,0.1);\n' +
+      '  font-size: 11px;\n' +
+      '  font-family: inherit;\n' +
+      '  color: var(--ce-gray400);\n' +
+      '  line-height: 18px;\n' +
+      '}\n' +
+      '.cb-footer {\n' +
+      '  padding: 4px 16px 10px;\n' +
+      '  display: flex;\n' +
+      '  justify-content: space-between;\n' +
+      '  align-items: center;\n' +
+      '}\n' +
+      '.cb-footer-powered {\n' +
+      '  font-size: 11px;\n' +
+      '  color: var(--ce-gray300);\n' +
+      '}\n' +
+      '.cb-footer-hint {\n' +
+      '  font-size: 11px;\n' +
+      '  color: var(--ce-gray400);\n' +
+      '}\n' +
+      '.cb-error {\n' +
+      '  color: #c0392b;\n' +
+      '  font-size: 13px;\n' +
+      '  padding: 8px 12px;\n' +
+      '  background: rgba(192,57,43,0.08);\n' +
+      '  border-radius: 8px;\n' +
+      '  line-height: 1.5;\n' +
+      '  margin: 0 22px;\n' +
+      '}\n';
+    shadow.appendChild(styleEl);
+
+    // ── BUILD DOM ──
+
+    // Pill trigger
+    var pill = document.createElement('div');
+    pill.className = 'cb-pill';
+
+    var pillIcon = document.createElement('span');
+    pillIcon.className = 'cb-pill-icon';
+    pillIcon.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+    pill.appendChild(pillIcon);
+
+    var pillBody = document.createElement('div');
+    pillBody.className = 'cb-pill-body';
+
+    var pillDot = document.createElement('div');
+    pillDot.className = 'cb-pill-dot';
+    var pillDotCore = document.createElement('div');
+    pillDotCore.className = 'cb-pill-dot-core';
+    var pillDotRing = document.createElement('div');
+    pillDotRing.className = 'cb-pill-dot-ring';
+    pillDot.appendChild(pillDotCore);
+    pillDot.appendChild(pillDotRing);
+    pillBody.appendChild(pillDot);
+
+    var pillText = document.createElement('span');
+    pillText.className = 'cb-pill-text';
+    pillText.textContent = 'Ask about our services...';
+    pillBody.appendChild(pillText);
+
+    pill.appendChild(pillBody);
+
+    var pillDivider = document.createElement('div');
+    pillDivider.className = 'cb-pill-divider';
+    pill.appendChild(pillDivider);
+
+    var pillKbd = document.createElement('kbd');
+    pillKbd.className = 'cb-pill-kbd';
+    pillKbd.textContent = navigator.platform.indexOf('Mac') > -1 ? '⌘K' : 'Ctrl+K';
+    pill.appendChild(pillKbd);
+
+    shadow.appendChild(pill);
+
+    // Backdrop
+    var backdrop = document.createElement('div');
+    backdrop.className = 'cb-backdrop';
+    shadow.appendChild(backdrop);
+
+    // Modal
+    var modal = document.createElement('div');
+    modal.className = 'cb-modal compact';
+
+    // Header
+    var header = document.createElement('div');
+    header.className = 'cb-header';
+
+    var headerLeft = document.createElement('div');
+    headerLeft.className = 'cb-header-left';
+
+    var headerAvatar = document.createElement('div');
+    headerAvatar.className = 'cb-avatar';
+    headerAvatar.innerHTML = avatarHTML;
+    headerLeft.appendChild(headerAvatar);
+
+    var headerTextWrap = document.createElement('div');
+    var titleEl = document.createElement('span');
+    titleEl.className = 'cb-title';
+    titleEl.textContent = s.display_name || 'Clara';
+    headerTextWrap.appendChild(titleEl);
+    var subtitleEl = document.createElement('span');
+    subtitleEl.className = 'cb-subtitle';
+    subtitleEl.textContent = 'Cloud Employee Assistant';
+    headerTextWrap.appendChild(subtitleEl);
+    headerLeft.appendChild(headerTextWrap);
+
+    header.appendChild(headerLeft);
+
+    var headerRight = document.createElement('div');
+    headerRight.className = 'cb-header-right';
+
+    var newChatBtn = document.createElement('button');
+    newChatBtn.className = 'cb-new-chat';
+    newChatBtn.textContent = 'New chat';
+    headerRight.appendChild(newChatBtn);
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'cb-close';
+    closeBtn.textContent = '✕';
+    headerRight.appendChild(closeBtn);
+
+    header.appendChild(headerRight);
+    modal.appendChild(header);
+
+    // Body
+    var body = document.createElement('div');
+    body.className = 'cb-body';
+
+    // Welcome zone (pre-conversation)
+    var welcomeZone = document.createElement('div');
+    welcomeZone.className = 'cb-welcome-zone';
+
+    var welcomeText = document.createElement('div');
+    welcomeText.className = 'cb-welcome-text';
+    welcomeText.textContent = s.welcome_message || 'Ask anything about ' + (s.display_name || 'our') + ' services.';
+    welcomeZone.appendChild(welcomeText);
+
+    var suggestionsLabel = document.createElement('div');
+    suggestionsLabel.className = 'cb-suggestions-label';
+    suggestionsLabel.textContent = 'Suggestions';
+    welcomeZone.appendChild(suggestionsLabel);
+
+    var suggestionsContainer = document.createElement('div');
+    suggestionsContainer.className = 'cb-suggestions-list';
+    welcomeZone.appendChild(suggestionsContainer);
+
+    body.appendChild(welcomeZone);
+
+    // Messages container (hidden initially)
+    var messagesContainer = document.createElement('div');
+    messagesContainer.className = 'cb-messages';
+    messagesContainer.style.display = 'none';
+
+    // Typing dots row
+    var typingRow = document.createElement('div');
+    typingRow.className = 'cb-msg-row';
+    typingRow.style.display = 'none';
+
+    var typingAvatar = document.createElement('div');
+    typingAvatar.className = 'cb-msg-avatar';
+    typingAvatar.innerHTML = avatarHTML;
+    typingRow.appendChild(typingAvatar);
+
+    var typingDots = document.createElement('div');
+    typingDots.className = 'cb-typing';
+    for (var i = 0; i < 3; i++) {
+      var dot = document.createElement('div');
+      dot.className = 'cb-dot';
+      typingDots.appendChild(dot);
+    }
+    typingRow.appendChild(typingDots);
+    messagesContainer.appendChild(typingRow);
+
+    body.appendChild(messagesContainer);
+    modal.appendChild(body);
+
+    // Bottom zone
+    var bottomEl = document.createElement('div');
+    bottomEl.className = 'cb-bottom';
+
+    var inputWrap = document.createElement('div');
+    inputWrap.className = 'cb-input-wrap';
+
+    var inputBar = document.createElement('div');
+    inputBar.className = 'cb-input-bar';
+
+    var inputEl = document.createElement('input');
+    inputEl.type = 'text';
+    inputEl.className = 'cb-input';
+    inputEl.placeholder = s.placeholder_text || 'Ask a question...';
+    inputBar.appendChild(inputEl);
+
+    var escBadge = document.createElement('div');
+    escBadge.className = 'cb-esc-badge';
+    var escKbd = document.createElement('kbd');
+    escKbd.className = 'cb-esc-kbd';
+    escKbd.textContent = 'esc';
+    escBadge.appendChild(escKbd);
+    inputBar.appendChild(escBadge);
+
+    var sendBtn = document.createElement('button');
+    sendBtn.className = 'cb-send inactive';
+    sendBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+    sendBtn.style.display = 'none';
+    inputBar.appendChild(sendBtn);
+
+    inputWrap.appendChild(inputBar);
+    bottomEl.appendChild(inputWrap);
+
+    // Footer
+    var footerEl = document.createElement('div');
+    footerEl.className = 'cb-footer';
+
+    if (s.powered_by_clara) {
+      var footerPowered = document.createElement('span');
+      footerPowered.className = 'cb-footer-powered';
+      footerPowered.textContent = 'Powered by Clara';
+      footerEl.appendChild(footerPowered);
+    } else {
+      var spacer = document.createElement('span');
+      footerEl.appendChild(spacer);
+    }
+
+    var footerHint = document.createElement('span');
+    footerHint.className = 'cb-footer-hint';
+    footerHint.textContent = '↵ ask';
+    footerEl.appendChild(footerHint);
+
+    bottomEl.appendChild(footerEl);
+    modal.appendChild(bottomEl);
+
+    shadow.appendChild(modal);
+
+    // ── HELPER FUNCTIONS ──
+
+    function scrollToBottom() {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function showTyping() {
+      typingRow.style.display = 'flex';
+    }
+
+    function hideTyping() {
+      typingRow.style.display = 'none';
+    }
+
+    function disableInput() {
+      inputEl.disabled = true;
+    }
+
+    function enableInput() {
+      inputEl.disabled = false;
+    }
+
+    function focusInput() {
+      inputEl.focus();
+    }
+
+    function updateFooterHint() {
+      footerHint.textContent = hasConversation ? '↵ send' : '↵ ask';
+    }
+
+    function openModal() {
+      pill.classList.add('hidden');
+      backdrop.classList.add('open');
+      modal.classList.add('open');
+      setTimeout(function() { inputEl.focus(); }, 150);
+    }
+
+    function closeModal() {
+      backdrop.classList.remove('open');
+      modal.classList.remove('open');
+      pill.classList.remove('hidden');
+    }
+
+    function resetChat() {
+      messagesContainer.innerHTML = '';
+      messagesContainer.appendChild(typingRow);
+      welcomeZone.style.display = 'block';
+      messagesContainer.style.display = 'none';
+      modal.classList.remove('expanded');
+      modal.classList.add('compact');
+      newChatBtn.classList.remove('visible');
+      hasConversation = false;
+      sessionToken = generateUUID();
+      inputEl.placeholder = s.placeholder_text || 'Ask a question...';
+      updateFooterHint();
+    }
+
+    function addUserMessage(text) {
+      var row = document.createElement('div');
+      row.className = 'cb-msg-row';
+
+      var avatar = document.createElement('div');
+      avatar.className = 'cb-msg-avatar cb-msg-avatar-user';
+      avatar.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
+      var content = document.createElement('div');
+      content.className = 'cb-msg-content';
+      var textEl = document.createElement('div');
+      textEl.className = 'cb-msg-text user';
+      textEl.textContent = text;
+      content.appendChild(textEl);
+
+      row.appendChild(avatar);
+      row.appendChild(content);
+      messagesContainer.insertBefore(row, typingRow);
+    }
+
+    function addAssistantMessage(text) {
+      var row = document.createElement('div');
+      row.className = 'cb-msg-row';
+
+      var avatar = document.createElement('div');
+      avatar.className = 'cb-msg-avatar';
+      avatar.innerHTML = avatarHTML;
+
+      var content = document.createElement('div');
+      content.className = 'cb-msg-content';
+      var textEl = document.createElement('div');
+      textEl.className = 'cb-msg-text assistant';
+      textEl.textContent = text;
+      content.appendChild(textEl);
+
+      row.appendChild(avatar);
+      row.appendChild(content);
+      messagesContainer.insertBefore(row, typingRow);
+
+      return { textEl: textEl, content: content };
+    }
+
+    function renderFollowupChips(parentContentEl, chips) {
+      // Remove any previous follow-up chip containers
+      var oldChips = messagesContainer.querySelectorAll('.cb-followup-chips');
+      oldChips.forEach(function(el) { el.remove(); });
+
+      if (!chips || chips.length === 0) return;
+
+      var container = document.createElement('div');
+      container.className = 'cb-followup-chips';
+
+      chips.forEach(function(chipText) {
+        var btn = document.createElement('button');
+        btn.className = 'cb-followup-chip';
+        btn.textContent = chipText;
+        btn.addEventListener('click', function() { sendMessage(chipText); });
+        container.appendChild(btn);
+      });
+
+      parentContentEl.appendChild(container);
+    }
+
+    function showErrorMessage(text) {
+      var err = document.createElement('div');
+      err.className = 'cb-error';
+      err.textContent = text;
+      messagesContainer.insertBefore(err, typingRow);
+      scrollToBottom();
+    }
+
+    // ── SEND MESSAGE ──
+
+    async function sendMessage(text) {
+      if (!text.trim() || isSending) return;
+      isSending = true;
+      disableInput();
+
+      // First message: transition from compact to expanded
+      if (!hasConversation) {
+        hasConversation = true;
+        welcomeZone.style.display = 'none';
+        messagesContainer.style.display = 'flex';
+        modal.classList.remove('compact');
+        modal.classList.add('expanded');
+        newChatBtn.classList.add('visible');
+        inputEl.placeholder = 'Ask a follow-up...';
+        updateFooterHint();
+      }
+
+      addUserMessage(text);
+      inputEl.value = '';
+      escBadge.style.display = 'flex';
+      sendBtn.style.display = 'none';
+      sendBtn.className = 'cb-send inactive';
+
+      showTyping();
+      scrollToBottom();
+
+      try {
+        var response = await fetch(BASE_URL + '/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: WORKSPACE_ID,
+            session_token: sessionToken,
+            message: text,
+            message_id: generateUUID(),
+            stream: true
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Chat request failed: ' + response.status);
+        }
+
+        hideTyping();
+        var msgResult = addAssistantMessage('');
+        var fullContent = '';
+
+        await handleSSEStream(response, {
+          onToken: function(content) {
+            fullContent += content;
+            msgResult.textEl.textContent = fullContent;
+            scrollToBottom();
+          },
+          onDone: function(data) {
+            msgResult.textEl.textContent = fullContent;
+            var chips = (data.suggestion_chips && data.suggestion_chips.length > 0)
+              ? data.suggestion_chips
+              : FALLBACK_CHIPS;
+            renderFollowupChips(msgResult.content, chips);
+            scrollToBottom();
+          },
+          onError: function(err) {
+            console.error('Clara stream error:', err);
+            showErrorMessage('Something went wrong. Please try again.');
+            hideTyping();
+          }
+        });
+      } catch (err) {
+        console.error('Clara chat error:', err);
+        hideTyping();
+        showErrorMessage('Could not connect. Please try again.');
+      } finally {
+        isSending = false;
+        enableInput();
+        focusInput();
+      }
+    }
+
+    // ── BUILD INITIAL SUGGESTIONS ──
+
+    var initialChips = (s.suggested_messages && s.suggested_messages.length > 0)
+      ? s.suggested_messages.slice(0, s.max_suggestion_chips || 4)
+      : DEFAULT_CHIPS;
+
+    initialChips.forEach(function(chipText) {
+      var btn = document.createElement('button');
+      btn.className = 'cb-suggestion';
+
+      var icon = document.createElement('span');
+      icon.className = 'cb-suggestion-icon';
+      icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
+
+      var textSpan = document.createElement('span');
+      textSpan.className = 'cb-suggestion-text';
+      textSpan.textContent = chipText;
+
+      var arrow = document.createElement('span');
+      arrow.className = 'cb-suggestion-arrow';
+      arrow.textContent = '→';
+
+      btn.appendChild(icon);
+      btn.appendChild(textSpan);
+      btn.appendChild(arrow);
+      btn.addEventListener('click', function() { sendMessage(chipText); });
+      suggestionsContainer.appendChild(btn);
+    });
+
+    // ── EVENT LISTENERS ──
+
+    // Input: toggle esc badge vs send button
+    inputEl.addEventListener('input', function() {
+      if (inputEl.value.trim()) {
+        escBadge.style.display = 'none';
+        sendBtn.style.display = 'flex';
+        sendBtn.className = 'cb-send active';
+      } else {
+        escBadge.style.display = 'flex';
+        sendBtn.style.display = 'none';
+        sendBtn.className = 'cb-send inactive';
+      }
+    });
+
+    // Enter key sends
+    inputEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && inputEl.value.trim()) {
+        sendMessage(inputEl.value.trim());
+      }
+    });
+
+    // Send button click
+    sendBtn.addEventListener('click', function() {
+      if (inputEl.value.trim()) sendMessage(inputEl.value.trim());
+    });
+
+    // Pill click opens modal
+    pill.addEventListener('click', function() { openModal(); });
+
+    // Backdrop click closes modal
+    backdrop.addEventListener('click', function() { closeModal(); });
+
+    // Close button click
+    closeBtn.addEventListener('click', function() { closeModal(); });
+
+    // New chat button
+    newChatBtn.addEventListener('click', function() { resetChat(); });
+
+    // ⌘K / Ctrl+K toggle + Escape close (document-level, named for cleanup)
+    var keydownHandler = function(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        if (modal.classList.contains('open')) closeModal();
+        else openModal();
+      }
+      if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    };
+    document.addEventListener('keydown', keydownHandler);
+
+    // ── WINDOW.CLARAWIDGET API ──
+
+    window.ClaraWidget = {
+      open: function() { openModal(); },
+      close: function() { closeModal(); },
+      destroy: function() {
+        document.removeEventListener('keydown', keydownHandler);
+        if (host && host.parentNode) host.parentNode.removeChild(host);
+        settings = null;
+        isOpen = false;
+      }
+    };
+  }
+
+  // ============================================================
   // LAYOUT: SIDE WHISPER — Shadow DOM Injection
   // ============================================================
 
@@ -1096,8 +2115,9 @@
       var layout = s.widget_layout || 'classic';
       switch (layout) {
         case 'command_bar':
-          createCommandBarTrigger(s);
-          break;
+          // Shadow DOM injection — spotlight overlay with ⌘K shortcut
+          createCommandBar();
+          return; // ClaraWidget API is set up inside createCommandBar
         case 'side_whisper':
           // Shadow DOM injection — real frosted glass, no iframe
           createSideWhisper();
