@@ -2,10 +2,14 @@ import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
 import { chatCompletion, chatCompletionStream, type LLMMessage } from '@/lib/llm/provider';
 import { decrypt } from '@/lib/encryption';
+import { summarizeConversation } from '@/lib/chat/summarize';
 import type { ChatRequest, ChatResponse, ChatMessage } from '@/types/chat';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { v4 as uuidv4 } from 'uuid';
 import Anthropic from '@anthropic-ai/sdk';
+
+// Trigger summary after this many messages (3 exchanges = 6 messages)
+const SUMMARY_THRESHOLD = 6;
 
 interface MatchedPair {
   id: string;
@@ -383,37 +387,49 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
   // Shared state for chips (used by both SSE stream and postProcess)
   let resolvedChips: string[] = [];
 
+  // SSE padding to push past TCP buffer thresholds (~1460 bytes MSS)
+  const SSE_PADDING = `: ${' '.repeat(256)}\n\n`;
+
   // Create SSE stream that wraps LLM tokens
   const sseStream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const reader = llmStream.getReader();
       try {
+        // Connection-priming comment to establish stream
+        controller.enqueue(encoder.encode(`: stream-start\n\n`));
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          // Send token event
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ type: 'token', content: value })}\n\n`)
           );
+          // Flush hint: pad with SSE comment to push past TCP buffer
+          controller.enqueue(encoder.encode(SSE_PADDING));
         }
 
         // Stream complete — get full response text for chip generation
         const fullText = await getFullResponse();
 
-        // Try LLM-generated contextual chips first, fall back to matchedPairs
-        const llmChips = await generateFollowUpChips(
-          request.message,
-          fullText,
-          context.settings.max_suggestion_chips
-        );
+        // Only generate chips if enabled
+        if (context.settings.suggestion_chips_enabled) {
+          // Try LLM-generated contextual chips first, fall back to matchedPairs
+          const llmChips = await generateFollowUpChips(
+            request.message,
+            fullText,
+            context.settings.max_suggestion_chips
+          );
 
-        if (llmChips && llmChips.length > 0) {
-          resolvedChips = llmChips;
-        } else {
-          // Fallback: use matched Q&A pair questions
-          resolvedChips = context.matchedPairs
-            .filter(pair => pair.question.toLowerCase().trim() !== request.message.toLowerCase().trim())
-            .slice(0, context.settings.max_suggestion_chips)
-            .map(pair => pair.question);
+          if (llmChips && llmChips.length > 0) {
+            resolvedChips = llmChips;
+          } else {
+            // Fallback: use matched Q&A pair questions
+            resolvedChips = context.matchedPairs
+              .filter(pair => pair.question.toLowerCase().trim() !== request.message.toLowerCase().trim())
+              .slice(0, context.settings.max_suggestion_chips)
+              .map(pair => pair.question);
+          }
         }
 
         // Use context-based escalation for streaming mode
@@ -495,7 +511,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       const updatedMessages = [...context.previousMessages, userMessage, assistantMessage];
 
-      await supabase.from('chat_sessions').upsert({
+      const { data: upsertedSession } = await supabase.from('chat_sessions').upsert({
         workspace_id: request.workspace_id,
         session_token: request.session_token,
         messages: updatedMessages,
@@ -503,7 +519,34 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         escalated_at: streamingEscalation
           ? new Date().toISOString()
           : context.existingSession?.escalated_at ?? null,
-      }, { onConflict: 'workspace_id,session_token' });
+      }, { onConflict: 'workspace_id,session_token' }).select('id, metadata').single();
+
+      // Summary generation (same logic as non-streaming path)
+      if (upsertedSession && updatedMessages.length >= SUMMARY_THRESHOLD) {
+        try {
+          const metadata = (upsertedSession.metadata as Record<string, unknown>) || {};
+
+          // Skip if already summarized
+          if (!metadata.summarized_at) {
+            const result = await summarizeConversation(updatedMessages);
+
+            if (result.success && result.summary) {
+              await supabase
+                .from('chat_sessions')
+                .update({
+                  metadata: {
+                    ...metadata,
+                    summary: result.summary,
+                    summarized_at: new Date().toISOString(),
+                  },
+                })
+                .eq('id', upsertedSession.id);
+            }
+          }
+        } catch {
+          // Silently fail - this is background work
+        }
+      }
     },
   };
 }
@@ -527,29 +570,74 @@ function buildChatPrompt(
     : 'No relevant Q&A pairs found in the knowledge base.';
 
   // Different response format for streaming vs non-streaming
-  const responseFormatSection = streaming
-    ? `## Response Format
+  let responseFormatSection: string;
+
+  if (streaming) {
+    responseFormatSection = `## Response Format
 Respond naturally and conversationally. Do not use JSON format. Just write your answer as plain text.
 Keep responses concise — 2-4 sentences for simple questions, more for complex ones.
-${settings.escalation_enabled && settings.booking_url ? `If the user shows buying intent, naturally suggest booking a call.` : ''}`
-    : `## Suggestion Chip Rules
-Generate exactly ${settings.max_suggestion_chips} suggestion chips. These are NOT generic follow-ups. Each chip should do ONE of:
-(a) Help the visitor clarify their specific needs
-(b) Surface high-value information from the knowledge base that's related to their question
-(c) Guide toward booking a call IF buying intent is present
+${settings.escalation_enabled && settings.booking_url ? `Only suggest booking a call if the visitor explicitly asks to speak with someone, provides specific urgent hiring requirements, or asks "how do I get started" after discussing their needs.` : ''}`;
+  } else if (settings.suggestion_chips_enabled) {
+    // Non-streaming with chips enabled
+    responseFormatSection = `## Suggestion Chip Rules
+Generate exactly ${settings.max_suggestion_chips} suggestion chips.
+
+Each chip must be a short question (under 10 words) that does ONE of:
+(a) Qualify the visitor — ask about their specific needs, situation, or requirements as defined in the personality prompt above
+(b) Book a call — if the visitor has shared enough about their needs and shows buying intent, suggest scheduling a conversation
+
+Review the conversation history. Never re-ask something the visitor already answered. Each chip should collect NEW information.
+
+NEVER generate chips that just ask for more info about the company (e.g., "Tell me about your process" or "How does pricing work"). Chips should ask about THE VISITOR, not about us.
 
 ${settings.escalation_enabled ? `## Escalation Rules
-If the user shows buying intent (asking about pricing, timelines, team availability, "how do I get started", comparing options), include a booking suggestion and set escalation to true.` : ''}
+Set escalation_offered to true ONLY when the visitor explicitly signals readiness to engage with a human. This means:
+- They directly ask to speak with someone or book a call
+- They provide specific hiring requirements with urgency (e.g., "We need 5 React devs by next month")
+- They explicitly ask "how do I get started" or "what are next steps" after already discussing their needs
+
+Do NOT set escalation_offered to true for:
+- General pricing questions ("How does pricing work?")
+- Role availability questions ("Do you have React developers?")
+- Process questions ("How does the onboarding work?")
+- Comparison questions ("How are you different from Toptal?")
+
+These are normal informational questions. You CAN still include a "Book a Call" suggestion chip as a helpful option without setting escalation_offered to true. Escalation should be rare — reserved for visitors who are clearly ready to convert.` : ''}
 
 ## Response Format
 Respond in this exact JSON format (no markdown fences, raw JSON only):
 {
   "answer": "Your conversational answer here",
-  "suggestion_chips": ["Strategic follow-up 1?", "Strategic follow-up 2?", "Strategic follow-up 3?"],
+  "suggestion_chips": ["Follow-up 1?", "Follow-up 2?", "Follow-up 3?"],
   "escalation_offered": false
 }
 
 ${settings.escalation_enabled && settings.booking_url ? `When escalation_offered is true, naturally weave a booking suggestion into your answer.` : ''}`;
+  } else {
+    // Non-streaming with chips disabled
+    responseFormatSection = `${settings.escalation_enabled ? `## Escalation Rules
+Set escalation_offered to true ONLY when the visitor explicitly signals readiness to engage with a human. This means:
+- They directly ask to speak with someone or book a call
+- They provide specific hiring requirements with urgency (e.g., "We need 5 React devs by next month")
+- They explicitly ask "how do I get started" or "what are next steps" after already discussing their needs
+
+Do NOT set escalation_offered to true for:
+- General pricing questions ("How does pricing work?")
+- Role availability questions ("Do you have React developers?")
+- Process questions ("How does the onboarding work?")
+- Comparison questions ("How are you different from Toptal?")
+
+These are normal informational questions. You CAN still include a "Book a Call" suggestion chip as a helpful option without setting escalation_offered to true. Escalation should be rare — reserved for visitors who are clearly ready to convert.` : ''}
+
+## Response Format
+Respond in this exact JSON format (no markdown fences, raw JSON only):
+{
+  "answer": "Your conversational answer here",
+  "escalation_offered": false
+}
+
+${settings.escalation_enabled && settings.booking_url ? `When escalation_offered is true, naturally weave a booking suggestion into your answer.` : ''}`;
+  }
 
   const systemPrompt = `${settings.personality_prompt}
 
@@ -557,9 +645,11 @@ ${settings.escalation_enabled && settings.booking_url ? `When escalation_offered
 ${contextBlock}
 
 ## Response Rules
-1. Answer the user's question using ONLY the knowledge base context above. Do not make up information.
-2. If the context doesn't fully answer the question, be honest: provide what you can and acknowledge what you don't know.
-3. Keep responses concise and conversational — 2-4 sentences for simple questions, more for complex ones.
+1. Answer using the knowledge base context above as your primary source.
+2. If the knowledge base doesn't fully cover the question, use your general knowledge to give a helpful answer — but be upfront when you're going beyond what's in the knowledge base. Never just say "I don't know" and stop.
+3. Keep responses SHORT — 2-3 sentences maximum. No paragraphs. Be conversational and direct.
+4. End every response with a qualifying question to learn more about the visitor's needs (role type, tech stack, team size, timeline, hiring experience).
+5. Never use bullet points or numbered lists in your answer. Write in natural conversational sentences.
 
 ${responseFormatSection}`;
 
@@ -580,9 +670,15 @@ function parseLLMResponse(rawContent: string, settings: WorkspaceSettings): Pars
   try {
     const cleaned = rawContent.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     const parsed = JSON.parse(cleaned);
+
+    // Strip chips if suggestion_chips_enabled is false (safety net)
+    const chips = settings.suggestion_chips_enabled && Array.isArray(parsed.suggestion_chips)
+      ? parsed.suggestion_chips.slice(0, settings.max_suggestion_chips)
+      : [];
+
     return {
       answer: parsed.answer || rawContent,
-      suggestion_chips: Array.isArray(parsed.suggestion_chips) ? parsed.suggestion_chips.slice(0, settings.max_suggestion_chips) : [],
+      suggestion_chips: chips,
       escalation_offered: Boolean(parsed.escalation_offered),
     };
   } catch {

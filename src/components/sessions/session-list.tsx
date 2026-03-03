@@ -2,7 +2,7 @@
 
 import { MessageSquare, AlertTriangle } from 'lucide-react';
 import { SummaryBadges } from './intent-card';
-import type { ConversationSummary } from '@/types/chat';
+import type { ConversationSummary, ChatMessage } from '@/types/chat';
 
 interface SessionMetadata {
   summary?: ConversationSummary;
@@ -12,13 +12,21 @@ interface SessionMetadata {
 interface Session {
   id: string;
   session_token: string;
-  messages: unknown[];
+  messages: ChatMessage[];
   metadata?: SessionMetadata;
   escalated: boolean;
   escalated_at: string | null;
   created_at: string;
   updated_at: string;
   message_count: number;
+}
+
+function getFirstUserMessagePreview(messages: ChatMessage[]): string | null {
+  const firstUserMessage = messages.find((m) => m.role === 'user');
+  if (!firstUserMessage?.content) return null;
+  const content = firstUserMessage.content.trim();
+  if (content.length <= 60) return content;
+  return content.slice(0, 57) + '...';
 }
 
 interface SessionListProps {
@@ -59,6 +67,7 @@ export function SessionList({ sessions, selectedId, onSelect }: SessionListProps
     <div className="divide-y divide-ce-border">
       {sessions.map((session) => {
         const summary = session.metadata?.summary;
+        const preview = getFirstUserMessagePreview(session.messages);
         return (
           <button
             key={session.id}
@@ -95,6 +104,12 @@ export function SessionList({ sessions, selectedId, onSelect }: SessionListProps
             {summary?.contact_info?.name && (
               <p className="text-xs text-ce-text-muted mt-1">
                 {formatDateTime(session.created_at)}
+              </p>
+            )}
+            {/* First user message preview */}
+            {preview && (
+              <p className="text-xs text-ce-text-muted mt-1 truncate">
+                &ldquo;{preview}&rdquo;
               </p>
             )}
           </button>
