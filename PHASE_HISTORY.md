@@ -599,3 +599,93 @@ src/types/workspace.ts         — OnboardingStepRecord, onboarding_completed_st
 4. `fix: auto-resolve gaps on individual Q&A add`
 5. `fix: streaming chat shows plain text instead of raw JSON`
 6. `feat: onboarding wizard UX polish — branded header, provider cards, better layout`
+
+---
+
+## v1.1 Session 8 — Widget Layouts
+**Date:** March 3, 2026
+**Status:** ✅ Complete
+
+### Features Built
+
+1. **Side Whisper Widget Layout**
+   - Frosted glass panel that slides in from right edge
+   - Shadow DOM isolation for complete style encapsulation
+   - `src/components/chat/panel-chat.tsx` component with backdrop blur effect
+   - Supports `?mode=panel` param in chat route
+
+2. **Command Bar Widget Layout**
+   - Spotlight-style overlay triggered by ⌘K keyboard shortcut
+   - Shadow DOM injection via `public/widget.js`
+   - Centered modal with search-like UX
+   - Supports `?mode=command` param in chat route
+
+3. **LLM-Generated Suggestion Chips**
+   - AI generates contextual follow-up questions after each response
+   - `generateFollowUpChips()` function in `src/lib/chat/engine.ts`
+   - Fallback chain to matched Q&A pairs when LLM generation fails
+   - Integrated into streaming response flow
+
+4. **Widget Mode System**
+   - Chat route accepts `?mode=panel|command|default` parameter
+   - `widget.js` updated to pass mode to iframe
+   - `WIDGET_LAYOUTS` constant in `src/types/workspace.ts`
+   - `widget_layout` field in WorkspaceSettings
+
+5. **Landing Page Widget Showcase**
+   - New section showcasing widget layout options
+   - Live demo integration
+   - Updated hero and feature presentation
+
+6. **Streaming Summary Debug Logging**
+   - Comprehensive `[Summary Debug]` logging added to postProcess function
+   - Traces: message count, threshold check, upsert result, summary generation, metadata update
+   - Located in `src/lib/chat/engine.ts` lines 514-583
+   - Confirmed AI summaries working correctly in streaming path
+
+### Files Created
+
+```
+src/components/chat/
+└── panel-chat.tsx              (Side Whisper component)
+```
+
+### Files Modified
+
+```
+src/lib/chat/engine.ts          — generateFollowUpChips(), [Summary Debug] logging in postProcess
+src/app/chat/[workspaceId]/page.tsx — Mode switching logic (panel/command/default)
+public/widget.js                — Shadow DOM injection, mode param handling, ⌘K shortcut
+src/types/workspace.ts          — WIDGET_LAYOUTS constant, widget_layout field
+src/app/page.tsx                — Landing page widget showcase section
+src/app/dashboard/settings/page.tsx — Removed preview panel, full-width layout
+```
+
+### Key Patterns Established
+
+1. **Shadow DOM Widget Injection:**
+   - Create shadow root on target container
+   - Inject iframe inside shadow DOM for style isolation
+   - Handle keyboard shortcuts (⌘K) at document level
+
+2. **Widget Mode Param Pattern:**
+   - Chat route reads `mode` from searchParams
+   - Renders different component based on mode value
+   - Widget script passes mode to iframe src
+
+3. **LLM Chip Generation with Fallback:**
+   - Try LLM generation first
+   - On failure, fall back to matched Q&A pair questions
+   - Filter out duplicate/similar chips
+
+4. **Debug Logging Pattern:**
+   - Use `[FeatureName Debug]` prefix for easy grep
+   - Log at key decision points (threshold check, API calls, results)
+   - Include relevant context (IDs, counts, success/error states)
+
+### Git Commits
+1. `feat: LLM-generated contextual suggestion chips with fallback chain`
+2. `feat: shadow DOM Side Whisper with real frosted glass backdrop blur`
+3. `feat: command bar widget — shadow DOM spotlight overlay with ⌘K shortcut`
+4. `feat: refresh landing page with widget layout showcase + live demo`
+5. `fix: session previews, streaming summaries, escalation threshold`

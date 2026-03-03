@@ -595,3 +595,4 @@ const [hasChanges, setHasChanges] = useState(false);
 | v1.1 Session 1 | Complete | Bulk operations, test-match pattern, iframe-responsive layout |
 | v1.1 Session 2 | Complete | File parsing (mammoth, pdf-parse), auto-resolve gaps, AI summaries, interview guide export |
 | v1.1 Session 7A | Complete | SSE streaming, onboarding gate, settings live preview, after() background processing |
+| v1.1 Session 8 | Complete | Shadow DOM widget layouts, LLM-generated suggestion chips, widget mode system, `[Summary Debug]` logging for streaming postProcess |

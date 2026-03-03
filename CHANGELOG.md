@@ -23,11 +23,19 @@ Public chat route built at `/chat/[workspaceId]` for iframe embedding and direct
 
 ---
 
+## v1.1 Session 8 — Widget Layouts
+**Status:** ✅ COMPLETE
+**Date:** March 3, 2026
+
+Alternative widget layouts using Shadow DOM for complete style isolation. **Side Whisper** — frosted glass panel that slides in from the right edge with backdrop blur effect, implemented in `panel-chat.tsx`. **Command Bar** — spotlight-style overlay triggered by ⌘K keyboard shortcut, centered modal with search-like UX (full implementation parked for future session). **LLM-generated suggestion chips** — AI now generates contextual follow-up questions after each response with fallback chain to matched Q&A pairs when generation fails. **Widget mode system** — chat route accepts `?mode=panel|command` parameter, `widget.js` updated to pass mode to iframe and handle Shadow DOM injection for each layout type. **Landing page refresh** — new widget layout showcase section with live demo. Settings preview panel removed — settings page now uses full-width layout. **Debug logging** — comprehensive `[Summary Debug]` logging added to streaming postProcess function to diagnose and verify AI summary generation; confirmed working correctly.
+
+---
+
 ## v1.1 Session 7A — UX Polish
 **Status:** ✅ COMPLETE
 **Date:** March 2, 2026
 
-Streaming chat responses via Server-Sent Events — tokens now appear in real-time instead of waiting for full LLM response. Added `chatCompletionStream()` for both Anthropic and OpenAI, `processChatStream()` in chat engine, and frontend SSE handling. Settings live preview panel shows widget changes in real-time without saving — 60/40 split layout on desktop, collapsible on tablet, hidden on mobile. Onboarding wizard guides new users through 4 steps: name bot, add knowledge, connect AI provider, preview chat. Full-screen overlay with progress tracking, skip functionality, and resume on reload. Auto-resolve gaps now triggers on individual Q&A add (not just bulk save) via `after()` background processing. Fixed streaming chat showing raw JSON instead of plain text.
+Streaming chat responses via Server-Sent Events — tokens now appear in real-time instead of waiting for full LLM response. Added `chatCompletionStream()` for both Anthropic and OpenAI, `processChatStream()` in chat engine, and frontend SSE handling. Settings live preview panel shows widget changes in real-time without saving — 60/40 split layout on desktop, collapsible on tablet, hidden on mobile (removed in Session 8). Onboarding wizard guides new users through 4 steps: name bot, add knowledge, connect AI provider, preview chat. Full-screen overlay with progress tracking, skip functionality, and resume on reload. Auto-resolve gaps now triggers on individual Q&A add (not just bulk save) via `after()` background processing. Fixed streaming chat showing raw JSON instead of plain text.
 
 ---
 
@@ -39,4 +47,4 @@ Intelligence features (docx/pdf upload, gap auto-resolution, conversation summar
 
 ---
 
-**v1.1 Session 7A Complete.** Clara is live at https://chatbot.jakevibes.dev
+**v1.1 Session 8 Complete.** Clara is live at https://chatbot.jakevibes.dev

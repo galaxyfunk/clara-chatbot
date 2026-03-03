@@ -511,7 +511,13 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       const updatedMessages = [...context.previousMessages, userMessage, assistantMessage];
 
-      const { data: upsertedSession } = await supabase.from('chat_sessions').upsert({
+      console.log('[Summary Debug] Starting postProcess', {
+        messageCount: updatedMessages.length,
+        threshold: SUMMARY_THRESHOLD,
+        meetsThreshold: updatedMessages.length >= SUMMARY_THRESHOLD,
+      });
+
+      const upsertResult = await supabase.from('chat_sessions').upsert({
         workspace_id: request.workspace_id,
         session_token: request.session_token,
         messages: updatedMessages,
@@ -521,17 +527,35 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           : context.existingSession?.escalated_at ?? null,
       }, { onConflict: 'workspace_id,session_token' }).select('id, metadata').single();
 
+      console.log('[Summary Debug] Upsert result:', JSON.stringify(upsertResult, null, 2));
+
+      const upsertedSession = upsertResult.data;
+
       // Summary generation (same logic as non-streaming path)
       if (upsertedSession && updatedMessages.length >= SUMMARY_THRESHOLD) {
+        console.log('[Summary Debug] Entering summary block', {
+          sessionId: upsertedSession.id,
+          hasMetadata: !!upsertedSession.metadata,
+          metadata: upsertedSession.metadata,
+        });
+
         try {
           const metadata = (upsertedSession.metadata as Record<string, unknown>) || {};
 
           // Skip if already summarized
           if (!metadata.summarized_at) {
+            console.log('[Summary Debug] Calling summarizeConversation with', updatedMessages.length, 'messages');
+
             const result = await summarizeConversation(updatedMessages);
 
+            console.log('[Summary Debug] Summary result:', {
+              success: result.success,
+              hasSummary: !!result.summary,
+              error: result.error,
+            });
+
             if (result.success && result.summary) {
-              await supabase
+              const updateResult = await supabase
                 .from('chat_sessions')
                 .update({
                   metadata: {
@@ -541,11 +565,21 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                   },
                 })
                 .eq('id', upsertedSession.id);
+
+              console.log('[Summary Debug] Metadata update result:', JSON.stringify(updateResult, null, 2));
             }
+          } else {
+            console.log('[Summary Debug] Skipping - already summarized at:', metadata.summarized_at);
           }
-        } catch {
-          // Silently fail - this is background work
+        } catch (error) {
+          console.error('[Summary Debug] Error in summary generation:', error);
         }
+      } else {
+        console.log('[Summary Debug] Skipping summary block', {
+          hasUpsertedSession: !!upsertedSession,
+          messageCount: updatedMessages.length,
+          threshold: SUMMARY_THRESHOLD,
+        });
       }
     },
   };
