@@ -13,6 +13,8 @@ const ALLOWED_ORIGINS = [
   'https://chatbot.jakevibes.dev',
   'https://cloudemployee.com',
   'https://www.cloudemployee.com',
+  'https://cloudemployee.io',
+  'https://www.cloudemployee.io',
   'http://localhost:3000',
 ];
 
