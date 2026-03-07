@@ -327,6 +327,40 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     console.error('[Session Upsert Error]', sessionError);
   }
 
+  // ── Email capture + HubSpot upsert ──
+  if (upsertedSession) {
+    const detectedEmail = extractEmail(request.message);
+    if (detectedEmail) {
+      const { data: sessionCheck } = await supabase
+        .from('chat_sessions')
+        .select('visitor_email')
+        .eq('id', upsertedSession.id)
+        .single();
+
+      if (!sessionCheck?.visitor_email) {
+        await supabase
+          .from('chat_sessions')
+          .update({ visitor_email: detectedEmail })
+          .eq('id', upsertedSession.id);
+
+        if (context.settings.hubspot_enabled) {
+          const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
+          const hubspotKey = process.env.HUBSPOT_API_KEY;
+          if (hubspotKey) {
+            const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions`;
+
+            await upsertHubSpotContact({
+              email: detectedEmail,
+              lead_source: 'Clara Chatbot',
+              lifecyclestage: 'marketingqualifiedlead',
+              clara_session_url: sessionUrl,
+            }, hubspotKey);
+          }
+        }
+      }
+    }
+  }
+
   return {
     answer: parsed.answer,
     suggestion_chips: parsed.suggestion_chips,
@@ -581,8 +615,53 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           threshold: SUMMARY_THRESHOLD,
         });
       }
+
+      // ── Email capture + HubSpot upsert ──
+      if (upsertedSession) {
+        const detectedEmail = extractEmail(request.message);
+        if (detectedEmail) {
+          const { data: sessionCheck } = await supabase
+            .from('chat_sessions')
+            .select('visitor_email')
+            .eq('id', upsertedSession.id)
+            .single();
+
+          if (!sessionCheck?.visitor_email) {
+            await supabase
+              .from('chat_sessions')
+              .update({ visitor_email: detectedEmail })
+              .eq('id', upsertedSession.id);
+
+            if (context.settings.hubspot_enabled) {
+              const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
+              const hubspotKey = process.env.HUBSPOT_API_KEY;
+              if (hubspotKey) {
+                const metadata = (upsertedSession.metadata as Record<string, unknown>) || {};
+                const summaryData = metadata.summary as Record<string, unknown> | undefined;
+                const summaryText = typeof summaryData?.summary_text === 'string' ? summaryData.summary_text : undefined;
+                const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions`;
+
+                await upsertHubSpotContact({
+                  email: detectedEmail,
+                  lead_source: 'Clara Chatbot',
+                  lifecyclestage: 'marketingqualifiedlead',
+                  clara_chat_summary: summaryText,
+                  clara_session_url: sessionUrl,
+                }, hubspotKey);
+              }
+            }
+          }
+        }
+      }
     },
   };
+}
+
+// ─── Email Extraction ────────────────────────────────────────────────
+
+function extractEmail(text: string): string | null {
+  const match = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+  return match ? match[0].toLowerCase() : null;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
