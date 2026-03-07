@@ -142,6 +142,7 @@ export default function PublicChatPage() {
     personality_prompt: '',
     confidence_threshold: 0.78,
     custom_categories: [],
+    hubspot_enabled: false,
     onboarding_completed_steps: [],
   };
 

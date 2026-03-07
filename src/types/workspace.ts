@@ -52,6 +52,9 @@ export interface WorkspaceSettings {
   // Knowledge Base
   custom_categories: string[];
 
+  // Integrations
+  hubspot_enabled: boolean;
+
   // Onboarding
   onboarding_completed_steps: OnboardingStepRecord[];
 }
@@ -88,6 +91,7 @@ You are a friendly and knowledgeable virtual assistant. Your primary role is to 
   escalation_enabled: true,
   powered_by_clara: true,
   custom_categories: [],
+  hubspot_enabled: false,
   onboarding_completed_steps: [],
 };
 
