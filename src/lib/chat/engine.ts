@@ -295,7 +295,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
             const result = await upsertHubSpotContact({
               email: detectedEmail,
-              lead_source: 'Clara Chatbot',
+              lead_source: 'Website',
               lifecyclestage: 'marketingqualifiedlead',
               clara_session_url: sessionUrl,
             }, hubspotKey);
@@ -564,7 +564,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
                 const result = await upsertHubSpotContact({
                   email: detectedEmail,
-                  lead_source: 'Clara Chatbot',
+                  lead_source: 'Website',
                   lifecyclestage: 'marketingqualifiedlead',
                   clara_chat_summary: summaryText,
                   clara_session_url: sessionUrl,

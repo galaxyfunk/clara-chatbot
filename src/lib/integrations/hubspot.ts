@@ -15,7 +15,7 @@ export async function upsertHubSpotContact(
   try {
     const properties: Record<string, string> = {
       email: payload.email,
-      lead_source: payload.lead_source ?? 'Clara Chatbot',
+      lead_source: payload.lead_source ?? 'Website',
       lifecyclestage: payload.lifecyclestage ?? 'marketingqualifiedlead',
     };
 
