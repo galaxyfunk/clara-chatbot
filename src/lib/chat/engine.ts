@@ -291,7 +291,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
           const hubspotKey = process.env.HUBSPOT_API_KEY;
           console.log('[HubSpot Debug] Non-streaming — calling upsert with email:', detectedEmail, '| has API key:', !!hubspotKey);
           if (hubspotKey) {
-            const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions`;
+            const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions/${upsertedSession.id}`;
 
             const result = await upsertHubSpotContact({
               email: detectedEmail,
@@ -560,7 +560,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                 const metadata = (upsertedSession.metadata as Record<string, unknown>) || {};
                 const summaryData = metadata.summary as Record<string, unknown> | undefined;
                 const summaryText = typeof summaryData?.summary_text === 'string' ? summaryData.summary_text : undefined;
-                const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions`;
+                const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions/${upsertedSession.id}`;
 
                 const result = await upsertHubSpotContact({
                   email: detectedEmail,
