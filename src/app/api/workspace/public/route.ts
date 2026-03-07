@@ -1,12 +1,45 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 
+// ─── CORS ────────────────────────────────────────────────────────────
+
+const ALLOWED_ORIGINS = [
+  'https://chatbot.jakevibes.dev',
+  'https://cloudemployee.com',
+  'https://www.cloudemployee.com',
+  'https://cloudemployee.io',
+  'https://www.cloudemployee.io',
+  'http://localhost:3000',
+];
+
+function getCorsHeaders(requestOrigin: string | null) {
+  const origin = ALLOWED_ORIGINS.includes(requestOrigin ?? '')
+    ? requestOrigin!
+    : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+export async function OPTIONS(request: Request) {
+  const origin = request.headers.get('origin');
+  return new Response(null, {
+    status: 204,
+    headers: getCorsHeaders(origin),
+  });
+}
+
 /**
  * GET /api/workspace/public?workspace_id={id}
  * Public endpoint to fetch workspace settings for widget/embed.
  * Returns only public-facing settings (no sensitive data).
  */
 export async function GET(request: Request) {
+  const origin = request.headers.get('origin');
+  const cors = getCorsHeaders(origin);
+
   try {
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get('workspace_id');
@@ -14,7 +47,7 @@ export async function GET(request: Request) {
     if (!workspaceId) {
       return NextResponse.json(
         { success: false, error: 'workspace_id is required' },
-        { status: 400 }
+        { status: 400, headers: cors }
       );
     }
 
@@ -28,7 +61,7 @@ export async function GET(request: Request) {
     if (error || !workspace) {
       return NextResponse.json(
         { success: false, error: 'Workspace not found' },
-        { status: 404 }
+        { status: 404, headers: cors }
       );
     }
 
@@ -60,9 +93,9 @@ export async function GET(request: Request) {
       success: true,
       workspace_id: workspace.id,
       settings: publicSettings,
-    });
+    }, { headers: cors });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500, headers: cors });
   }
 }
