@@ -19,6 +19,7 @@ interface PublicSettings {
   avatar_url: string | null;
   chat_icon_url: string | null;
   max_suggestion_chips: number;
+  suggestion_chips_enabled: boolean;
   escalation_enabled: boolean;
   powered_by_clara: boolean;
   // Widget layouts (may include legacy 'terminal' from database)
@@ -127,6 +128,7 @@ export default function PublicChatPage() {
     avatar_url: settings.avatar_url,
     chat_icon_url: settings.chat_icon_url,
     max_suggestion_chips: settings.max_suggestion_chips,
+    suggestion_chips_enabled: settings.suggestion_chips_enabled,
     escalation_enabled: settings.escalation_enabled,
     powered_by_clara: settings.powered_by_clara,
     // Widget layouts - normalize legacy 'terminal' to 'classic'

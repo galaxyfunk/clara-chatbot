@@ -1338,10 +1338,12 @@
           },
           onDone: function(data) {
             msgResult.textEl.textContent = fullContent;
-            var chips = (data.suggestion_chips && data.suggestion_chips.length > 0)
-              ? data.suggestion_chips
-              : FALLBACK_CHIPS;
-            renderFollowupChips(msgResult.content, chips);
+            if (s.suggestion_chips_enabled) {
+              var chips = (data.suggestion_chips && data.suggestion_chips.length > 0)
+                ? data.suggestion_chips
+                : FALLBACK_CHIPS;
+              renderFollowupChips(msgResult.content, chips);
+            }
             scrollToBottom();
           },
           onError: function(err) {
@@ -1361,34 +1363,36 @@
       }
     }
 
-    // ── BUILD INITIAL SUGGESTIONS ──
+    // ── BUILD INITIAL SUGGESTIONS (only if suggestion_chips_enabled) ──
 
-    var initialChips = (s.suggested_messages && s.suggested_messages.length > 0)
-      ? s.suggested_messages.slice(0, s.max_suggestion_chips || 4)
-      : DEFAULT_CHIPS;
+    if (s.suggestion_chips_enabled) {
+      var initialChips = (s.suggested_messages && s.suggested_messages.length > 0)
+        ? s.suggested_messages.slice(0, s.max_suggestion_chips || 4)
+        : DEFAULT_CHIPS;
 
-    initialChips.forEach(function(chipText) {
-      var btn = document.createElement('button');
-      btn.className = 'cb-suggestion';
+      initialChips.forEach(function(chipText) {
+        var btn = document.createElement('button');
+        btn.className = 'cb-suggestion';
 
-      var icon = document.createElement('span');
-      icon.className = 'cb-suggestion-icon';
-      icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
+        var icon = document.createElement('span');
+        icon.className = 'cb-suggestion-icon';
+        icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
 
-      var textSpan = document.createElement('span');
-      textSpan.className = 'cb-suggestion-text';
-      textSpan.textContent = chipText;
+        var textSpan = document.createElement('span');
+        textSpan.className = 'cb-suggestion-text';
+        textSpan.textContent = chipText;
 
-      var arrow = document.createElement('span');
-      arrow.className = 'cb-suggestion-arrow';
-      arrow.textContent = '→';
+        var arrow = document.createElement('span');
+        arrow.className = 'cb-suggestion-arrow';
+        arrow.textContent = '→';
 
-      btn.appendChild(icon);
-      btn.appendChild(textSpan);
-      btn.appendChild(arrow);
-      btn.addEventListener('click', function() { sendMessage(chipText); });
-      suggestionsContainer.appendChild(btn);
-    });
+        btn.appendChild(icon);
+        btn.appendChild(textSpan);
+        btn.appendChild(arrow);
+        btn.addEventListener('click', function() { sendMessage(chipText); });
+        suggestionsContainer.appendChild(btn);
+      });
+    }
 
     // ── EVENT LISTENERS ──
 
@@ -1992,10 +1996,14 @@
           },
           onDone: function(data) {
             assistantEl.textContent = fullContent;
-            var chips = (data.suggestion_chips && data.suggestion_chips.length > 0)
-              ? data.suggestion_chips.slice(0, s.max_suggestion_chips || 4)
-              : FALLBACK_CHIPS.slice(0, s.max_suggestion_chips || 3);
-            renderChips(chipsContainer, chips, sendMessage);
+            if (s.suggestion_chips_enabled) {
+              var chips = (data.suggestion_chips && data.suggestion_chips.length > 0)
+                ? data.suggestion_chips.slice(0, s.max_suggestion_chips || 4)
+                : FALLBACK_CHIPS.slice(0, s.max_suggestion_chips || 3);
+              renderChips(chipsContainer, chips, sendMessage);
+            } else {
+              chipsContainer.innerHTML = '';
+            }
             scrollToBottom();
           },
           onError: function(err) {
@@ -2061,11 +2069,13 @@
       }
     });
 
-    // Render initial chips
-    var initialChips = (s.suggested_messages && s.suggested_messages.length > 0)
-      ? s.suggested_messages.slice(0, s.max_suggestion_chips || 4)
-      : DEFAULT_CHIPS;
-    renderChips(chipsContainer, initialChips, sendMessage);
+    // Render initial chips (only if suggestion_chips_enabled)
+    if (s.suggestion_chips_enabled) {
+      var initialChips = (s.suggested_messages && s.suggested_messages.length > 0)
+        ? s.suggested_messages.slice(0, s.max_suggestion_chips || 4)
+        : DEFAULT_CHIPS;
+      renderChips(chipsContainer, initialChips, sendMessage);
+    }
 
     // Update window.ClaraWidget API
     window.ClaraWidget = {

@@ -110,11 +110,13 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
       setIsLoading(false);
       setIsStreaming(true);
 
-      // Read SSE stream
+      // Read SSE stream with RAF-throttled rendering
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       let fullContent = '';
+      let rafId: number | null = null;
+      let pendingContent = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -131,14 +133,27 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
 
             if (data.type === 'token') {
               fullContent += data.content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, content: fullContent } : m
-                )
-              );
+              pendingContent = fullContent;
+
+              // Schedule render on next animation frame (batches multiple tokens)
+              if (!rafId) {
+                rafId = requestAnimationFrame(() => {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantId ? { ...m, content: pendingContent } : m
+                    )
+                  );
+                  rafId = null;
+                });
+              }
             }
 
             if (data.type === 'done') {
+              // Cancel any pending RAF and do final render
+              if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+              }
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
@@ -156,6 +171,10 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             }
 
             if (data.type === 'error') {
+              if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+              }
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
@@ -173,6 +192,16 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
           }
         }
       }
+
+      // Final flush in case stream ended without 'done' event
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId ? { ...m, content: fullContent, isStreaming: false } : m
+        )
+      );
 
       setIsStreaming(false);
     } catch {
@@ -197,10 +226,13 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
   };
 
   // Get suggestion chips - either from last assistant message or initial chips
+  // Only show chips if suggestion_chips_enabled is true
   const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
-  const currentChips = showInitialChips
-    ? settings.suggested_messages.slice(0, settings.max_suggestion_chips)
-    : lastAssistantMessage?.suggestion_chips || [];
+  const currentChips = settings.suggestion_chips_enabled
+    ? (showInitialChips
+        ? settings.suggested_messages.slice(0, settings.max_suggestion_chips)
+        : lastAssistantMessage?.suggestion_chips || [])
+    : [];
 
   const isDisabled = isLoading || isStreaming;
 

@@ -20,9 +20,11 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
   const [completedSteps, setCompletedSteps] = useState<OnboardingStepRecord[]>([]);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function checkOnboarding() {
       try {
-        const res = await fetch('/api/workspace');
+        const res = await fetch('/api/workspace', { signal: controller.signal });
         const data = await res.json();
 
         if (!data.success || !data.workspace) {
@@ -41,13 +43,20 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
         const allStepsComplete = ALL_STEPS.every((step) => finishedSteps.includes(step));
 
         setShowWizard(!allStepsComplete);
+        setLoading(false);
       } catch (err) {
+        // Ignore abort errors (expected during cleanup)
+        if (err instanceof Error && err.name === 'AbortError') return;
         console.error('Failed to check onboarding:', err);
+        setLoading(false);
       }
-      setLoading(false);
     }
 
     checkOnboarding();
+
+    return () => {
+      controller.abort();
+    };
   }, []);
 
   const handleWizardComplete = () => {

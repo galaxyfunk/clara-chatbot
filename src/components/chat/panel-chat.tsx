@@ -132,11 +132,13 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
       setIsLoading(false);
       setIsStreaming(true);
 
-      // Read SSE stream
+      // Read SSE stream with RAF-throttled rendering
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       let fullContent = '';
+      let rafId: number | null = null;
+      let pendingContent = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -153,14 +155,27 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
 
             if (data.type === 'token') {
               fullContent += data.content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, content: fullContent } : m
-                )
-              );
+              pendingContent = fullContent;
+
+              // Schedule render on next animation frame (batches multiple tokens)
+              if (!rafId) {
+                rafId = requestAnimationFrame(() => {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantId ? { ...m, content: pendingContent } : m
+                    )
+                  );
+                  rafId = null;
+                });
+              }
             }
 
             if (data.type === 'done') {
+              // Cancel any pending RAF and do final render
+              if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+              }
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
@@ -176,6 +191,10 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
             }
 
             if (data.type === 'error') {
+              if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+              }
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
@@ -193,6 +212,16 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
           }
         }
       }
+
+      // Final flush in case stream ended without 'done' event
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId ? { ...m, content: fullContent, isStreaming: false } : m
+        )
+      );
 
       setIsStreaming(false);
     } catch {
@@ -220,39 +249,41 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
     window.parent.postMessage({ type: 'clara-close' }, '*');
   };
 
-  // Get suggestion chips — use fallback defaults if workspace has none configured
-  const defaultChips = settings.suggested_messages?.length > 0
-    ? settings.suggested_messages
-    : [
-        'What services does Cloud Employee offer?',
-        'How does your pricing work?',
-        'What roles can you hire through CE?',
-        'How is Cloud Employee different?',
-      ];
-
-  // Fallback chips for when API returns empty (after conversation starts)
-  const conversationFallbackChips = [
-    'Tell me more about your services',
-    'How does pricing work?',
-    'Can I book a call with your team?',
-  ];
-
+  // Get suggestion chips — only if enabled in settings
   const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
-  const apiChips = (lastAssistantMessage?.suggestion_chips || []).slice(0, settings.max_suggestion_chips);
 
-  // Determine which chips to show
-  let bottomChips: string[];
-  if (showInitialChips && messages.length === 0) {
-    // Initial state — show default/configured chips
-    bottomChips = defaultChips.slice(0, settings.max_suggestion_chips);
-  } else if (apiChips.length > 0) {
-    // API returned chips — use them
-    bottomChips = apiChips;
-  } else if (messages.length > 0) {
-    // API returned empty but we have conversation — use fallback
-    bottomChips = conversationFallbackChips.slice(0, settings.max_suggestion_chips);
-  } else {
-    bottomChips = [];
+  // Determine which chips to show (only when suggestion_chips_enabled is true)
+  let bottomChips: string[] = [];
+  if (settings.suggestion_chips_enabled) {
+    // Use fallback defaults if workspace has none configured
+    const defaultChips = settings.suggested_messages?.length > 0
+      ? settings.suggested_messages
+      : [
+          'What services does Cloud Employee offer?',
+          'How does your pricing work?',
+          'What roles can you hire through CE?',
+          'How is Cloud Employee different?',
+        ];
+
+    // Fallback chips for when API returns empty (after conversation starts)
+    const conversationFallbackChips = [
+      'Tell me more about your services',
+      'How does pricing work?',
+      'Can I book a call with your team?',
+    ];
+
+    const apiChips = (lastAssistantMessage?.suggestion_chips || []).slice(0, settings.max_suggestion_chips);
+
+    if (showInitialChips && messages.length === 0) {
+      // Initial state — show default/configured chips
+      bottomChips = defaultChips.slice(0, settings.max_suggestion_chips);
+    } else if (apiChips.length > 0) {
+      // API returned chips — use them
+      bottomChips = apiChips;
+    } else if (messages.length > 0) {
+      // API returned empty but we have conversation — use fallback
+      bottomChips = conversationFallbackChips.slice(0, settings.max_suggestion_chips);
+    }
   }
 
   const isDisabled = isLoading || isStreaming;

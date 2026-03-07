@@ -104,11 +104,12 @@ export function OnboardingWizard({
 
   // Check if step 2 was already done (has Q&A pairs)
   useEffect(() => {
+    let cancelled = false;
     async function checkKnowledge() {
       try {
         const res = await fetch('/api/qa-pairs');
         const data = await res.json();
-        if (data.success && data.pairs && data.pairs.length > 0) {
+        if (!cancelled && data.success && data.pairs && data.pairs.length > 0) {
           setQaCount(data.pairs.length);
         }
       } catch {
@@ -116,15 +117,17 @@ export function OnboardingWizard({
       }
     }
     checkKnowledge();
+    return () => { cancelled = true; };
   }, []);
 
   // Check if step 3 was already done (has API keys)
   useEffect(() => {
+    let cancelled = false;
     async function checkApiKeys() {
       try {
         const res = await fetch('/api/api-keys');
         const data = await res.json();
-        if (data.success && data.keys && data.keys.length > 0) {
+        if (!cancelled && data.success && data.keys && data.keys.length > 0) {
           setKeyTested(true);
         }
       } catch {
@@ -132,6 +135,7 @@ export function OnboardingWizard({
       }
     }
     checkApiKeys();
+    return () => { cancelled = true; };
   }, []);
 
   const isStepCompleted = (stepId: OnboardingStep): boolean => {

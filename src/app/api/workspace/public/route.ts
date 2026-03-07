@@ -46,6 +46,7 @@ export async function GET(request: Request) {
       avatar_url: settings.avatar_url || null,
       chat_icon_url: settings.chat_icon_url || null,
       max_suggestion_chips: settings.max_suggestion_chips || 3,
+      suggestion_chips_enabled: settings.suggestion_chips_enabled ?? false,
       escalation_enabled: settings.escalation_enabled ?? true,
       powered_by_clara: settings.powered_by_clara ?? true,
       // Widget layouts
