@@ -272,6 +272,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
   // ── Email capture + HubSpot upsert ──
   if (upsertedSession) {
     const detectedEmail = extractEmail(request.message);
+    console.log('[HubSpot Debug] Non-streaming path — email extracted:', detectedEmail, '| hubspot_enabled:', context.settings.hubspot_enabled);
     if (detectedEmail) {
       const { data: sessionCheck } = await supabase
         .from('chat_sessions')
@@ -288,17 +289,23 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
         if (context.settings.hubspot_enabled) {
           const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
           const hubspotKey = process.env.HUBSPOT_API_KEY;
+          console.log('[HubSpot Debug] Non-streaming — calling upsert with email:', detectedEmail, '| has API key:', !!hubspotKey);
           if (hubspotKey) {
             const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions`;
 
-            await upsertHubSpotContact({
+            const result = await upsertHubSpotContact({
               email: detectedEmail,
               lead_source: 'Clara Chatbot',
               lifecyclestage: 'marketingqualifiedlead',
               clara_session_url: sessionUrl,
             }, hubspotKey);
+            console.log('[HubSpot Debug] Non-streaming — upsert result:', JSON.stringify(result));
           }
+        } else {
+          console.log('[HubSpot Debug] Non-streaming — skipped: hubspot_enabled is false');
         }
+      } else {
+        console.log('[HubSpot Debug] Non-streaming — skipped: visitor_email already set:', sessionCheck.visitor_email);
       }
     }
   }
@@ -531,6 +538,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       // ── Email capture + HubSpot upsert ──
       if (upsertedSession) {
         const detectedEmail = extractEmail(request.message);
+        console.log('[HubSpot Debug] Streaming postProcess — email extracted:', detectedEmail, '| hubspot_enabled:', context.settings.hubspot_enabled);
         if (detectedEmail) {
           const { data: sessionCheck } = await supabase
             .from('chat_sessions')
@@ -547,21 +555,27 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
             if (context.settings.hubspot_enabled) {
               const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
               const hubspotKey = process.env.HUBSPOT_API_KEY;
+              console.log('[HubSpot Debug] Streaming — calling upsert with email:', detectedEmail, '| has API key:', !!hubspotKey);
               if (hubspotKey) {
                 const metadata = (upsertedSession.metadata as Record<string, unknown>) || {};
                 const summaryData = metadata.summary as Record<string, unknown> | undefined;
                 const summaryText = typeof summaryData?.summary_text === 'string' ? summaryData.summary_text : undefined;
                 const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions`;
 
-                await upsertHubSpotContact({
+                const result = await upsertHubSpotContact({
                   email: detectedEmail,
                   lead_source: 'Clara Chatbot',
                   lifecyclestage: 'marketingqualifiedlead',
                   clara_chat_summary: summaryText,
                   clara_session_url: sessionUrl,
                 }, hubspotKey);
+                console.log('[HubSpot Debug] Streaming — upsert result:', JSON.stringify(result));
               }
+            } else {
+              console.log('[HubSpot Debug] Streaming — skipped: hubspot_enabled is false');
             }
+          } else {
+            console.log('[HubSpot Debug] Streaming — skipped: visitor_email already set:', sessionCheck.visitor_email);
           }
         }
       }

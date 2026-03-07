@@ -10,6 +10,8 @@ export async function upsertHubSpotContact(
   payload: HubSpotContactPayload,
   apiKey: string
 ): Promise<{ success: boolean; contactId?: string; error?: string }> {
+  console.log('[HubSpot Debug] upsertHubSpotContact called with:', JSON.stringify({ email: payload.email, lead_source: payload.lead_source, lifecyclestage: payload.lifecyclestage, has_summary: !!payload.clara_chat_summary, has_session_url: !!payload.clara_session_url }));
+
   try {
     const properties: Record<string, string> = {
       email: payload.email,
@@ -53,7 +55,7 @@ export async function upsertHubSpotContact(
 
     const data = await response.json();
     const contactId = data?.results?.[0]?.id;
-    console.log('[HubSpot] Contact upserted:', contactId);
+    console.log('[HubSpot Debug] API response status:', response.status, '| contactId:', contactId, '| full response:', JSON.stringify(data));
     return { success: true, contactId };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
