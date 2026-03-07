@@ -126,6 +126,33 @@ export function AITab({ settings, onChange }: AITabProps) {
           </div>
         </label>
       </div>
+
+      {/* Integrations */}
+      <div className="border-t border-ce-border pt-6">
+        <h3 className="text-sm font-semibold text-ce-text mb-4">Integrations</h3>
+        <div className="p-4 bg-ce-muted rounded-lg">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.hubspot_enabled}
+              onChange={(e) =>
+                onChange({ hubspot_enabled: e.target.checked })
+              }
+              className="w-4 h-4 mt-0.5 rounded border-ce-border text-ce-navy focus:ring-ce-navy"
+            />
+            <div>
+              <span className="block text-sm font-medium text-ce-text">
+                HubSpot Contact Sync
+              </span>
+              <span className="block mt-1 text-xs text-ce-text-muted">
+                Automatically create or update HubSpot contacts when visitors
+                share their email in chat. Requires HUBSPOT_API_KEY environment
+                variable.
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
     </div>
   );
 }
