@@ -393,3 +393,43 @@ Maps every feature to its owning files. Organized by feature area.
 - **Page:** `/` (landing page)
 - **Components:** `src/app/page.tsx`
 - **Session:** v1.1-8
+
+---
+
+## v1.1 Session 9A Features ✅ Complete
+
+### Email Capture
+- **Description:** Extracts email from visitor messages via regex and stores on chat_sessions.visitor_email (one-time per session)
+- **Page:** N/A (background process in chat engine)
+- **API Route:** `src/app/api/chat/route.ts` (runs in postProcess via after())
+- **Components:** N/A
+- **Lib Modules:** `src/lib/chat/engine.ts` (extractEmail helper, email capture block in postProcess)
+- **DB Tables:** `chat_sessions.visitor_email`
+- **Session:** v1.1-9A
+
+### HubSpot Contact Sync
+- **Description:** Upserts HubSpot contact when visitor shares email in chat, gated by hubspot_enabled toggle
+- **Page:** N/A (background process)
+- **API Route:** N/A (triggered from engine.ts postProcess)
+- **Components:** N/A
+- **Lib Modules:** `src/lib/integrations/hubspot.ts` (upsertHubSpotContact)
+- **Types:** `src/types/integrations.ts` (HubSpotContactPayload)
+- **DB Tables:** `workspaces.settings.hubspot_enabled`
+- **Env Vars:** `HUBSPOT_API_KEY`
+- **Session:** v1.1-9A
+
+### CORS on Chat API
+- **Description:** Allowlist-based CORS headers on /api/chat for cross-origin widget embedding
+- **Page:** N/A
+- **API Route:** `src/app/api/chat/route.ts` (OPTIONS handler + CORS headers on all responses)
+- **Components:** N/A
+- **Allowed Origins:** chatbot.jakevibes.dev, cloudemployee.com, cloudemployee.io, localhost:3000
+- **Session:** v1.1-9A
+
+### HubSpot Settings Toggle
+- **Description:** hubspot_enabled boolean toggle in workspace settings UI
+- **Page:** `/dashboard/settings` (AI tab → Integrations section)
+- **API Route:** `src/app/api/workspace` (PATCH via settings merge)
+- **Components:** `src/components/settings/ai-tab.tsx` (toggle under Integrations heading)
+- **Types:** `hubspot_enabled` in `WorkspaceSettings` (`src/types/workspace.ts`)
+- **Session:** v1.1-9A

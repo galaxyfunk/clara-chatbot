@@ -689,3 +689,79 @@ src/app/dashboard/settings/page.tsx — Removed preview panel, full-width layout
 3. `feat: command bar widget — shadow DOM spotlight overlay with ⌘K shortcut`
 4. `feat: refresh landing page with widget layout showcase + live demo`
 5. `fix: session previews, streaming summaries, escalation threshold`
+
+---
+
+## v1.1 Session 9A — CE Go-Live Infrastructure
+**Date:** March 7, 2026
+**Status:** ✅ Complete
+
+### Features Built
+
+1. **Email Capture in Chat Engine**
+   - `extractEmail()` helper in `src/lib/chat/engine.ts` — regex extraction from user messages
+   - Runs in `postProcess` for both streaming and non-streaming paths
+   - Stores first detected email on `chat_sessions.visitor_email` (one-time write per session)
+   - Fresh query before write to avoid overwriting existing email
+
+2. **HubSpot Contact Sync**
+   - `src/types/integrations.ts` — `HubSpotContactPayload` interface
+   - `src/lib/integrations/hubspot.ts` — `upsertHubSpotContact()` using HubSpot REST API batch upsert
+   - Idempotent by email (upsert, not create) — safe to call multiple times
+   - Gated by `settings.hubspot_enabled` toggle + `HUBSPOT_API_KEY` env var
+   - Fail-silent with `[HubSpot]` log prefix — never blocks chat flow
+   - Summary truncated to 500 chars for CRM field limits
+
+3. **CORS on /api/chat**
+   - Allowlist-based `ALLOWED_ORIGINS` array (chatbot.jakevibes.dev, cloudemployee.com, cloudemployee.io, localhost:3000)
+   - `getCorsHeaders()` helper returns origin-matched headers
+   - `OPTIONS` preflight handler returning 204
+   - CORS headers added to all response paths (streaming, non-streaming, validation errors, server errors)
+
+4. **HubSpot Settings Toggle**
+   - `hubspot_enabled: boolean` added to `WorkspaceSettings` interface + defaults (false)
+   - Toggle in AI tab under new "Integrations" section with border separator
+   - Added to public chat page `fullSettings` object literal to prevent type error
+
+### Files Created
+
+```
+src/types/integrations.ts                — HubSpotContactPayload interface
+src/lib/integrations/hubspot.ts          — upsertHubSpotContact() function
+```
+
+### Files Modified
+
+```
+src/types/workspace.ts                   — Added hubspot_enabled to WorkspaceSettings + defaults
+src/lib/chat/engine.ts                   — extractEmail() helper, email capture + HubSpot blocks in both paths
+src/app/api/chat/route.ts                — CORS headers, OPTIONS handler, getCorsHeaders()
+src/components/settings/ai-tab.tsx       — HubSpot toggle under Integrations section
+src/app/chat/[workspaceId]/page.tsx      — hubspot_enabled in fullSettings literal
+```
+
+### Key Patterns Established
+
+1. **Integration Gating Pattern:**
+   - Feature toggle in workspace settings (`hubspot_enabled`)
+   - Environment variable for API key (`HUBSPOT_API_KEY`)
+   - Both must be truthy for integration to fire
+   - Dynamic import (`await import()`) to avoid loading integration code when disabled
+
+2. **Email Capture Pattern:**
+   - Regex extraction from user message text
+   - One-time write per session (check before write)
+   - Runs in background `postProcess`, never blocks response
+
+3. **CORS Allowlist Pattern:**
+   - Static array of allowed origins
+   - Helper function returns origin-specific headers
+   - Applied to all response paths including errors
+
+### Git Commits
+1. `feat: add hubspot integration types and hubspot_enabled to WorkspaceSettings`
+2. `feat: add hubspot integration lib with upsert function`
+3. `feat: add email capture to engine postProcess with hubspot trigger`
+4. `fix: add CORS headers to chat API route`
+5. `feat: add hubspot_enabled toggle to workspace settings UI`
+6. `fix: add cloudemployee.io to CORS allowed origins`

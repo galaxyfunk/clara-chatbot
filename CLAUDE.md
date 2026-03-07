@@ -8,7 +8,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 **Tagline:** "Your AI-Powered Chatbot, Built in Minutes"
 
 ## Current Version
-**v1.1: IN PROGRESS** — Session 8 complete (Mar 3, 2026). Widget layouts shipped; integrations next.
+**v1.1: IN PROGRESS** — Session 9A complete (Mar 7, 2026). CE go-live infrastructure shipped (HubSpot, email capture, CORS).
 
 **v1.0: DEPLOYED** — Live at https://chatbot.jakevibes.dev (Feb 23, 2026)
 - Dashboard app at chatbot.jakevibes.dev
@@ -20,7 +20,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 - 4 sessions, 18 build steps — ALL COMPLETE
 
 ## Codebase
-- **Repo:** ce-chatbot (GitHub)
+- **Repo:** galaxyfunk/clara-chatbot (GitHub)
 - **Database:** Supabase (standalone project — not shared with any other product)
 - **Storage:** Supabase Storage (chatbot-assets bucket)
 - **Deploy:** Vercel → chatbot.jakevibes.dev
@@ -28,7 +28,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 ## Tech Stack
 | Layer | Technology |
 |-------|------------|
-| Framework | Next.js 14 (App Router, TypeScript) |
+| Framework | Next.js 16 (App Router, TypeScript) |
 | Database | Supabase (Postgres + pgvector) |
 | Storage | Supabase Storage |
 | Styling | Tailwind CSS |
@@ -37,19 +37,20 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | AI — Embeddings | OpenAI text-embedding-3-small — app-level key |
 | AI — Extraction | Claude Sonnet — app-level key |
 | Encryption | AES-256-GCM (Node.js crypto) |
+| Integrations | HubSpot API (contact upsert via REST) |
 | Hosting | Vercel |
 
 ## Database Tables (5)
-1. **workspaces** — One per user. Settings JSONB stores content (display_name, welcome_message, suggested_messages, placeholder_text, booking_url), style (primary_color, bubble_color, bubble_position, avatar_url, chat_icon_url), and AI config (personality_prompt, confidence_threshold, max_suggestion_chips, escalation_enabled).
+1. **workspaces** — One per user. Settings JSONB stores content (display_name, welcome_message, suggested_messages, placeholder_text, booking_url), style (primary_color, bubble_color, bubble_position, avatar_url, chat_icon_url, widget_layout, trigger_text, status_messages, hint_messages), AI config (personality_prompt, confidence_threshold, suggestion_chips_enabled, max_suggestion_chips, escalation_enabled), integrations (hubspot_enabled), widget (powered_by_clara), knowledge base (custom_categories), and onboarding (onboarding_completed_steps).
 2. **api_keys** — User LLM API keys encrypted with AES-256-GCM. Fields: provider, model, encrypted_key, key_last4, label, is_default, is_active.
 3. **qa_pairs** — Knowledge base. Fields: question, answer, category, embedding (vector 1536d), source (manual/csv_import/transcript_extraction), is_active, metadata.
-4. **chat_sessions** — Conversation logs. session_token (client UUID), messages (JSONB array with message_id per message), escalated flag.
-5. **qa_gaps** — Low-confidence questions flagged for review. Fields: question, ai_answer, best_match_id, similarity_score, status (open/resolved/dismissed).
+4. **chat_sessions** — Conversation logs. Fields: session_token (client UUID), messages (JSONB array with message_id per message), summary (JSONB), metadata (JSONB), visitor_name, visitor_email, escalated, escalated_at. Unique on (workspace_id, session_token).
+5. **qa_gaps** — Low-confidence questions flagged for review. Fields: question, ai_answer, best_match_id, similarity_score, session_id, status (open/resolved/dismissed), resolved_qa_id.
 
 ## Key API Routes
 | Route | Method | Auth | Purpose |
 |-------|--------|------|---------|
-| /api/chat | POST | Public | Main chat endpoint (workspace_id identifies) |
+| /api/chat | POST+OPTIONS | Public | Main chat endpoint with CORS (workspace_id identifies) |
 | /api/qa-pairs | GET/POST | Auth | Q&A CRUD with dedup check |
 | /api/qa-pairs/[id] | PATCH/DELETE | Auth | Update/soft-delete pair |
 | /api/qa-pairs/import | POST | Auth | CSV bulk import with overlap detection |
@@ -103,12 +104,16 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 - File parsing — mammoth for .docx, pdf-parse/lib/pdf-parse.js for .pdf (requires runtime = 'nodejs')
 - Background work — use after() from next/server, never void asyncFn()
 - AI summaries — app-level Claude key, trigger after 6+ messages
+- Shadow DOM isolation — widget layouts (Side Whisper, Command Bar) use attachShadow({ mode: 'open' }) for style encapsulation on host pages
+- CORS on /api/chat — allowlist-based origin headers for cross-origin widget embedding (chatbot.jakevibes.dev, cloudemployee.com/io, localhost)
+- HubSpot integration — upsert-only via REST API, gated by hubspot_enabled toggle, fail silently, [HubSpot] log prefix, 500-char summary truncation
+- Email capture — regex extraction from user messages in postProcess, stored once per session on visitor_email, triggers HubSpot upsert when enabled
 
 ## Version Roadmap
 | Version | Focus | Status |
 |---------|-------|--------|
 | v1.0 | Core Product + Widget + Deploy | **✅ SHIPPED — Feb 23, 2026** |
-| v1.1 | Polish + Intelligence + UX + Widget Layouts (26 features, 5 sessions) | **IN PROGRESS — 4/5 sessions complete** |
+| v1.1 | Polish + Intelligence + UX + Widget Layouts + CE Go-Live | **IN PROGRESS — 6 sessions complete** |
 | v1.2 | Channel Integrations (Slack, Telegram, WhatsApp) | Future |
 | v1.3 | Analytics + Reporting | Future |
 | Bridge | Insights Bank one-way API push | Future |
@@ -128,7 +133,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | 6 (v1.1-2) | Intelligence | 7 features | **✅ COMPLETE — Mar 1, 2026** |
 | 7A (v1.1-3a) | UX Polish | 4 features | **✅ COMPLETE — Mar 2, 2026** |
 | 8 (v1.1-4) | Widget Layouts | 5 features | **✅ COMPLETE — Mar 3, 2026** |
-| 7B (v1.1-3b) | Integrations | TBD | Pending |
+| 9A (v1.1-5) | CE Go-Live Infrastructure | 4 features | **✅ COMPLETE — Mar 7, 2026** |
 
 ## v1.1 Session 1 Features (Complete)
 1. Deploy fixes — remotePatterns + maxDuration
@@ -164,6 +169,12 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 4. Widget mode system — Chat route supports `?mode=panel` and `?mode=command` params, widget.js passes mode to iframe, WIDGET_LAYOUTS constant in workspace types
 5. Landing page refresh — Widget layout showcase section with live demo, updated hero and feature presentation
 6. Streaming summary debug logging — `[Summary Debug]` traces in engine.ts postProcess function for diagnosing AI summary generation in streaming path
+
+## v1.1 Session 9A Features (Complete)
+1. Email capture in chat engine — Regex extraction from user messages in postProcess (both streaming and non-streaming paths), stored once per session on visitor_email, fresh query to avoid overwriting
+2. HubSpot contact sync — upsertHubSpotContact() in src/lib/integrations/hubspot.ts, batch upsert via REST API, gated by hubspot_enabled toggle, fail-silent with [HubSpot] log prefix
+3. CORS on /api/chat — Allowlist-based origin headers (chatbot.jakevibes.dev, cloudemployee.com, cloudemployee.io, localhost), OPTIONS preflight handler, headers on all response paths
+4. HubSpot settings toggle — hubspot_enabled boolean in WorkspaceSettings, toggle in AI tab under Integrations section, off by default
 
 ## Deployment Info
 - **Production URL:** https://chatbot.jakevibes.dev

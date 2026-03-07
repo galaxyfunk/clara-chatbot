@@ -16,7 +16,8 @@ src/
 ├── lib/              → Business logic (ALL logic lives here)
 │   ├── supabase/     → Supabase client factories
 │   ├── llm/          → LLM provider abstraction
-│   └── chat/         → Chat engine, extraction, dedup, improve
+│   ├── chat/         → Chat engine, extraction, dedup, improve
+│   └── integrations/ → Third-party integrations (HubSpot, etc.)
 └── types/            → TypeScript interfaces
 ```
 
@@ -584,6 +585,70 @@ const [hasChanges, setHasChanges] = useState(false);
 
 ---
 
+## CORS Allowlist Pattern
+
+For public API routes that serve cross-origin requests (widget embedding):
+
+```typescript
+const ALLOWED_ORIGINS = [
+  'https://chatbot.jakevibes.dev',
+  'https://cloudemployee.com',
+  'https://www.cloudemployee.com',
+  'https://cloudemployee.io',
+  'https://www.cloudemployee.io',
+  'http://localhost:3000',
+];
+
+function getCorsHeaders(requestOrigin: string | null) {
+  const origin = ALLOWED_ORIGINS.includes(requestOrigin ?? '')
+    ? requestOrigin!
+    : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+// OPTIONS preflight handler
+export async function OPTIONS(request: Request) {
+  return new Response(null, { status: 204, headers: getCorsHeaders(request.headers.get('origin')) });
+}
+```
+
+**Rules:**
+- Add CORS headers to ALL response paths (success, validation error, server error, streaming)
+- Use allowlist, never wildcard `*`
+- Return 204 for OPTIONS preflight
+
+---
+
+## Integration Gating Pattern
+
+For third-party integrations (HubSpot, etc.):
+
+```typescript
+// Gate on BOTH settings toggle AND env var
+if (context.settings.hubspot_enabled) {
+  const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
+  const hubspotKey = process.env.HUBSPOT_API_KEY;
+  if (hubspotKey) {
+    await upsertHubSpotContact(payload, hubspotKey);
+  }
+}
+```
+
+**Rules:**
+- Feature toggle in workspace settings (e.g., `hubspot_enabled`)
+- Environment variable for API key (e.g., `HUBSPOT_API_KEY`)
+- Both must be truthy for integration to fire
+- Dynamic `import()` to avoid loading integration code when disabled
+- Fail silently — integrations never block the main chat flow
+- Use `[IntegrationName]` log prefix for easy grep (e.g., `[HubSpot]`)
+- Integration libs live in `src/lib/integrations/`
+
+---
+
 ## Version History
 
 | Version | Status | Key Patterns Established |
@@ -596,3 +661,4 @@ const [hasChanges, setHasChanges] = useState(false);
 | v1.1 Session 2 | Complete | File parsing (mammoth, pdf-parse), auto-resolve gaps, AI summaries, interview guide export |
 | v1.1 Session 7A | Complete | SSE streaming, onboarding gate, settings live preview, after() background processing |
 | v1.1 Session 8 | Complete | Shadow DOM widget layouts, LLM-generated suggestion chips, widget mode system, `[Summary Debug]` logging for streaming postProcess |
+| v1.1 Session 9A | Complete | CORS allowlist, integration gating (HubSpot), email capture from chat messages, dynamic import for optional integrations |
