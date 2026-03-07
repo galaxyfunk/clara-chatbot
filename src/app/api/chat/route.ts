@@ -7,16 +7,47 @@ import type { ChatRequest, ChatMessage } from '@/types/chat';
 // Trigger summary after this many messages (3 exchanges = 6 messages)
 const SUMMARY_THRESHOLD = 6;
 
+// ─── CORS ────────────────────────────────────────────────────────────
+
+const ALLOWED_ORIGINS = [
+  'https://chatbot.jakevibes.dev',
+  'https://cloudemployee.com',
+  'https://www.cloudemployee.com',
+  'http://localhost:3000',
+];
+
+function getCorsHeaders(requestOrigin: string | null) {
+  const origin = ALLOWED_ORIGINS.includes(requestOrigin ?? '')
+    ? requestOrigin!
+    : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+export async function OPTIONS(request: Request) {
+  const origin = request.headers.get('origin');
+  return new Response(null, {
+    status: 204,
+    headers: getCorsHeaders(origin),
+  });
+}
+
 export async function POST(request: Request) {
+  const origin = request.headers.get('origin');
+  const cors = getCorsHeaders(origin);
+
   try {
     const body: ChatRequest & { stream?: boolean } = await request.json();
 
     if (!body.workspace_id || !body.session_token || !body.message) {
-      return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400, headers: cors });
     }
 
     if (body.message.length > 2000) {
-      return NextResponse.json({ success: false, error: 'Message too long (max 2000 characters)' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Message too long (max 2000 characters)' }, { status: 400, headers: cors });
     }
 
     // Detect if client wants streaming
@@ -34,6 +65,7 @@ export async function POST(request: Request) {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
+          ...cors,
         },
       });
     }
@@ -80,10 +112,10 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ success: true, ...response });
+    return NextResponse.json({ success: true, ...response }, { headers: cors });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500, headers: cors });
   }
 }
 
