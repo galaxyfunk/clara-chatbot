@@ -96,20 +96,6 @@ export function SessionDetail({ session }: SessionDetailProps) {
                 </a>
               )}
 
-              {/* Suggestion chips (disabled in review) */}
-              {message.role === 'assistant' && message.suggestion_chips && message.suggestion_chips.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {message.suggestion_chips.map((chip, chipIndex) => (
-                    <span
-                      key={chipIndex}
-                      className="px-2 py-1 text-xs bg-ce-muted text-ce-text-muted border border-ce-border rounded-full"
-                    >
-                      {chip}
-                    </span>
-                  ))}
-                </div>
-              )}
-
               {/* Timestamp */}
               <span className="text-xs text-ce-text-muted">
                 {formatTime(message.timestamp)}

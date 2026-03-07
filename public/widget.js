@@ -89,29 +89,6 @@
     }
   }
 
-  // Chip Renderer
-  function renderChips(container, chips, onClickChip) {
-    container.innerHTML = '';
-    if (!chips || chips.length === 0) {
-      container.style.display = 'none';
-      return;
-    }
-    container.style.display = 'flex';
-    chips.forEach(function(chipText) {
-      var btn = document.createElement('button');
-      btn.className = 'clara-chip';
-      var label = document.createElement('span');
-      label.textContent = chipText;
-      var arrow = document.createElement('span');
-      arrow.className = 'clara-chip-arrow';
-      arrow.textContent = '→';
-      btn.appendChild(label);
-      btn.appendChild(arrow);
-      btn.addEventListener('click', function() { onClickChip(chipText); });
-      container.appendChild(btn);
-    });
-  }
-
   // Typing Dots Creator
   function createTypingDots() {
     var el = document.createElement('div');
@@ -128,20 +105,6 @@
       hide: function() { el.style.display = 'none'; }
     };
   }
-
-  // Default suggestion chips
-  var DEFAULT_CHIPS = [
-    'What services does Cloud Employee offer?',
-    'How does your pricing work?',
-    'What roles can you hire through CE?',
-    'How is Cloud Employee different?'
-  ];
-
-  var FALLBACK_CHIPS = [
-    'Tell me more about your services',
-    'How does pricing work?',
-    'Can I book a call with your team?'
-  ];
 
   function typeText(el, text, speed, callback) {
     var i = 0;
@@ -483,10 +446,6 @@
       '  --glass-outer-border: 1px solid rgba(255, 255, 255, 0.5);\n' +
       '  --glass-modal-shadow: 0 32px 80px rgba(33,61,102,0.2), 0 12px 40px rgba(33,61,102,0.1), inset 0 1px 0 rgba(255,255,255,0.6);\n' +
       '  --glass-pill-shadow: 0 4px 24px rgba(33,61,102,0.12), 0 1px 4px rgba(33,61,102,0.06), inset 0 1px 0 rgba(255,255,255,0.7);\n' +
-      '  --glass-chip-bg: rgba(255, 255, 255, 0.55);\n' +
-      '  --glass-chip-bg-hover: rgba(42, 127, 127, 0.06);\n' +
-      '  --glass-chip-border: rgba(33, 61, 102, 0.09);\n' +
-      '  --glass-chip-border-hover: rgba(42, 127, 127, 0.3);\n' +
       '  --glass-input-bg: rgba(255, 255, 255, 0.5);\n' +
       '  --glass-input-border: rgba(33, 61, 102, 0.1);\n' +
       '  --glass-backdrop: rgba(15, 23, 42, 0.3);\n' +
@@ -822,27 +781,6 @@
       '}\n' +
       '.cb-msg-text.user { color: var(--ce-text); }\n' +
       '.cb-msg-text.assistant { color: var(--ce-text-muted); line-height: 1.65; }\n' +
-      '.cb-followup-chips {\n' +
-      '  display: flex;\n' +
-      '  flex-wrap: wrap;\n' +
-      '  gap: 6px;\n' +
-      '  margin-top: 10px;\n' +
-      '}\n' +
-      '.cb-followup-chip {\n' +
-      '  padding: 6px 13px;\n' +
-      '  background: var(--glass-chip-bg);\n' +
-      '  border: 1px solid var(--glass-chip-border);\n' +
-      '  border-radius: 8px;\n' +
-      '  color: var(--ce-text);\n' +
-      '  font-size: 12.5px;\n' +
-      '  cursor: pointer;\n' +
-      '  transition: all 0.15s ease;\n' +
-      '  font-family: inherit;\n' +
-      '}\n' +
-      '.cb-followup-chip:hover {\n' +
-      '  border-color: var(--glass-chip-border-hover);\n' +
-      '  background: var(--glass-chip-bg-hover);\n' +
-      '}\n' +
       '.cb-typing {\n' +
       '  display: flex;\n' +
       '  gap: 5px;\n' +
@@ -1252,27 +1190,6 @@
       return { textEl: textEl, content: content };
     }
 
-    function renderFollowupChips(parentContentEl, chips) {
-      // Remove any previous follow-up chip containers
-      var oldChips = messagesContainer.querySelectorAll('.cb-followup-chips');
-      oldChips.forEach(function(el) { el.remove(); });
-
-      if (!chips || chips.length === 0) return;
-
-      var container = document.createElement('div');
-      container.className = 'cb-followup-chips';
-
-      chips.forEach(function(chipText) {
-        var btn = document.createElement('button');
-        btn.className = 'cb-followup-chip';
-        btn.textContent = chipText;
-        btn.addEventListener('click', function() { sendMessage(chipText); });
-        container.appendChild(btn);
-      });
-
-      parentContentEl.appendChild(container);
-    }
-
     function showErrorMessage(text) {
       var err = document.createElement('div');
       err.className = 'cb-error';
@@ -1338,12 +1255,6 @@
           },
           onDone: function(data) {
             msgResult.textEl.textContent = fullContent;
-            if (s.suggestion_chips_enabled) {
-              var chips = (data.suggestion_chips && data.suggestion_chips.length > 0)
-                ? data.suggestion_chips
-                : FALLBACK_CHIPS;
-              renderFollowupChips(msgResult.content, chips);
-            }
             scrollToBottom();
           },
           onError: function(err) {
@@ -1361,37 +1272,6 @@
         enableInput();
         focusInput();
       }
-    }
-
-    // ── BUILD INITIAL SUGGESTIONS (only if suggestion_chips_enabled) ──
-
-    if (s.suggestion_chips_enabled) {
-      var initialChips = (s.suggested_messages && s.suggested_messages.length > 0)
-        ? s.suggested_messages.slice(0, s.max_suggestion_chips || 4)
-        : DEFAULT_CHIPS;
-
-      initialChips.forEach(function(chipText) {
-        var btn = document.createElement('button');
-        btn.className = 'cb-suggestion';
-
-        var icon = document.createElement('span');
-        icon.className = 'cb-suggestion-icon';
-        icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
-
-        var textSpan = document.createElement('span');
-        textSpan.className = 'cb-suggestion-text';
-        textSpan.textContent = chipText;
-
-        var arrow = document.createElement('span');
-        arrow.className = 'cb-suggestion-arrow';
-        arrow.textContent = '→';
-
-        btn.appendChild(icon);
-        btn.appendChild(textSpan);
-        btn.appendChild(arrow);
-        btn.addEventListener('click', function() { sendMessage(chipText); });
-        suggestionsContainer.appendChild(btn);
-      });
     }
 
     // ── EVENT LISTENERS ──
@@ -1499,10 +1379,6 @@
       '  --glass-blur: blur(40px) saturate(180%);\n' +
       '  --glass-outer-border: 1px solid rgba(255, 255, 255, 0.45);\n' +
       '  --glass-shadow: -12px 0 60px rgba(33,61,102,0.1), -1px 0 0 rgba(255,255,255,0.3);\n' +
-      '  --glass-chip-bg: rgba(255, 255, 255, 0.55);\n' +
-      '  --glass-chip-bg-hover: rgba(42, 127, 127, 0.06);\n' +
-      '  --glass-chip-border: rgba(33, 61, 102, 0.09);\n' +
-      '  --glass-chip-border-hover: rgba(42, 127, 127, 0.3);\n' +
       '  --glass-input-bg: rgba(255, 255, 255, 0.6);\n' +
       '  --glass-input-border: rgba(33, 61, 102, 0.1);\n' +
       '}\n' +
@@ -1656,40 +1532,6 @@
       '  border-top: 1px solid var(--ce-border);\n' +
       '  background: var(--glass-bg-solid);\n' +
       '  padding: 12px 16px 16px;\n' +
-      '  flex-shrink: 0;\n' +
-      '}\n' +
-      '.clara-chips {\n' +
-      '  display: flex;\n' +
-      '  flex-direction: column;\n' +
-      '  gap: 5px;\n' +
-      '  margin-bottom: 10px;\n' +
-      '}\n' +
-      '.clara-chip {\n' +
-      '  width: 100%;\n' +
-      '  text-align: left;\n' +
-      '  padding: 10px 14px;\n' +
-      '  background: var(--glass-chip-bg);\n' +
-      '  border: 1px solid var(--glass-chip-border);\n' +
-      '  border-radius: 10px;\n' +
-      '  color: var(--ce-text);\n' +
-      '  font-size: 13px;\n' +
-      '  line-height: 1.4;\n' +
-      '  cursor: pointer;\n' +
-      '  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);\n' +
-      '  display: flex;\n' +
-      '  align-items: center;\n' +
-      '  justify-content: space-between;\n' +
-      '  gap: 12px;\n' +
-      '  font-family: inherit;\n' +
-      '}\n' +
-      '.clara-chip:hover {\n' +
-      '  border-color: var(--glass-chip-border-hover);\n' +
-      '  background: var(--glass-chip-bg-hover);\n' +
-      '  transform: translateX(3px);\n' +
-      '}\n' +
-      '.clara-chip-arrow {\n' +
-      '  color: var(--ce-teal);\n' +
-      '  font-size: 15px;\n' +
       '  flex-shrink: 0;\n' +
       '}\n' +
       '.clara-input-bar {\n' +
@@ -1851,10 +1693,6 @@
     var bottomEl = document.createElement('div');
     bottomEl.className = 'clara-bottom';
 
-    var chipsContainer = document.createElement('div');
-    chipsContainer.className = 'clara-chips';
-    bottomEl.appendChild(chipsContainer);
-
     // Input bar
     var inputBar = document.createElement('div');
     inputBar.className = 'clara-input-bar';
@@ -1950,10 +1788,6 @@
       scrollToBottom();
     }
 
-    function hideChips() {
-      chipsContainer.style.display = 'none';
-    }
-
     // Send message with streaming
     async function sendMessage(text) {
       if (!text.trim() || isSending) return;
@@ -1963,7 +1797,6 @@
       updateSendButton();
 
       addUserBubble(text);
-      hideChips();
       typingDots.show();
       scrollToBottom();
 
@@ -1996,14 +1829,6 @@
           },
           onDone: function(data) {
             assistantEl.textContent = fullContent;
-            if (s.suggestion_chips_enabled) {
-              var chips = (data.suggestion_chips && data.suggestion_chips.length > 0)
-                ? data.suggestion_chips.slice(0, s.max_suggestion_chips || 4)
-                : FALLBACK_CHIPS.slice(0, s.max_suggestion_chips || 3);
-              renderChips(chipsContainer, chips, sendMessage);
-            } else {
-              chipsContainer.innerHTML = '';
-            }
             scrollToBottom();
           },
           onError: function(err) {
@@ -2068,14 +1893,6 @@
         closePanel();
       }
     });
-
-    // Render initial chips (only if suggestion_chips_enabled)
-    if (s.suggestion_chips_enabled) {
-      var initialChips = (s.suggested_messages && s.suggested_messages.length > 0)
-        ? s.suggested_messages.slice(0, s.max_suggestion_chips || 4)
-        : DEFAULT_CHIPS;
-      renderChips(chipsContainer, initialChips, sendMessage);
-    }
 
     // Update window.ClaraWidget API
     window.ClaraWidget = {

@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import { MessageBubble } from './message-bubble';
-import { SuggestionChips } from './suggestion-chips';
 import type { WorkspaceSettings } from '@/types/workspace';
 
 // Simple isDark check - returns true if background appears dark
@@ -24,7 +23,6 @@ interface Message {
   gap_detected?: boolean;
   escalation_offered?: boolean;
   booking_url?: string | null;
-  suggestion_chips?: string[];
   isStreaming?: boolean;
 }
 
@@ -44,7 +42,6 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionToken] = useState(() => generateId());
-  const [showInitialChips, setShowInitialChips] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -69,7 +66,6 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
-    setShowInitialChips(false);
     setIsLoading(true);
 
     try {
@@ -103,7 +99,6 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
         id: assistantId,
         role: 'assistant',
         content: '',
-        suggestion_chips: [],
         isStreaming: true,
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -160,7 +155,6 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
                     ? {
                         ...m,
                         content: fullContent,
-                        suggestion_chips: data.suggestion_chips || [],
                         escalation_offered: data.escalation_offered || false,
                         booking_url: data.booking_url || null,
                         isStreaming: false,
@@ -220,19 +214,6 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
     e.preventDefault();
     sendMessage(input);
   };
-
-  const handleChipClick = (chip: string) => {
-    sendMessage(chip);
-  };
-
-  // Get suggestion chips - either from last assistant message or initial chips
-  // Only show chips if suggestion_chips_enabled is true
-  const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
-  const currentChips = settings.suggestion_chips_enabled
-    ? (showInitialChips
-        ? settings.suggested_messages.slice(0, settings.max_suggestion_chips)
-        : lastAssistantMessage?.suggestion_chips || [])
-    : [];
 
   const isDisabled = isLoading || isStreaming;
 
@@ -317,18 +298,6 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
 
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Suggestion chips - hide while streaming */}
-      {currentChips.length > 0 && !isDisabled && (
-        <div className="flex-shrink-0 px-4 pb-2">
-          <SuggestionChips
-            chips={currentChips}
-            onChipClick={handleChipClick}
-            primaryColor={settings.primary_color}
-            isDarkBg={isDarkBg}
-          />
-        </div>
-      )}
 
       {/* Input */}
       <form

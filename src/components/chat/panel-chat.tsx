@@ -25,10 +25,6 @@ const GLASS = {
   bgSolid: 'rgba(255, 255, 255, 0.82)',
   blur: 'blur(40px) saturate(180%)',
   outerBorder: '1px solid rgba(255, 255, 255, 0.45)',
-  chipBg: 'rgba(255, 255, 255, 0.55)',
-  chipBgHover: 'rgba(42, 127, 127, 0.06)',
-  chipBorder: 'rgba(33, 61, 102, 0.09)',
-  chipBorderHover: 'rgba(42, 127, 127, 0.3)',
   inputBg: 'rgba(255, 255, 255, 0.6)',
   inputBorder: 'rgba(33, 61, 102, 0.1)',
 };
@@ -40,7 +36,6 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  suggestion_chips?: string[];
   isStreaming?: boolean;
 }
 
@@ -65,7 +60,6 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionToken] = useState(() => generateId());
-  const [showInitialChips, setShowInitialChips] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -91,7 +85,6 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
-    setShowInitialChips(false);
     setIsLoading(true);
 
     try {
@@ -125,7 +118,6 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
         id: assistantId,
         role: 'assistant',
         content: '',
-        suggestion_chips: [],
         isStreaming: true,
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -182,7 +174,6 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
                     ? {
                         ...m,
                         content: fullContent,
-                        suggestion_chips: data.suggestion_chips || [],
                         isStreaming: false,
                       }
                     : m
@@ -241,50 +232,9 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
     sendMessage(input);
   };
 
-  const handleChipClick = (chip: string) => {
-    sendMessage(chip);
-  };
-
   const handleClose = () => {
     window.parent.postMessage({ type: 'clara-close' }, '*');
   };
-
-  // Get suggestion chips — only if enabled in settings
-  const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
-
-  // Determine which chips to show (only when suggestion_chips_enabled is true)
-  let bottomChips: string[] = [];
-  if (settings.suggestion_chips_enabled) {
-    // Use fallback defaults if workspace has none configured
-    const defaultChips = settings.suggested_messages?.length > 0
-      ? settings.suggested_messages
-      : [
-          'What services does Cloud Employee offer?',
-          'How does your pricing work?',
-          'What roles can you hire through CE?',
-          'How is Cloud Employee different?',
-        ];
-
-    // Fallback chips for when API returns empty (after conversation starts)
-    const conversationFallbackChips = [
-      'Tell me more about your services',
-      'How does pricing work?',
-      'Can I book a call with your team?',
-    ];
-
-    const apiChips = (lastAssistantMessage?.suggestion_chips || []).slice(0, settings.max_suggestion_chips);
-
-    if (showInitialChips && messages.length === 0) {
-      // Initial state — show default/configured chips
-      bottomChips = defaultChips.slice(0, settings.max_suggestion_chips);
-    } else if (apiChips.length > 0) {
-      // API returned chips — use them
-      bottomChips = apiChips;
-    } else if (messages.length > 0) {
-      // API returned empty but we have conversation — use fallback
-      bottomChips = conversationFallbackChips.slice(0, settings.max_suggestion_chips);
-    }
-  }
 
   const isDisabled = isLoading || isStreaming;
   const hasInput = input.trim().length > 0;
@@ -508,64 +458,6 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
           flexShrink: 0,
         }}
       >
-        {/* Suggestion chips */}
-        {bottomChips.length > 0 && !isDisabled && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '5px',
-              marginBottom: '10px',
-            }}
-          >
-            {bottomChips.map((chip, i) => (
-              <button
-                key={`${chip}-${i}`}
-                onClick={() => handleChipClick(chip)}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '10px 14px',
-                  background: GLASS.chipBg,
-                  border: `1px solid ${GLASS.chipBorder}`,
-                  borderRadius: '10px',
-                  color: CE.text,
-                  fontSize: '13px',
-                  lineHeight: 1.4,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                  fontFamily: 'inherit',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = GLASS.chipBorderHover;
-                  e.currentTarget.style.background = GLASS.chipBgHover;
-                  e.currentTarget.style.transform = 'translateX(3px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = GLASS.chipBorder;
-                  e.currentTarget.style.background = GLASS.chipBg;
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
-              >
-                <span>{chip}</span>
-                <span
-                  style={{
-                    color: CE.teal,
-                    fontSize: '15px',
-                    flexShrink: 0,
-                  }}
-                >
-                  →
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
         {/* Input bar */}
         <form onSubmit={handleSubmit}>
           <div

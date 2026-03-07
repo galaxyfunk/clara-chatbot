@@ -6,7 +6,6 @@ import { summarizeConversation } from '@/lib/chat/summarize';
 import type { ChatRequest, ChatResponse, ChatMessage } from '@/types/chat';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { v4 as uuidv4 } from 'uuid';
-import Anthropic from '@anthropic-ai/sdk';
 
 // Trigger summary after this many messages (3 exchanges = 6 messages)
 const SUMMARY_THRESHOLD = 6;
@@ -37,57 +36,6 @@ function checkRateLimit(sessionToken: string): boolean {
   return true;
 }
 
-// ─── Follow-up Chip Generation (App-Level Key) ──────────────────────
-
-const FOLLOWUP_SYSTEM_PROMPT = `You generate follow-up questions for a customer support chatbot. Based on the conversation below, suggest exactly 3 brief follow-up questions the user might ask next. Return ONLY a valid JSON array of 3 strings. No markdown, no backticks, no explanation. Each question must be under 60 characters.`;
-
-async function generateFollowUpChips(
-  userQuestion: string,
-  assistantAnswer: string,
-  maxChips: number
-): Promise<string[] | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-
-  // 3 second timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-  try {
-    const client = new Anthropic({ apiKey });
-    const truncatedAnswer = assistantAnswer.slice(0, 500);
-
-    const response = await client.messages.create(
-      {
-        model: 'claude-haiku-4-5-20250514',
-        max_tokens: 150,
-        temperature: 0.7,
-        system: FOLLOWUP_SYSTEM_PROMPT,
-        messages: [{
-          role: 'user',
-          content: `User asked: ${userQuestion}\n\nAssistant answered: ${truncatedAnswer}`,
-        }],
-      },
-      { signal: controller.signal }
-    );
-
-    clearTimeout(timeoutId);
-
-    const textContent = response.content.find((c) => c.type === 'text');
-    const text = textContent?.text || '';
-
-    // Parse JSON array
-    const parsed = JSON.parse(text);
-    if (Array.isArray(parsed) && parsed.length > 0 && parsed.every((s) => typeof s === 'string')) {
-      return parsed.slice(0, maxChips);
-    }
-    return null;
-  } catch {
-    clearTimeout(timeoutId);
-    return null; // Timeout, parse error, or API error — caller will use fallback
-  }
-}
-
 // ─── Chat Context (Shared Pre-LLM Logic) ────────────────────────────
 
 interface ChatContext {
@@ -102,7 +50,6 @@ interface ChatContext {
   existingSession: { id: string; escalated: boolean; escalated_at: string | null } | null;
   llmMessages: LLMMessage[];
   fallbackAnswer?: string;
-  fallbackChips?: string[];
 }
 
 async function prepareChatContext(request: ChatRequest, streaming: boolean = false): Promise<ChatContext> {
@@ -122,7 +69,6 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
       existingSession: null,
       llmMessages: [],
       fallbackAnswer: "You've sent a lot of messages! Please wait a bit before sending more.",
-      fallbackChips: [],
     };
   }
 
@@ -152,7 +98,6 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
       existingSession: null,
       llmMessages: [],
       fallbackAnswer: `I'm not set up yet! My knowledge base is empty — add some Q&A pairs in the dashboard to get ${settings.display_name} started.`,
-      fallbackChips: [],
     };
   }
 
@@ -212,7 +157,6 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
         } : null,
         llmMessages: [],
         fallbackAnswer: existingResponse.content,
-        fallbackChips: existingResponse.suggestion_chips ?? [],
       };
     }
   }
@@ -247,7 +191,6 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
   if (context.fallbackAnswer !== undefined) {
     return {
       answer: context.fallbackAnswer,
-      suggestion_chips: context.fallbackChips ?? [],
       confidence: context.confidence,
       gap_detected: false,
       escalation_offered: false,
@@ -268,7 +211,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
   );
 
   // Parse response
-  const parsed = parseLLMResponse(llmResponse.content, context.settings);
+  const parsed = parseLLMResponse(llmResponse.content);
 
   // Gap detection with dedup
   const gapDetected = !context.isConfident;
@@ -306,7 +249,6 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     role: 'assistant',
     content: parsed.answer,
     timestamp: new Date().toISOString(),
-    suggestion_chips: parsed.suggestion_chips,
     gap_detected: gapDetected,
     matched_qa_ids: context.matchedPairs.map(m => m.id),
     confidence: context.confidence,
@@ -363,7 +305,6 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
   return {
     answer: parsed.answer,
-    suggestion_chips: parsed.suggestion_chips,
     confidence: context.confidence,
     gap_detected: gapDetected,
     escalation_offered: parsed.escalation_offered,
@@ -395,7 +336,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         controller.enqueue(encoder.encode(
           `data: ${JSON.stringify({
             type: 'done',
-            suggestion_chips: context.fallbackChips ?? [],
             escalation_offered: false,
             booking_url: null,
           })}\n\n`
@@ -417,9 +357,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
     context.llmMessages,
     { maxTokens: 1024, temperature: 0.7 }
   );
-
-  // Shared state for chips (used by both SSE stream and postProcess)
-  let resolvedChips: string[] = [];
 
   // SSE padding to push past TCP buffer thresholds (~1460 bytes MSS)
   const SSE_PADDING = `: ${' '.repeat(256)}\n\n`;
@@ -443,36 +380,12 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           controller.enqueue(encoder.encode(SSE_PADDING));
         }
 
-        // Stream complete — get full response text for chip generation
-        const fullText = await getFullResponse();
-
-        // Only generate chips if enabled
-        if (context.settings.suggestion_chips_enabled) {
-          // Try LLM-generated contextual chips first, fall back to matchedPairs
-          const llmChips = await generateFollowUpChips(
-            request.message,
-            fullText,
-            context.settings.max_suggestion_chips
-          );
-
-          if (llmChips && llmChips.length > 0) {
-            resolvedChips = llmChips;
-          } else {
-            // Fallback: use matched Q&A pair questions
-            resolvedChips = context.matchedPairs
-              .filter(pair => pair.question.toLowerCase().trim() !== request.message.toLowerCase().trim())
-              .slice(0, context.settings.max_suggestion_chips)
-              .map(pair => pair.question);
-          }
-        }
-
         // Use context-based escalation for streaming mode
         const escalationOffered = !context.isConfident && context.settings.escalation_enabled;
 
         // Send final metadata event
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
           type: 'done',
-          suggestion_chips: resolvedChips,
           escalation_offered: escalationOffered,
           booking_url: escalationOffered
             ? appendUtmParams(context.settings.booking_url)
@@ -536,7 +449,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         role: 'assistant',
         content: fullText, // Plain text answer
         timestamp: new Date().toISOString(),
-        suggestion_chips: resolvedChips, // LLM-generated or matchedPairs fallback
         gap_detected: !context.isConfident,
         matched_qa_ids: context.matchedPairs.map(m => m.id),
         confidence: context.confidence,
@@ -690,44 +602,7 @@ function buildChatPrompt(
 Respond naturally and conversationally. Do not use JSON format. Just write your answer as plain text.
 Keep responses concise — 2-4 sentences for simple questions, more for complex ones.
 ${settings.escalation_enabled && settings.booking_url ? `Only suggest booking a call if the visitor explicitly asks to speak with someone, provides specific urgent hiring requirements, or asks "how do I get started" after discussing their needs.` : ''}`;
-  } else if (settings.suggestion_chips_enabled) {
-    // Non-streaming with chips enabled
-    responseFormatSection = `## Suggestion Chip Rules
-Generate exactly ${settings.max_suggestion_chips} suggestion chips.
-
-Each chip must be a short question (under 10 words) that does ONE of:
-(a) Qualify the visitor — ask about their specific needs, situation, or requirements as defined in the personality prompt above
-(b) Book a call — if the visitor has shared enough about their needs and shows buying intent, suggest scheduling a conversation
-
-Review the conversation history. Never re-ask something the visitor already answered. Each chip should collect NEW information.
-
-NEVER generate chips that just ask for more info about the company (e.g., "Tell me about your process" or "How does pricing work"). Chips should ask about THE VISITOR, not about us.
-
-${settings.escalation_enabled ? `## Escalation Rules
-Set escalation_offered to true ONLY when the visitor explicitly signals readiness to engage with a human. This means:
-- They directly ask to speak with someone or book a call
-- They provide specific hiring requirements with urgency (e.g., "We need 5 React devs by next month")
-- They explicitly ask "how do I get started" or "what are next steps" after already discussing their needs
-
-Do NOT set escalation_offered to true for:
-- General pricing questions ("How does pricing work?")
-- Role availability questions ("Do you have React developers?")
-- Process questions ("How does the onboarding work?")
-- Comparison questions ("How are you different from Toptal?")
-
-These are normal informational questions. You CAN still include a "Book a Call" suggestion chip as a helpful option without setting escalation_offered to true. Escalation should be rare — reserved for visitors who are clearly ready to convert.` : ''}
-
-## Response Format
-Respond in this exact JSON format (no markdown fences, raw JSON only):
-{
-  "answer": "Your conversational answer here",
-  "suggestion_chips": ["Follow-up 1?", "Follow-up 2?", "Follow-up 3?"],
-  "escalation_offered": false
-}
-
-${settings.escalation_enabled && settings.booking_url ? `When escalation_offered is true, naturally weave a booking suggestion into your answer.` : ''}`;
   } else {
-    // Non-streaming with chips disabled
     responseFormatSection = `${settings.escalation_enabled ? `## Escalation Rules
 Set escalation_offered to true ONLY when the visitor explicitly signals readiness to engage with a human. This means:
 - They directly ask to speak with someone or book a call
@@ -740,7 +615,7 @@ Do NOT set escalation_offered to true for:
 - Process questions ("How does the onboarding work?")
 - Comparison questions ("How are you different from Toptal?")
 
-These are normal informational questions. You CAN still include a "Book a Call" suggestion chip as a helpful option without setting escalation_offered to true. Escalation should be rare — reserved for visitors who are clearly ready to convert.` : ''}
+These are normal informational questions. Escalation should be rare — reserved for visitors who are clearly ready to convert.` : ''}
 
 ## Response Format
 Respond in this exact JSON format (no markdown fences, raw JSON only):
@@ -777,24 +652,18 @@ ${responseFormatSection}`;
   return messages;
 }
 
-interface ParsedResponse { answer: string; suggestion_chips: string[]; escalation_offered: boolean; }
+interface ParsedResponse { answer: string; escalation_offered: boolean; }
 
-function parseLLMResponse(rawContent: string, settings: WorkspaceSettings): ParsedResponse {
+function parseLLMResponse(rawContent: string): ParsedResponse {
   try {
     const cleaned = rawContent.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     const parsed = JSON.parse(cleaned);
 
-    // Strip chips if suggestion_chips_enabled is false (safety net)
-    const chips = settings.suggestion_chips_enabled && Array.isArray(parsed.suggestion_chips)
-      ? parsed.suggestion_chips.slice(0, settings.max_suggestion_chips)
-      : [];
-
     return {
       answer: parsed.answer || rawContent,
-      suggestion_chips: chips,
       escalation_offered: Boolean(parsed.escalation_offered),
     };
   } catch {
-    return { answer: rawContent, suggestion_chips: [], escalation_offered: false };
+    return { answer: rawContent, escalation_offered: false };
   }
 }

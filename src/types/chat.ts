@@ -3,7 +3,6 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
-  suggestion_chips?: string[];
   gap_detected?: boolean;
   matched_qa_ids?: string[];
   confidence?: number;
@@ -33,7 +32,6 @@ export interface ChatRequest {
 
 export interface ChatResponse {
   answer: string;
-  suggestion_chips: string[];
   confidence: number;
   gap_detected: boolean;
   escalation_offered: boolean;

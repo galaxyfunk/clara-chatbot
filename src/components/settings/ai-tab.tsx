@@ -53,56 +53,6 @@ export function AITab({ settings, onChange }: AITabProps) {
         </p>
       </div>
 
-      {/* Suggestion Chips Toggle */}
-      <div className="p-4 bg-ce-muted rounded-lg">
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={settings.suggestion_chips_enabled}
-            onChange={(e) =>
-              onChange({ suggestion_chips_enabled: e.target.checked })
-            }
-            className="w-4 h-4 mt-0.5 rounded border-ce-border text-ce-navy focus:ring-ce-navy"
-          />
-          <div>
-            <span className="block text-sm font-medium text-ce-text">
-              Enable Suggestion Chips
-            </span>
-            <span className="block mt-1 text-xs text-ce-text-muted">
-              Show follow-up question suggestions after each response.
-            </span>
-          </div>
-        </label>
-      </div>
-
-      {/* Max Suggestion Chips */}
-      <div className={settings.suggestion_chips_enabled ? '' : 'opacity-50 pointer-events-none'}>
-        <label className="block text-sm font-medium text-ce-text mb-1">
-          Max Suggestion Chips
-        </label>
-        <div className="flex items-center gap-4">
-          <input
-            type="range"
-            min="1"
-            max="5"
-            step="1"
-            value={settings.max_suggestion_chips}
-            onChange={(e) =>
-              onChange({ max_suggestion_chips: parseInt(e.target.value) })
-            }
-            className="flex-1 h-2 bg-ce-muted rounded-lg appearance-none cursor-pointer accent-ce-navy"
-            disabled={!settings.suggestion_chips_enabled}
-          />
-          <span className="w-12 px-2 py-1 text-center text-sm font-medium bg-ce-muted rounded">
-            {settings.max_suggestion_chips}
-          </span>
-        </div>
-        <p className="mt-1 text-xs text-ce-text-muted">
-          Maximum number of follow-up question suggestions shown after each
-          response
-        </p>
-      </div>
-
       {/* Escalation Toggle */}
       <div className="p-4 bg-ce-muted rounded-lg">
         <label className="flex items-start gap-3 cursor-pointer">

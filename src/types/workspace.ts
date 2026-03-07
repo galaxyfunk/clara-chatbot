@@ -40,8 +40,6 @@ export interface WorkspaceSettings {
   // AI
   personality_prompt: string;
   confidence_threshold: number;
-  suggestion_chips_enabled: boolean;
-  max_suggestion_chips: number;
 
   // Escalation
   escalation_enabled: boolean;
@@ -86,8 +84,6 @@ You are a friendly and knowledgeable virtual assistant. Your primary role is to 
 3. Never make up information or speculate beyond what the knowledge base contains.
 4. Keep responses concise — 2-4 sentences for simple questions.`,
   confidence_threshold: 0.78,
-  suggestion_chips_enabled: false,
-  max_suggestion_chips: 3,
   escalation_enabled: true,
   powered_by_clara: true,
   custom_categories: [],
