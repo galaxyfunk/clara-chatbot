@@ -212,6 +212,8 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
   // Parse response
   const parsed = parseLLMResponse(llmResponse.content);
+  // Strip any hallucinated URLs from LLM answer — booking link is provided separately
+  parsed.answer = parsed.answer.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
 
   // Gap detection with dedup
   const gapDetected = !context.isConfident;
@@ -420,6 +422,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       // Wait for full response text (plain text in streaming mode)
       const fullText = await getFullResponse();
+      // Strip any hallucinated URLs from LLM answer — booking link is provided separately
+      const cleanedText = fullText.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
 
       // Gap detection (same logic as non-streaming)
       if (!context.isConfident) {
@@ -435,7 +439,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           await supabase.from('qa_gaps').insert({
             workspace_id: request.workspace_id,
             question: request.message,
-            ai_answer: fullText, // Plain text answer
+            ai_answer: cleanedText,
             best_match_id: context.topMatch?.id ?? null,
             similarity_score: context.confidence,
             session_id: context.existingSession?.id ?? null,
@@ -454,7 +458,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       const assistantMessage: ChatMessage = {
         message_id: uuidv4(),
         role: 'assistant',
-        content: fullText, // Plain text answer
+        content: cleanedText,
         timestamp: new Date().toISOString(),
         gap_detected: !context.isConfident,
         matched_qa_ids: context.matchedPairs.map(m => m.id),
