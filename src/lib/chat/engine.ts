@@ -215,27 +215,37 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
   // Strip any hallucinated URLs from LLM answer — booking link is provided separately
   parsed.answer = parsed.answer.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
 
-  // Gap detection with dedup
+  // Gap detection with dedup + noise filtering
   const gapDetected = !context.isConfident;
   if (gapDetected) {
-    const { data: existingGaps } = await supabase
-      .from('qa_gaps').select('id, question')
-      .eq('workspace_id', request.workspace_id).eq('status', 'open');
+    const msg = request.message.trim();
+    const isTooShort = msg.length < 20;
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg);
+    const isGreeting = /^(hi|hello|hey|thanks|thank you|ok|okay|bye|yes|no|sure|great)[\s!.,]*$/i.test(msg);
+    const looksLikeName = /^[a-zA-Z\s]{2,30}$/.test(msg) && msg.split(' ').length <= 4 && !msg.includes('?');
+    const hasQuestionIntent = msg.includes('?') || msg.split(' ').length >= 5;
+    const shouldSkipGap = isTooShort || isEmail || isGreeting || (looksLikeName && !hasQuestionIntent);
 
-    const isDuplicateGap = (existingGaps ?? []).some(g =>
-      g.question.toLowerCase().trim() === request.message.toLowerCase().trim()
-    );
+    if (!shouldSkipGap) {
+      const { data: existingGaps } = await supabase
+        .from('qa_gaps').select('id, question')
+        .eq('workspace_id', request.workspace_id).eq('status', 'open');
 
-    if (!isDuplicateGap) {
-      await supabase.from('qa_gaps').insert({
-        workspace_id: request.workspace_id,
-        question: request.message,
-        ai_answer: parsed.answer,
-        best_match_id: context.topMatch?.id ?? null,
-        similarity_score: context.confidence,
-        session_id: context.existingSession?.id ?? null,
-        status: 'open',
-      });
+      const isDuplicateGap = (existingGaps ?? []).some(g =>
+        g.question.toLowerCase().trim() === request.message.toLowerCase().trim()
+      );
+
+      if (!isDuplicateGap) {
+        await supabase.from('qa_gaps').insert({
+          workspace_id: request.workspace_id,
+          question: request.message,
+          ai_answer: parsed.answer,
+          best_match_id: context.topMatch?.id ?? null,
+          similarity_score: context.confidence,
+          session_id: context.existingSession?.id ?? null,
+          status: 'open',
+        });
+      }
     }
   }
 
@@ -389,8 +399,13 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           controller.enqueue(encoder.encode(SSE_PADDING));
         }
 
-        // Use context-based escalation for streaming mode
-        const escalationOffered = !context.isConfident && context.settings.escalation_enabled;
+        // Use context-based escalation for streaming mode (with noise guard)
+        const msgLength = request.message.trim().length;
+        const messageCount = context.previousMessages.length;
+        const escalationOffered = !context.isConfident
+          && context.settings.escalation_enabled
+          && msgLength > 15
+          && messageCount >= 2;
 
         // Send final metadata event
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -411,8 +426,13 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
     },
   });
 
-  // Escalation flag for use in postProcess
-  const streamingEscalation = !context.isConfident && context.settings.escalation_enabled;
+  // Escalation flag for use in postProcess (same guard as SSE done event)
+  const streamMsgLength = request.message.trim().length;
+  const streamMsgCount = context.previousMessages.length;
+  const streamingEscalation = !context.isConfident
+    && context.settings.escalation_enabled
+    && streamMsgLength > 15
+    && streamMsgCount >= 2;
 
   // Return stream + a postProcess function for after()
   return {
@@ -425,26 +445,36 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       // Strip any hallucinated URLs from LLM answer — booking link is provided separately
       const cleanedText = fullText.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
 
-      // Gap detection (same logic as non-streaming)
+      // Gap detection (same logic as non-streaming) with noise filtering
       if (!context.isConfident) {
-        const { data: existingGaps } = await supabase
-          .from('qa_gaps').select('id, question')
-          .eq('workspace_id', request.workspace_id).eq('status', 'open');
+        const msg = request.message.trim();
+        const isTooShort = msg.length < 20;
+        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg);
+        const isGreeting = /^(hi|hello|hey|thanks|thank you|ok|okay|bye|yes|no|sure|great)[\s!.,]*$/i.test(msg);
+        const looksLikeName = /^[a-zA-Z\s]{2,30}$/.test(msg) && msg.split(' ').length <= 4 && !msg.includes('?');
+        const hasQuestionIntent = msg.includes('?') || msg.split(' ').length >= 5;
+        const shouldSkipGap = isTooShort || isEmail || isGreeting || (looksLikeName && !hasQuestionIntent);
 
-        const isDuplicateGap = (existingGaps ?? []).some(g =>
-          g.question.toLowerCase().trim() === request.message.toLowerCase().trim()
-        );
+        if (!shouldSkipGap) {
+          const { data: existingGaps } = await supabase
+            .from('qa_gaps').select('id, question')
+            .eq('workspace_id', request.workspace_id).eq('status', 'open');
 
-        if (!isDuplicateGap) {
-          await supabase.from('qa_gaps').insert({
-            workspace_id: request.workspace_id,
-            question: request.message,
-            ai_answer: cleanedText,
-            best_match_id: context.topMatch?.id ?? null,
-            similarity_score: context.confidence,
-            session_id: context.existingSession?.id ?? null,
-            status: 'open',
-          });
+          const isDuplicateGap = (existingGaps ?? []).some(g =>
+            g.question.toLowerCase().trim() === request.message.toLowerCase().trim()
+          );
+
+          if (!isDuplicateGap) {
+            await supabase.from('qa_gaps').insert({
+              workspace_id: request.workspace_id,
+              question: request.message,
+              ai_answer: cleanedText,
+              best_match_id: context.topMatch?.id ?? null,
+              similarity_score: context.confidence,
+              session_id: context.existingSession?.id ?? null,
+              status: 'open',
+            });
+          }
         }
       }
 
