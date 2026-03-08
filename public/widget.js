@@ -1266,11 +1266,11 @@
         await handleSSEStream(response, {
           onToken: function(content) {
             fullContent += content;
-            msgResult.textEl.textContent = fullContent;
+            msgResult.textEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
             scrollToBottom();
           },
           onDone: function(data) {
-            msgResult.textEl.textContent = fullContent;
+            msgResult.textEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
             if (data.booking_url) {
               renderBookingLink(data.booking_url, msgResult.content);
             }
@@ -1843,11 +1843,11 @@
         await handleSSEStream(response, {
           onToken: function(content) {
             fullContent += content;
-            assistantEl.textContent = fullContent;
+            assistantEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
             scrollToBottom();
           },
           onDone: function(data) {
-            assistantEl.textContent = fullContent;
+            assistantEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
             if (data.booking_url) {
               renderBookingLink(data.booking_url, assistantEl);
             }

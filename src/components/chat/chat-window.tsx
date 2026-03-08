@@ -36,6 +36,11 @@ function generateId() {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
+// Strip any hallucinated URLs from LLM text — booking link is provided separately
+function stripUrls(text: string): string {
+  return text.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
+}
+
 export function ChatWindow({ workspaceId, settings, isPlayground = false }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -128,7 +133,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
 
             if (data.type === 'token') {
               fullContent += data.content;
-              pendingContent = fullContent;
+              pendingContent = stripUrls(fullContent);
 
               // Schedule render on next animation frame (batches multiple tokens)
               if (!rafId) {
@@ -154,7 +159,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
                   m.id === assistantId
                     ? {
                         ...m,
-                        content: fullContent,
+                        content: stripUrls(fullContent),
                         escalation_offered: data.escalation_offered || false,
                         booking_url: data.booking_url || null,
                         isStreaming: false,
@@ -174,7 +179,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
                   m.id === assistantId
                     ? {
                         ...m,
-                        content: fullContent || 'Sorry, something went wrong. Please try again.',
+                        content: stripUrls(fullContent) || 'Sorry, something went wrong. Please try again.',
                         isStreaming: false,
                       }
                     : m
@@ -193,7 +198,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
       }
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: fullContent, isStreaming: false } : m
+          m.id === assistantId ? { ...m, content: stripUrls(fullContent), isStreaming: false } : m
         )
       );
 
