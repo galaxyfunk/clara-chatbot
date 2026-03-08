@@ -405,7 +405,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         const escalationOffered = !context.isConfident
           && context.settings.escalation_enabled
           && msgLength > 15
-          && messageCount >= 2;
+          && messageCount >= 1;
 
         // Send final metadata event
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -432,7 +432,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
   const streamingEscalation = !context.isConfident
     && context.settings.escalation_enabled
     && streamMsgLength > 15
-    && streamMsgCount >= 2;
+    && streamMsgCount >= 1;
 
   // Return stream + a postProcess function for after()
   return {
