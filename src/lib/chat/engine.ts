@@ -615,7 +615,7 @@ function buildChatPrompt(
     responseFormatSection = `## Response Format
 Respond naturally and conversationally. Do not use JSON format. Just write your answer as plain text.
 Keep responses concise — 2-4 sentences for simple questions, more for complex ones.
-${settings.escalation_enabled && settings.booking_url ? `Only suggest booking a call if the visitor explicitly asks to speak with someone, provides specific urgent hiring requirements, or asks "how do I get started" after discussing their needs.` : ''}`;
+${settings.escalation_enabled && settings.booking_url ? `Only suggest booking a call if the visitor explicitly asks to speak with someone, provides specific urgent hiring requirements, or asks "how do I get started" after discussing their needs. Do NOT write any URL or link in your message text. Never generate or hallucinate a booking URL. The booking link is provided automatically by the system separately from your message.` : ''}`;
   } else {
     responseFormatSection = `${settings.escalation_enabled ? `## Escalation Rules
 Set escalation_offered to true ONLY when the visitor explicitly signals readiness to engage with a human. This means:
@@ -638,7 +638,7 @@ Respond in this exact JSON format (no markdown fences, raw JSON only):
   "escalation_offered": false
 }
 
-${settings.escalation_enabled && settings.booking_url ? `When escalation_offered is true, naturally weave a booking suggestion into your answer.` : ''}`;
+${settings.escalation_enabled && settings.booking_url ? `When escalation_offered is true, naturally weave a booking suggestion into your answer. Do NOT write any URL or link in your message text. Never generate or hallucinate a booking URL. The booking link is provided automatically by the system separately from your message.` : ''}`;
   }
 
   const systemPrompt = `${settings.personality_prompt}
