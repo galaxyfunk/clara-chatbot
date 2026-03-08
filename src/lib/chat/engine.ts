@@ -388,9 +388,11 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         // Connection-priming comment to establish stream
         controller.enqueue(encoder.encode(`: stream-start\n\n`));
 
+        let fullContent = '';
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          fullContent += value;
           // Send token event
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ type: 'token', content: value })}\n\n`)
@@ -407,11 +409,15 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           && msgLength > 15
           && messageCount >= 1;
 
+        // Check if LLM naturally offered escalation via email-related language
+        const llmOfferedEscalation = /your email|drop.*email|work email|email.*reach|email.*team|email.*connect/i.test(fullContent);
+        const finalEscalation = escalationOffered || llmOfferedEscalation;
+
         // Send final metadata event
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
           type: 'done',
-          escalation_offered: escalationOffered,
-          booking_url: escalationOffered
+          escalation_offered: finalEscalation,
+          booking_url: finalEscalation
             ? appendUtmParams(context.settings.booking_url)
             : null,
         })}\n\n`));
@@ -444,6 +450,10 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       const fullText = await getFullResponse();
       // Strip any hallucinated URLs from LLM answer — booking link is provided separately
       const cleanedText = fullText.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
+
+      // Check if LLM naturally offered escalation via email-related language
+      const llmOfferedEscalation = /your email|drop.*email|work email|email.*reach|email.*team|email.*connect/i.test(fullText);
+      const finalEscalation = streamingEscalation || llmOfferedEscalation;
 
       // Gap detection (same logic as non-streaming) with noise filtering
       if (!context.isConfident) {
@@ -493,7 +503,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         gap_detected: !context.isConfident,
         matched_qa_ids: context.matchedPairs.map(m => m.id),
         confidence: context.confidence,
-        escalation_offered: streamingEscalation,
+        escalation_offered: finalEscalation,
       };
 
       const updatedMessages = [...context.previousMessages, userMessage, assistantMessage];
@@ -508,8 +518,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         workspace_id: request.workspace_id,
         session_token: request.session_token,
         messages: updatedMessages,
-        escalated: streamingEscalation || context.existingSession?.escalated || false,
-        escalated_at: streamingEscalation
+        escalated: finalEscalation || context.existingSession?.escalated || false,
+        escalated_at: finalEscalation
           ? new Date().toISOString()
           : context.existingSession?.escalated_at ?? null,
       }, { onConflict: 'workspace_id,session_token' }).select('id, metadata').single();
