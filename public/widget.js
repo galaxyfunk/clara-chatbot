@@ -106,6 +106,22 @@
     };
   }
 
+  // Render a booking URL as a clickable anchor appended to a container element.
+  // Safe DOM construction — no innerHTML for user-facing content.
+  function renderBookingLink(bookingUrl, containerEl) {
+    if (!bookingUrl) return;
+    var wrapper = document.createElement('div');
+    wrapper.style.marginTop = '8px';
+    var a = document.createElement('a');
+    a.href = bookingUrl;
+    a.textContent = 'Book a Call';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.style.cssText = 'display:inline-block;padding:6px 14px;border-radius:6px;background:#213D66;color:#fff;text-decoration:none;font-size:13px;font-weight:500;';
+    wrapper.appendChild(a);
+    containerEl.appendChild(wrapper);
+  }
+
   function typeText(el, text, speed, callback) {
     var i = 0;
     el.textContent = '';
@@ -1255,6 +1271,9 @@
           },
           onDone: function(data) {
             msgResult.textEl.textContent = fullContent;
+            if (data.booking_url) {
+              renderBookingLink(data.booking_url, msgResult.content);
+            }
             scrollToBottom();
           },
           onError: function(err) {
@@ -1829,6 +1848,9 @@
           },
           onDone: function(data) {
             assistantEl.textContent = fullContent;
+            if (data.booking_url) {
+              renderBookingLink(data.booking_url, assistantEl);
+            }
             scrollToBottom();
           },
           onError: function(err) {
