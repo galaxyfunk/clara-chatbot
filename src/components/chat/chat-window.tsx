@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import { MessageBubble } from './message-bubble';
 import type { WorkspaceSettings } from '@/types/workspace';
@@ -49,6 +49,52 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
   const [sessionToken] = useState(() => generateId());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const charQueueRef = useRef<string[]>([]);
+  const displayedContentRef = useRef('');
+  const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeAssistantIdRef = useRef<string | null>(null);
+
+  // Start the 15ms character dequeue interval if not already running
+  const startCharTick = useCallback((assistantId: string) => {
+    if (tickIntervalRef.current) return;
+    activeAssistantIdRef.current = assistantId;
+    tickIntervalRef.current = setInterval(() => {
+      const queue = charQueueRef.current;
+      if (queue.length === 0) {
+        clearInterval(tickIntervalRef.current!);
+        tickIntervalRef.current = null;
+        return;
+      }
+      const char = queue.shift()!;
+      displayedContentRef.current += char;
+      const displayed = displayedContentRef.current;
+      const id = activeAssistantIdRef.current!;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, content: displayed } : m))
+      );
+    }, 15);
+  }, []);
+
+  // Flush the entire remaining queue immediately (for done/error/unmount)
+  const flushCharQueue = useCallback(() => {
+    if (tickIntervalRef.current) {
+      clearInterval(tickIntervalRef.current);
+      tickIntervalRef.current = null;
+    }
+    if (charQueueRef.current.length > 0) {
+      displayedContentRef.current += charQueueRef.current.join('');
+      charQueueRef.current = [];
+    }
+  }, []);
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (tickIntervalRef.current) {
+        clearInterval(tickIntervalRef.current);
+      }
+    };
+  }, []);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -61,7 +107,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
   }, []);
 
   const sendMessage = async (content: string) => {
-    if (!content.trim() || isLoading || isStreaming) return;
+    if (!content.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: generateId(),
@@ -110,13 +156,16 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
       setIsLoading(false);
       setIsStreaming(true);
 
-      // Read SSE stream with RAF-throttled rendering
+      // Reset character queue for this response
+      charQueueRef.current = [];
+      displayedContentRef.current = '';
+
+      // Read SSE stream with character-by-character animation
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       let fullContent = '';
-      let rafId: number | null = null;
-      let pendingContent = '';
+      let prevStripped = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -133,33 +182,26 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
 
             if (data.type === 'token') {
               fullContent += data.content;
-              pendingContent = stripUrls(fullContent);
-
-              // Schedule render on next animation frame (batches multiple tokens)
-              if (!rafId) {
-                rafId = requestAnimationFrame(() => {
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantId ? { ...m, content: pendingContent } : m
-                    )
-                  );
-                  rafId = null;
-                });
+              const stripped = stripUrls(fullContent);
+              // Push only the new characters (delta after strip) into the queue
+              const newChars = stripped.slice(prevStripped.length);
+              prevStripped = stripped;
+              for (const ch of newChars) {
+                charQueueRef.current.push(ch);
               }
+              startCharTick(assistantId);
             }
 
             if (data.type === 'done') {
-              // Cancel any pending RAF and do final render
-              if (rafId) {
-                cancelAnimationFrame(rafId);
-                rafId = null;
-              }
+              // Flush remaining queue instantly and apply final metadata
+              flushCharQueue();
+              const finalContent = stripUrls(fullContent);
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
                     ? {
                         ...m,
-                        content: stripUrls(fullContent),
+                        content: finalContent,
                         escalation_offered: data.escalation_offered || false,
                         booking_url: data.booking_url || null,
                         isStreaming: false,
@@ -170,18 +212,12 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             }
 
             if (data.type === 'error') {
-              if (rafId) {
-                cancelAnimationFrame(rafId);
-                rafId = null;
-              }
+              flushCharQueue();
+              const finalContent = stripUrls(fullContent) || 'Sorry, something went wrong. Please try again.';
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
-                    ? {
-                        ...m,
-                        content: stripUrls(fullContent) || 'Sorry, something went wrong. Please try again.',
-                        isStreaming: false,
-                      }
+                    ? { ...m, content: finalContent, isStreaming: false }
                     : m
                 )
               );
@@ -193,12 +229,11 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
       }
 
       // Final flush in case stream ended without 'done' event
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-      }
+      flushCharQueue();
+      const finalContent = stripUrls(fullContent);
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: stripUrls(fullContent), isStreaming: false } : m
+          m.id === assistantId ? { ...m, content: finalContent, isStreaming: false } : m
         )
       );
 
@@ -220,7 +255,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
     sendMessage(input);
   };
 
-  const isDisabled = isLoading || isStreaming;
+  const isDisabled = isLoading;
 
   // Classic chat uses white background
   const chatBackground = '#ffffff';
@@ -276,6 +311,35 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
           displayName={settings.display_name}
           isDarkBg={isDarkBg}
         />
+
+        {/* Suggested message chips (pre-conversation only) */}
+        {messages.length === 0 && (settings.suggested_messages || []).filter((msg) => msg.trim()).length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {(settings.suggested_messages || []).filter((msg) => msg.trim()).map((msg, i) => (
+              <button
+                key={i}
+                onClick={() => sendMessage(msg)}
+                disabled={isDisabled}
+                className="px-3 py-1.5 rounded-full text-sm transition-colors disabled:opacity-50"
+                style={{
+                  border: `1px solid ${settings.primary_color}`,
+                  color: settings.primary_color,
+                  background: 'transparent',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = settings.primary_color;
+                  e.currentTarget.style.color = '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = settings.primary_color;
+                }}
+              >
+                {msg}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Conversation messages */}
         {messages.map((message) => (
