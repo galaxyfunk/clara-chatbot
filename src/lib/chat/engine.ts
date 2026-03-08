@@ -406,7 +406,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         const messageCount = context.previousMessages.length;
         const escalationOffered = !context.isConfident
           && context.settings.escalation_enabled
-          && msgLength > 15
+          && msgLength > 25
           && messageCount >= 1;
 
         // Check if LLM naturally offered escalation via email-related language
@@ -437,7 +437,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
   const streamMsgCount = context.previousMessages.length;
   const streamingEscalation = !context.isConfident
     && context.settings.escalation_enabled
-    && streamMsgLength > 15
+    && streamMsgLength > 25
     && streamMsgCount >= 1;
 
   // Return stream + a postProcess function for after()
