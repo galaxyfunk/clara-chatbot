@@ -717,6 +717,7 @@
       '  color: var(--ce-text-muted);\n' +
       '  font-size: 14px;\n' +
       '  line-height: 1.6;\n' +
+      '  white-space: pre-wrap;\n' +
       '}\n' +
       '.cb-suggestions-label {\n' +
       '  padding: 6px 4px 4px;\n' +
@@ -1018,6 +1019,24 @@
 
     var suggestionsContainer = document.createElement('div');
     suggestionsContainer.className = 'cb-suggestions-list';
+
+    var suggestions = (s.suggested_messages || []).filter(function(m) { return m.trim(); });
+    if (suggestions.length > 0) {
+      suggestions.forEach(function(text) {
+        var btn = document.createElement('button');
+        btn.className = 'cb-suggestion';
+        btn.innerHTML =
+          '<span class="cb-suggestion-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>' +
+          '<span class="cb-suggestion-text">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>' +
+          '<span class="cb-suggestion-arrow">→</span>';
+        btn.addEventListener('click', function() { sendMessage(text); });
+        suggestionsContainer.appendChild(btn);
+      });
+    } else {
+      suggestionsLabel.style.display = 'none';
+      suggestionsContainer.style.display = 'none';
+    }
+
     welcomeZone.appendChild(suggestionsContainer);
 
     body.appendChild(welcomeZone);
@@ -1510,6 +1529,27 @@
       '  color: var(--ce-text-muted);\n' +
       '  font-size: 14px;\n' +
       '  line-height: 1.65;\n' +
+      '  white-space: pre-wrap;\n' +
+      '}\n' +
+      '.clara-suggestions {\n' +
+      '  display: flex;\n' +
+      '  flex-wrap: wrap;\n' +
+      '  gap: 8px;\n' +
+      '}\n' +
+      '.clara-suggestion-btn {\n' +
+      '  padding: 6px 14px;\n' +
+      '  border-radius: 999px;\n' +
+      '  border: 1px solid var(--ce-teal);\n' +
+      '  background: transparent;\n' +
+      '  color: var(--ce-teal);\n' +
+      '  font-size: 13px;\n' +
+      '  line-height: 1.4;\n' +
+      '  cursor: pointer;\n' +
+      '  font-family: inherit;\n' +
+      '  transition: background 0.15s ease;\n' +
+      '}\n' +
+      '.clara-suggestion-btn:hover {\n' +
+      '  background: rgba(42, 127, 127, 0.06);\n' +
       '}\n' +
       '.clara-msg-user {\n' +
       '  display: flex;\n' +
@@ -1703,6 +1743,22 @@
     welcomeEl.textContent = s.welcome_message || 'Hi! How can I help you today?';
     messagesEl.appendChild(welcomeEl);
 
+    // Suggested message chips
+    var suggestionsWrap = null;
+    var panelSuggestions = (s.suggested_messages || []).filter(function(m) { return m.trim(); });
+    if (panelSuggestions.length > 0) {
+      suggestionsWrap = document.createElement('div');
+      suggestionsWrap.className = 'clara-suggestions';
+      panelSuggestions.forEach(function(text) {
+        var btn = document.createElement('button');
+        btn.className = 'clara-suggestion-btn';
+        btn.textContent = text;
+        btn.addEventListener('click', function() { sendMessage(text); });
+        suggestionsWrap.appendChild(btn);
+      });
+      messagesEl.appendChild(suggestionsWrap);
+    }
+
     var typingDots = createTypingDots();
     messagesEl.appendChild(typingDots.element);
 
@@ -1814,6 +1870,12 @@
       disableInput();
       inputEl.value = '';
       updateSendButton();
+
+      // Hide suggestion chips on first message
+      if (suggestionsWrap) {
+        suggestionsWrap.style.display = 'none';
+        suggestionsWrap = null;
+      }
 
       addUserBubble(text);
       typingDots.show();
