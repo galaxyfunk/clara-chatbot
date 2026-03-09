@@ -401,16 +401,11 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           controller.enqueue(encoder.encode(SSE_PADDING));
         }
 
-        // Use context-based escalation for streaming mode (with noise guard)
-        const msgLength = request.message.trim().length;
-        const messageCount = context.previousMessages.length;
-        const escalationOffered = !context.isConfident
-          && context.settings.escalation_enabled
-          && msgLength > 25
-          && messageCount >= 1;
+        // Context-based escalation removed — LLM-only trigger via regex on response text
+        const escalationOffered = false;
 
-        // Check if LLM naturally offered escalation via email-related language
-        const llmOfferedEscalation = /your email|drop.*email|work email|email.*reach|email.*team|email.*connect/i.test(fullContent);
+        // Check if LLM naturally offered escalation via booking-related language
+        const llmOfferedEscalation = /open to a call|book a call|schedule a call|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call/i.test(fullContent);
         const finalEscalation = escalationOffered || llmOfferedEscalation;
 
         // Send final metadata event
@@ -432,13 +427,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
     },
   });
 
-  // Escalation flag for use in postProcess (same guard as SSE done event)
-  const streamMsgLength = request.message.trim().length;
-  const streamMsgCount = context.previousMessages.length;
-  const streamingEscalation = !context.isConfident
-    && context.settings.escalation_enabled
-    && streamMsgLength > 25
-    && streamMsgCount >= 1;
+  // Context-based escalation removed — LLM-only trigger via regex on response text
+  const streamingEscalation = false;
 
   // Return stream + a postProcess function for after()
   return {
@@ -451,8 +441,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       // Strip any hallucinated URLs from LLM answer — booking link is provided separately
       const cleanedText = fullText.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
 
-      // Check if LLM naturally offered escalation via email-related language
-      const llmOfferedEscalation = /your email|drop.*email|work email|email.*reach|email.*team|email.*connect/i.test(fullText);
+      // Check if LLM naturally offered escalation via booking-related language
+      const llmOfferedEscalation = /open to a call|book a call|schedule a call|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call/i.test(fullText);
       const finalEscalation = streamingEscalation || llmOfferedEscalation;
 
       // Gap detection (same logic as non-streaming) with noise filtering
@@ -659,7 +649,7 @@ function buildChatPrompt(
     responseFormatSection = `## Response Format
 Respond naturally and conversationally. Do not use JSON format. Just write your answer as plain text.
 Keep responses concise — 2-4 sentences for simple questions, more for complex ones.
-${settings.escalation_enabled && settings.booking_url ? `Only suggest booking a call if the visitor explicitly asks to speak with someone, provides specific urgent hiring requirements, or asks "how do I get started" after discussing their needs. Do NOT write any URL or link in your message text. Never generate or hallucinate a booking URL. The booking link is provided automatically by the system separately from your message.` : ''}`;
+${settings.escalation_enabled && settings.booking_url ? `When the visitor has gathered enough information and seems ready to take the next step, naturally ask: 'Would you be open to a quick call with our team?' — this is the ONLY trigger for the booking button. Do not offer this for general questions. Only ask once you genuinely sense buying intent or readiness. Never write a URL or link in your message text.` : ''}`;
   } else {
     responseFormatSection = `${settings.escalation_enabled ? `## Escalation Rules
 Set escalation_offered to true ONLY when the visitor explicitly signals readiness to engage with a human. This means:
