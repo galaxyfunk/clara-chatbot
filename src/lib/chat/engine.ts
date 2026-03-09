@@ -569,8 +569,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                     const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
                     const hubspotKey = process.env.HUBSPOT_API_KEY;
                     if (hubspotKey) {
-                      const summaryText = typeof result.summary?.summary_text === 'string'
-                        ? result.summary.summary_text.slice(0, 500)
+                      const summaryText = typeof result.summary?.summary === 'string'
+                        ? result.summary.summary.slice(0, 500)
                         : undefined;
                       const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions/${upsertedSession.id}`;
                       console.log('[HubSpot Debug] Post-summary upsert — sessionUrl:', sessionUrl);
