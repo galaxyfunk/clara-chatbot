@@ -405,7 +405,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         const escalationOffered = false;
 
         // Check if LLM naturally offered escalation via booking-related language
-        const llmOfferedEscalation = /open to a call|book a call|schedule a call|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call/i.test(fullContent);
+        const llmOfferedEscalation = /open to a.*call|book a call|schedule a call|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call|grab a time/i.test(fullContent);
         const finalEscalation = escalationOffered || llmOfferedEscalation;
 
         // Send final metadata event
@@ -442,7 +442,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       const cleanedText = fullText.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
 
       // Check if LLM naturally offered escalation via booking-related language
-      const llmOfferedEscalation = /open to a call|book a call|schedule a call|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call/i.test(fullText);
+      const llmOfferedEscalation = /open to a.*call|book a call|schedule a call|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call|grab a time/i.test(fullText);
       const finalEscalation = streamingEscalation || llmOfferedEscalation;
 
       // Gap detection (same logic as non-streaming) with noise filtering
