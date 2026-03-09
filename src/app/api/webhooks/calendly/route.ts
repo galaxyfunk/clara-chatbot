@@ -12,8 +12,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true });
     }
 
-    const email = body.payload?.invitee?.email as string | undefined;
-    const name = body.payload?.invitee?.name as string | undefined;
+    const email = body.payload?.email as string | undefined;
+    const name = body.payload?.name as string | undefined;
     const eventName = (body.payload?.scheduled_event?.name as string | undefined) ?? 'Discovery Call';
     const startTime = body.payload?.scheduled_event?.start_time as string | undefined;
 
