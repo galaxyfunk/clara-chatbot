@@ -328,7 +328,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     confidence: context.confidence,
     gap_detected: gapDetected,
     escalation_offered: parsed.escalation_offered,
-    booking_url: parsed.escalation_offered ? appendUtmParams(context.settings.booking_url) : null,
+    booking_url: parsed.escalation_offered ? appendUtmParams(context.settings.booking_url, request.session_token) : null,
     matched_pairs: context.matchedPairs.map(m => ({ id: m.id, question: m.question, similarity: m.similarity })),
     session_id: upsertedSession?.id || context.existingSession?.id,
     message_count: updatedMessages.length,
@@ -414,7 +414,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           type: 'done',
           escalation_offered: finalEscalation,
           booking_url: finalEscalation
-            ? appendUtmParams(context.settings.booking_url)
+            ? appendUtmParams(context.settings.booking_url, request.session_token)
             : null,
         })}\n\n`));
 
@@ -662,10 +662,12 @@ function extractEmail(text: string): string | null {
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-function appendUtmParams(url: string | null): string | null {
+function appendUtmParams(url: string | null, sessionToken?: string): string | null {
   if (!url) return null;
   const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}utm_source=clara&utm_medium=chatbot`;
+  let result = `${url}${separator}utm_source=clara&utm_medium=chatbot`;
+  if (sessionToken) result += `&utm_content=${sessionToken}`;
+  return result;
 }
 
 function buildChatPrompt(

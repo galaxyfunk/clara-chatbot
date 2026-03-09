@@ -16,6 +16,7 @@ export async function POST(request: Request) {
     const name = body.payload?.name as string | undefined;
     const eventName = (body.payload?.scheduled_event?.name as string | undefined) ?? 'Discovery Call';
     const startTime = body.payload?.scheduled_event?.start_time as string | undefined;
+    const sessionToken = body.payload?.tracking?.utm_content as string | undefined;
 
     if (!email) {
       return NextResponse.json({ error: 'No email in payload' }, { status: 400 });
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
         name: name ?? null,
         eventName,
         startTime: startTime ?? null,
+        sessionToken,
       });
     });
 

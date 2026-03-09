@@ -1,10 +1,12 @@
 import { upsertHubSpotContact } from '@/lib/integrations/hubspot';
+import { createClient } from '@supabase/supabase-js';
 
 interface CalendlyBookingPayload {
   email: string;
   name: string | null;
   eventName: string;
   startTime: string | null;
+  sessionToken?: string;
 }
 
 export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Promise<void> {
@@ -19,6 +21,33 @@ export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Pr
       return;
     }
 
+    let claraChatSummary: string | undefined;
+    let claraSessionUrl: string | undefined;
+
+    if (payload.sessionToken) {
+      try {
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        const { data: chatSession } = await supabase
+          .from('chat_sessions')
+          .select('id, summary')
+          .eq('session_token', payload.sessionToken)
+          .single();
+
+        if (chatSession) {
+          const summaryData = chatSession.summary as Record<string, unknown> | null;
+          if (typeof summaryData?.summary === 'string') {
+            claraChatSummary = summaryData.summary.slice(0, 500);
+          }
+          claraSessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions/${chatSession.id}`;
+        }
+      } catch (e) {
+        console.error('[Calendly] Session lookup failed:', e);
+      }
+    }
+
     const note = `Booked: ${eventName}${startTime ? ` — ${new Date(startTime).toLocaleString()}` : ''}`;
 
     const hubspotPayload = {
@@ -26,6 +55,8 @@ export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Pr
       ...(name ? { firstname: name.split(' ')[0], lastname: name.split(' ').slice(1).join(' ') || undefined } : {}),
       lifecyclestage: 'salesqualifiedlead',
       lead_source: 'Website',
+      clara_chat_summary: claraChatSummary,
+      clara_session_url: claraSessionUrl,
     };
 
     const result = await upsertHubSpotContact(hubspotPayload, apiKey);
