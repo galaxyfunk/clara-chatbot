@@ -10,6 +10,7 @@ interface Stats {
   totalSessions: number;
   openGaps: number;
   escalations: number;
+  bookings: number;
 }
 
 interface Gap {
@@ -24,6 +25,8 @@ export default function DashboardPage() {
   const [recentGaps, setRecentGaps] = useState<Gap[]>([]);
   const [displayName, setDisplayName] = useState('Clara');
   const [loading, setLoading] = useState(true);
+  const [bookingPeriod, setBookingPeriod] = useState<'all' | 'week' | 'month' | '30days'>('all');
+  const [bookingsCount, setBookingsCount] = useState<number>(0);
 
   useEffect(() => {
     async function load() {
@@ -55,6 +58,12 @@ export default function DashboardPage() {
     }
     load();
   }, []);
+
+  useEffect(() => {
+    fetch(`/api/dashboard/stats?period=${bookingPeriod}`)
+      .then(r => r.json())
+      .then(data => setBookingsCount(data.stats?.bookings ?? 0));
+  }, [bookingPeriod]);
 
   const isEmpty = stats && stats.totalPairs === 0;
 
@@ -110,7 +119,20 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {stats && <StatsCards stats={stats} />}
+      <div className="flex justify-end mb-3">
+        <select
+          value={bookingPeriod}
+          onChange={e => setBookingPeriod(e.target.value as typeof bookingPeriod)}
+          className="text-sm border border-gray-200 rounded-md px-3 py-1.5 text-ce-text bg-white"
+        >
+          <option value="all">All time</option>
+          <option value="week">This week</option>
+          <option value="month">This month</option>
+          <option value="30days">Last 30 days</option>
+        </select>
+      </div>
+
+      {stats && <StatsCards stats={{ ...stats, bookings: bookingsCount }} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RecentGaps gaps={recentGaps} />

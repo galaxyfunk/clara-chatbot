@@ -24,12 +24,13 @@ export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Pr
     let claraChatSummary: string | undefined;
     let claraSessionUrl: string | undefined;
 
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
     if (payload.sessionToken) {
       try {
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
         const { data: chatSession } = await supabase
           .from('chat_sessions')
           .select('id, metadata')
@@ -64,6 +65,19 @@ export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Pr
 
     if (result.success && result.contactId) {
       console.log('[Calendly] HubSpot contact upgraded to SQL. contactId:', result.contactId);
+
+      if (payload.sessionToken) {
+        const { error: updateError } = await supabase
+          .from('chat_sessions')
+          .update({ booked_at: new Date().toISOString() })
+          .eq('session_token', payload.sessionToken);
+        if (updateError) {
+          console.error('[Calendly] Failed to write booked_at to chat_sessions:', updateError);
+        } else {
+          console.log('[Calendly] booked_at written to chat_sessions for token:', payload.sessionToken);
+        }
+      }
+
       await addHubSpotNote(result.contactId, note, apiKey);
     } else {
       console.error('[Calendly] HubSpot upsert failed:', result.error);

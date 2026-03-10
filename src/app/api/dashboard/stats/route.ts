@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAuthClient } from '@/lib/supabase/auth-server';
 import { createServerClient } from '@/lib/supabase/server';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // 1. Get authenticated user
     const authClient = await createAuthClient();
@@ -23,8 +23,26 @@ export async function GET() {
     }
     const workspaceId = workspace.id;
 
-    // 3. Run aggregate queries
-    const [pairsResult, sessionsResult, gapsResult, escalationsResult] = await Promise.all([
+    // 3. Read optional period filter for bookings
+    const period = new URL(request.url).searchParams.get('period') ?? 'all';
+
+    // 4. Build bookings query with optional date filter
+    let bookingsQuery = supabase
+      .from('chat_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .not('booked_at', 'is', null);
+
+    if (period === 'week') {
+      bookingsQuery = bookingsQuery.gte('booked_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+    } else if (period === 'month') {
+      bookingsQuery = bookingsQuery.gte('booked_at', new Date(new Date().setDate(1)).toISOString());
+    } else if (period === '30days') {
+      bookingsQuery = bookingsQuery.gte('booked_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    }
+
+    // 5. Run aggregate queries
+    const [pairsResult, sessionsResult, gapsResult, escalationsResult, bookingsResult] = await Promise.all([
       // Total active Q&A pairs
       supabase
         .from('qa_pairs')
@@ -48,6 +66,8 @@ export async function GET() {
         .select('id', { count: 'exact', head: true })
         .eq('workspace_id', workspaceId)
         .eq('escalated', true),
+      // Booked sessions
+      bookingsQuery,
     ]);
 
     return NextResponse.json({
@@ -57,6 +77,7 @@ export async function GET() {
         totalSessions: sessionsResult.count || 0,
         openGaps: gapsResult.count || 0,
         escalations: escalationsResult.count || 0,
+        bookings: bookingsResult.count || 0,
       },
     });
   } catch (error) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { Database, MessageSquare, AlertCircle, PhoneForwarded } from 'lucide-react';
+import { Database, MessageSquare, AlertCircle, PhoneForwarded, PhoneCall } from 'lucide-react';
 
 interface StatsCardsProps {
   stats: {
@@ -8,6 +8,7 @@ interface StatsCardsProps {
     totalSessions: number;
     openGaps: number;
     escalations: number;
+    bookings: number;
   };
 }
 
@@ -17,10 +18,11 @@ export function StatsCards({ stats }: StatsCardsProps) {
     { label: 'Sessions', value: stats.totalSessions, icon: MessageSquare },
     { label: 'Flagged Questions', value: stats.openGaps, icon: AlertCircle },
     { label: 'Escalations', value: stats.escalations, icon: PhoneForwarded },
+    { label: 'Calls Booked', value: stats.bookings, icon: PhoneCall },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
       {cards.map((card) => {
         const Icon = card.icon;
         return (
@@ -44,8 +46,8 @@ export function StatsCards({ stats }: StatsCardsProps) {
 
 export function StatsCardsSkeleton() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {[1, 2, 3, 4].map((i) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {[1, 2, 3, 4, 5].map((i) => (
         <div key={i} className="bg-white rounded-lg shadow-sm p-6 animate-pulse">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-ce-muted rounded-lg" />
