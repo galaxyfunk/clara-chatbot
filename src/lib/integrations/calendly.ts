@@ -32,12 +32,13 @@ export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Pr
         );
         const { data: chatSession } = await supabase
           .from('chat_sessions')
-          .select('id, summary')
+          .select('id, metadata')
           .eq('session_token', payload.sessionToken)
           .single();
 
         if (chatSession) {
-          const summaryData = chatSession.summary as Record<string, unknown> | null;
+          const metadata = chatSession.metadata as Record<string, unknown> | null;
+          const summaryData = metadata?.summary as Record<string, unknown> | null;
           if (typeof summaryData?.summary === 'string') {
             claraChatSummary = summaryData.summary.slice(0, 500);
           }
