@@ -1019,6 +1019,7 @@
 
     var suggestionsContainer = document.createElement('div');
     suggestionsContainer.className = 'cb-suggestions-list';
+    suggestionsContainer.style.marginBottom = '16px';
 
     var suggestions = (s.suggested_messages || []).filter(function(m) { return m.trim(); });
     if (suggestions.length > 0) {
@@ -1129,7 +1130,7 @@
     // ── HELPER FUNCTIONS ──
 
     function scrollToBottom() {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      body.scrollTop = body.scrollHeight;
     }
 
     function showTyping() {
@@ -1201,6 +1202,7 @@
       row.appendChild(avatar);
       row.appendChild(content);
       messagesContainer.insertBefore(row, typingRow);
+      scrollToBottom();
     }
 
     function addAssistantMessage(text) {
@@ -1221,6 +1223,7 @@
       row.appendChild(avatar);
       row.appendChild(content);
       messagesContainer.insertBefore(row, typingRow);
+      scrollToBottom();
 
       return { textEl: textEl, content: content };
     }
