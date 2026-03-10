@@ -55,7 +55,7 @@ export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Pr
       email,
       ...(name ? { firstname: name.split(' ')[0], lastname: name.split(' ').slice(1).join(' ') || undefined } : {}),
       lifecyclestage: 'salesqualifiedlead',
-      lead_source: 'Website',
+      lead_source: 'Clara',
       clara_chat_summary: claraChatSummary,
       clara_session_url: claraSessionUrl,
     };
