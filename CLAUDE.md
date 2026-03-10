@@ -8,7 +8,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 **Tagline:** "Your AI-Powered Chatbot, Built in Minutes"
 
 ## Current Version
-**v1.1: IN PROGRESS** — Session 9B complete (Mar 8, 2026). Suggestion chips removed, HubSpot fixes shipped.
+**v1.1: IN PROGRESS** — Session 9C complete (Mar 10, 2026). Calendly webhook fix, summary prompt rewrite, widget scroll fixes.
 
 **v1.0: DEPLOYED** — Live at https://chatbot.jakevibes.dev (Feb 23, 2026)
 - Dashboard app at chatbot.jakevibes.dev
@@ -103,7 +103,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 - Iframe detection — window.self !== window.top, postMessage for resize
 - File parsing — mammoth for .docx, pdf-parse/lib/pdf-parse.js for .pdf (requires runtime = 'nodejs')
 - Background work — use after() from next/server, never void asyncFn()
-- AI summaries — app-level Claude key, trigger after 6+ messages
+- AI summaries — app-level Claude key, trigger after 4+ messages, summary stored in metadata.summary
 - Shadow DOM isolation — widget layouts (Side Whisper, Command Bar) use attachShadow({ mode: 'open' }) for style encapsulation on host pages
 - CORS on /api/chat — allowlist-based origin headers for cross-origin widget embedding (chatbot.jakevibes.dev, cloudemployee.com/io, localhost)
 - HubSpot integration — upsert-only via REST API, gated by hubspot_enabled toggle, fail silently, [HubSpot] log prefix, 500-char summary truncation
@@ -113,7 +113,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | Version | Focus | Status |
 |---------|-------|--------|
 | v1.0 | Core Product + Widget + Deploy | **✅ SHIPPED — Feb 23, 2026** |
-| v1.1 | Polish + Intelligence + UX + Widget Layouts + CE Go-Live | **IN PROGRESS — 7 sessions complete** |
+| v1.1 | Polish + Intelligence + UX + Widget Layouts + CE Go-Live | **IN PROGRESS — 8 sessions complete** |
 | v1.2 | Channel Integrations (Slack, Telegram, WhatsApp) | Future |
 | v1.3 | Analytics + Reporting | Future |
 | Bridge | Insights Bank one-way API push | Future |
@@ -135,6 +135,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | 8 (v1.1-4) | Widget Layouts | 5 features | **✅ COMPLETE — Mar 3, 2026** |
 | 9A (v1.1-5) | CE Go-Live Infrastructure | 4 features | **✅ COMPLETE — Mar 7, 2026** |
 | 9B (v1.1-6) | Cleanup + HubSpot Fixes | 4 changes | **✅ COMPLETE — Mar 8, 2026** |
+| 9C (v1.1-7) | Calendly Fix + Summary Rewrite + Widget Polish | 5 changes | **✅ COMPLETE — Mar 10, 2026** |
 
 ## v1.1 Session 1 Features (Complete)
 1. Deploy fixes — remotePatterns + maxDuration
@@ -182,6 +183,13 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 2. HubSpot lead_source fix — Changed from 'Clara Chatbot' (invalid dropdown value causing 400 errors) to 'Website' (standard HubSpot value) in hubspot.ts and both engine.ts paths
 3. HubSpot sessionUrl deep link — Changed generic `/dashboard/sessions` to `/dashboard/sessions/${session.id}` for direct session linking in CRM
 4. HubSpot debug logging — Added `[HubSpot Debug]` console.log statements across engine.ts and hubspot.ts to trace contact creation flow
+
+## v1.1 Session 9C Changes (Complete)
+1. Calendly metadata fix — Changed Supabase select from `summary` column to `metadata` column in handleCalendlyBooking(), updated extraction path to `metadata.summary.summary` matching how engine.ts stores summaries
+2. Summary threshold lowered — SUMMARY_THRESHOLD changed from 6 to 4 messages (2 exchanges instead of 3) in engine.ts
+3. Calendly lead_source — Changed from `'Website'` to `'Clara'` in handleCalendlyBooking() hubspotPayload to distinguish chatbot-originated bookings in HubSpot
+4. Summary prompt rewrite — Rewrote summarize.ts system prompt for staffing sales context: visitor-focused client brief (not conversation recap), staffing-relevant intent examples, action items as next steps
+5. Command Bar widget fixes — Added 16px margin below suggestion chips container, fixed scrollToBottom() to target `body` (cb-body, the actual scrollable parent with overflow-y: auto) instead of messagesContainer, added scrollToBottom() calls after addUserMessage() and addAssistantMessage() insertions
 
 ## Deployment Info
 - **Production URL:** https://chatbot.jakevibes.dev

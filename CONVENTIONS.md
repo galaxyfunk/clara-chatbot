@@ -663,3 +663,4 @@ if (context.settings.hubspot_enabled) {
 | v1.1 Session 8 | Complete | Shadow DOM widget layouts, widget mode system, `[Summary Debug]` logging for streaming postProcess |
 | v1.1 Session 9A | Complete | CORS allowlist, integration gating (HubSpot), email capture from chat messages, dynamic import for optional integrations |
 | v1.1 Session 9B | Complete | Suggestion chips removal, HubSpot lead_source/sessionUrl fixes, `[HubSpot Debug]` logging |
+| v1.1 Session 9C | Complete | Calendly metadata fix, summary threshold tuning, staffing-focused summary prompt, widget scroll targeting `cb-body` parent |

@@ -454,3 +454,32 @@ Maps every feature to its owning files. Organized by feature area.
 - **Description:** Added `[HubSpot Debug]` console.log statements to trace contact creation flow
 - **Files Modified:** `src/lib/chat/engine.ts`, `src/lib/integrations/hubspot.ts`
 - **Session:** v1.1-9B
+
+---
+
+## v1.1 Session 9C Changes ✅ Complete
+
+### Calendly Webhook Metadata Fix
+- **Description:** Fixed `handleCalendlyBooking()` to read summary from `metadata.summary.summary` instead of non-existent `summary` column
+- **Files Modified:** `src/lib/integrations/calendly.ts` (select changed from `id, summary` to `id, metadata`, extraction path updated)
+- **Session:** v1.1-9C
+
+### Summary Threshold Lowered
+- **Description:** Reduced `SUMMARY_THRESHOLD` from 6 to 4 messages (triggers after 2 exchanges instead of 3)
+- **Files Modified:** `src/lib/chat/engine.ts` (line 11 constant)
+- **Session:** v1.1-9C
+
+### Calendly lead_source Update
+- **Description:** Changed `lead_source` from `'Website'` to `'Clara'` in Calendly booking handler to distinguish chatbot-originated bookings
+- **Files Modified:** `src/lib/integrations/calendly.ts` (hubspotPayload object)
+- **Session:** v1.1-9C
+
+### Summary Prompt Rewrite
+- **Description:** Rewrote AI summary system prompt for staffing sales context — visitor-focused client brief, staffing-relevant intent examples, action items as next steps
+- **Files Modified:** `src/lib/chat/summarize.ts` (SUMMARIZE_PROMPT constant)
+- **Session:** v1.1-9C
+
+### Command Bar Widget Auto-Scroll Fix
+- **Description:** Fixed scrollToBottom() to target correct scrollable parent (`body`/`cb-body` with `overflow-y: auto`), added scroll calls after message insertion, added spacing below suggestion chips
+- **Files Modified:** `public/widget.js` (scrollToBottom target, addUserMessage, addAssistantMessage, suggestionsContainer margin)
+- **Session:** v1.1-9C

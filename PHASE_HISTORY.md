@@ -827,3 +827,61 @@ src/app/api/workspace/public/route.ts    — Chip fields removal from public API
 2. `feat: add HubSpot debug logging to trace contact creation flow`
 3. `fix: change HubSpot lead_source from Clara Chatbot to Website`
 4. `fix: HubSpot sessionUrl deep link with session ID`
+
+---
+
+## v1.1 Session 9C — Calendly Fix + Summary Rewrite + Widget Polish
+**Date:** March 10, 2026
+**Status:** ✅ Complete
+
+### Changes Made
+
+1. **Calendly Webhook Metadata Fix**
+   - `handleCalendlyBooking()` was selecting `summary` column from `chat_sessions` — that column doesn't hold AI summaries
+   - AI summaries are stored at `metadata.summary.summary` (set by engine.ts postProcess)
+   - Changed `.select('id, summary')` to `.select('id, metadata')`
+   - Updated extraction: `metadata?.summary?.summary` instead of `chatSession.summary.summary`
+   - File: `src/lib/integrations/calendly.ts`
+
+2. **Summary Threshold Lowered**
+   - Changed `SUMMARY_THRESHOLD` from 6 to 4 in `src/lib/chat/engine.ts`
+   - Summaries now trigger after 2 exchanges (4 messages) instead of 3 (6 messages)
+   - Earlier summary generation means HubSpot contacts get enriched sooner
+
+3. **Calendly lead_source Update**
+   - Changed `lead_source` in Calendly hubspotPayload from `'Website'` to `'Clara'`
+   - Distinguishes chatbot-originated bookings from other website leads in HubSpot
+   - Note: `'Clara'` must exist as a valid option in HubSpot's `lead_source` dropdown property
+   - File: `src/lib/integrations/calendly.ts`
+
+4. **Summary Prompt Rewrite**
+   - Rewrote `SUMMARIZE_PROMPT` in `src/lib/chat/summarize.ts` for staffing sales context
+   - Changed framing from "customer support conversation" to "sales conversation for a software staffing company"
+   - Summary field now produces visitor-focused client brief: requirements, technical needs, timeline, budget, hesitations
+   - Explicitly instructs: "Do not describe what the assistant said or did"
+   - Updated intent examples to staffing-relevant phrases ("hire React developer", "explore staff augmentation")
+   - Action items rephrased as "next steps"
+
+5. **Command Bar Widget Auto-Scroll Fix**
+   - `scrollToBottom()` was targeting `messagesContainer.scrollTop` but `cb-messages` has no `overflow-y`
+   - The actual scrollable parent is `body` (`cb-body`) which has `overflow-y: auto`
+   - Changed `scrollToBottom()` to target `body.scrollTop = body.scrollHeight`
+   - Added `scrollToBottom()` call after `messagesContainer.insertBefore()` in both `addUserMessage()` and `addAssistantMessage()`
+   - Added `marginBottom: '16px'` to `suggestionsContainer` for spacing below suggestion chips
+   - File: `public/widget.js`
+
+### Files Modified
+
+```
+src/lib/integrations/calendly.ts    — Metadata fix + lead_source change
+src/lib/chat/engine.ts              — SUMMARY_THRESHOLD 6 → 4
+src/lib/chat/summarize.ts           — Summary prompt rewrite
+public/widget.js                    — scrollToBottom fix + chip spacing
+```
+
+### Git Commits
+1. `fix: read chat summary from metadata not summary column in Calendly webhook`
+2. `config: lower summary generation threshold from 6 to 4 messages`
+3. `config: set lead_source to Clara for chatbot-originated bookings`
+4. `feat: rewrite summary prompt for staffing sales context with detailed output`
+5. `fix: add spacing below suggestion chips and auto-scroll on message insert`

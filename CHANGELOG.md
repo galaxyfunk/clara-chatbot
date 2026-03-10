@@ -65,4 +65,12 @@ Intelligence features (docx/pdf upload, gap auto-resolution, conversation summar
 
 ---
 
-**v1.1 Session 9B Complete.** Clara is live at https://chatbot.jakevibes.dev
+## v1.1 Session 9C — Calendly Fix + Summary Rewrite + Widget Polish
+**Status:** ✅ COMPLETE
+**Date:** March 10, 2026
+
+**Calendly webhook metadata fix** — `handleCalendlyBooking()` was selecting the non-existent `summary` column from `chat_sessions`. Changed to select `metadata` and extract summary via `metadata.summary.summary`, matching how `engine.ts` actually stores AI summaries. **Summary threshold lowered** — `SUMMARY_THRESHOLD` reduced from 6 to 4 messages (triggers after 2 exchanges instead of 3). **Calendly lead_source** — Changed from `'Website'` to `'Clara'` in Calendly booking handler to distinguish chatbot-originated bookings in HubSpot CRM. **Summary prompt rewrite** — Rewrote the `summarize.ts` system prompt for staffing sales context: now produces a visitor-focused client brief (what they need, technical requirements, timeline, budget) rather than a generic conversation recap; uses staffing-relevant intent examples. **Command Bar widget fixes** — Added `marginBottom: 16px` below suggestion chips for spacing, fixed `scrollToBottom()` to target `body` (`cb-body` with `overflow-y: auto`) instead of `messagesContainer`, added `scrollToBottom()` calls in `addUserMessage()` and `addAssistantMessage()` so new messages are always visible.
+
+---
+
+**v1.1 Session 9C Complete.** Clara is live at https://chatbot.jakevibes.dev
