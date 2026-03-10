@@ -1,16 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ChatMessage, ConversationSummary } from '@/types/chat';
 
-const SUMMARIZE_PROMPT = `You are analyzing a customer support conversation. Extract structured information from the chat.
+const SUMMARIZE_PROMPT = `You are analyzing a sales conversation between a potential client and an AI assistant for a software staffing company.
 
 Return a JSON object with these exact fields:
-- summary: A 1-2 sentence summary of what the conversation was about
-- visitor_intent: A short phrase describing the visitor's primary intent (e.g., "pricing inquiry", "technical support", "demo request")
+- summary: Write a natural paragraph summarising the full conversation. Cover: what the visitor is looking for, the role or skills they need, any technical requirements, their timeline, budget or company context if mentioned, and how the conversation ended. Do not truncate — if the conversation was detailed, the summary should reflect that.
+- visitor_intent: A short phrase describing the visitor's primary intent (e.g., "hire React developer", "explore staff augmentation", "urgent backend hire")
 - topics_discussed: Array of topics covered in the conversation
 - sentiment: One of "positive", "neutral", or "negative" based on the visitor's tone
 - buying_stage: One of "awareness", "consideration", "decision", or "unknown"
 - contact_info: Object with { name: string|null, email: string|null, company: string|null }
-- action_items: Array of follow-up actions if any were mentioned
+- action_items: Array of follow-up actions or next steps mentioned
 
 Respond ONLY with valid JSON, no markdown or explanation.`;
 
