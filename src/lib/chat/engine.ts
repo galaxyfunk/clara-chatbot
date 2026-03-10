@@ -8,7 +8,7 @@ import type { WorkspaceSettings } from '@/types/workspace';
 import { v4 as uuidv4 } from 'uuid';
 
 // Trigger summary after this many messages (3 exchanges = 6 messages)
-const SUMMARY_THRESHOLD = 6;
+const SUMMARY_THRESHOLD = 4;
 
 interface MatchedPair {
   id: string;
