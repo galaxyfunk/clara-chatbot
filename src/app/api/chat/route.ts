@@ -15,6 +15,7 @@ const ALLOWED_ORIGINS = [
   'https://www.cloudemployee.com',
   'https://cloudemployee.io',
   'https://www.cloudemployee.io',
+  'https://clara.cloudemployee.io',
   'http://localhost:3000',
 ];
 

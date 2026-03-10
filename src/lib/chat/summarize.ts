@@ -4,7 +4,7 @@ import type { ChatMessage, ConversationSummary } from '@/types/chat';
 const SUMMARIZE_PROMPT = `You are analyzing a sales conversation between a potential client and an AI assistant for a software staffing company.
 
 Return a JSON object with these exact fields:
-- summary: Write a natural paragraph summarising the full conversation. Cover: what the visitor is looking for, the role or skills they need, any technical requirements, their timeline, budget or company context if mentioned, and how the conversation ended. Do not truncate — if the conversation was detailed, the summary should reflect that.
+- summary: Write a natural paragraph focused entirely on the visitor — what they are looking for, their specific requirements, technical needs, timeline, budget or company context if mentioned, and any hesitations or open questions they raised. Do not describe what the assistant said or did. This summary should read as a client brief that a salesperson can act on immediately.
 - visitor_intent: A short phrase describing the visitor's primary intent (e.g., "hire React developer", "explore staff augmentation", "urgent backend hire")
 - topics_discussed: Array of topics covered in the conversation
 - sentiment: One of "positive", "neutral", or "negative" based on the visitor's tone

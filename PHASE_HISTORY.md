@@ -620,11 +620,12 @@ src/types/workspace.ts         — OnboardingStepRecord, onboarding_completed_st
    - Centered modal with search-like UX
    - Supports `?mode=command` param in chat route
 
-3. **LLM-Generated Suggestion Chips**
+3. **LLM-Generated Suggestion Chips** *(Removed in Session 9B)*
    - AI generates contextual follow-up questions after each response
    - `generateFollowUpChips()` function in `src/lib/chat/engine.ts`
    - Fallback chain to matched Q&A pairs when LLM generation fails
    - Integrated into streaming response flow
+   - **Note:** Fully removed in Session 9B — all chip code, components, types, and settings deleted
 
 4. **Widget Mode System**
    - Chat route accepts `?mode=panel|command|default` parameter
@@ -765,3 +766,64 @@ src/app/chat/[workspaceId]/page.tsx      — hubspot_enabled in fullSettings lit
 4. `fix: add CORS headers to chat API route`
 5. `feat: add hubspot_enabled toggle to workspace settings UI`
 6. `fix: add cloudemployee.io to CORS allowed origins`
+
+---
+
+## v1.1 Session 9B — Cleanup + HubSpot Fixes
+**Date:** March 8, 2026
+**Status:** ✅ Complete
+
+### Changes Made
+
+1. **Suggestion Chips Removal**
+   - Fully removed LLM-generated suggestion chips from entire codebase (~570 lines deleted)
+   - Deleted `src/components/chat/suggestion-chips.tsx`
+   - Removed `generateFollowUpChips()` function, `FOLLOWUP_SYSTEM_PROMPT`, and `Anthropic` SDK import from engine.ts
+   - Removed `suggestion_chips` from SSE `done` events, `ChatMessage`, and `ChatResponse` types
+   - Removed `suggestion_chips_enabled` and `max_suggestion_chips` from `WorkspaceSettings` interface and defaults
+   - Removed chip toggle and slider from ai-tab.tsx settings UI
+   - Removed chip rendering from widget.js (Command Bar + Side Whisper Shadow DOM), chat-window.tsx, panel-chat.tsx, session-detail.tsx
+   - Removed chip fields from public settings API response and public chat page
+   - Simplified `parseLLMResponse()` signature (no longer needs settings parameter)
+
+2. **HubSpot lead_source Fix**
+   - Changed `lead_source` from `'Clara Chatbot'` to `'Website'` in 3 locations
+   - `'Clara Chatbot'` was not a valid HubSpot dropdown option, causing 400 validation errors
+   - Fixed in: hubspot.ts (default), engine.ts non-streaming path, engine.ts streaming postProcess path
+
+3. **HubSpot sessionUrl Deep Link**
+   - Changed `sessionUrl` from generic `/dashboard/sessions` to `/dashboard/sessions/${upsertedSession.id}`
+   - Enables direct deep-linking from HubSpot CRM to the specific conversation
+   - Fixed in both streaming and non-streaming paths in engine.ts
+
+4. **HubSpot Debug Logging**
+   - Added `[HubSpot Debug]` console.log statements at 6 points across engine.ts and hubspot.ts
+   - Traces: hubspot_enabled flag, email extraction, API key presence, upsert call, API response
+
+### Files Deleted
+
+```
+src/components/chat/suggestion-chips.tsx
+```
+
+### Files Modified
+
+```
+src/lib/chat/engine.ts                   — Chip removal + HubSpot fixes + debug logging
+src/lib/integrations/hubspot.ts          — lead_source fix + debug logging
+public/widget.js                         — Chip removal (Command Bar + Side Whisper)
+src/components/chat/chat-window.tsx      — Chip removal
+src/components/chat/panel-chat.tsx       — Chip removal
+src/components/settings/ai-tab.tsx       — Chip toggle/slider removal
+src/components/sessions/session-detail.tsx — Chip display removal
+src/types/workspace.ts                   — suggestion_chips_enabled, max_suggestion_chips removal
+src/types/chat.ts                        — suggestion_chips removal from ChatMessage/ChatResponse
+src/app/chat/[workspaceId]/page.tsx      — Chip fields removal from PublicSettings/fullSettings
+src/app/api/workspace/public/route.ts    — Chip fields removal from public API response
+```
+
+### Git Commits
+1. `feat: remove suggestion chips from entire codebase`
+2. `feat: add HubSpot debug logging to trace contact creation flow`
+3. `fix: change HubSpot lead_source from Clara Chatbot to Website`
+4. `fix: HubSpot sessionUrl deep link with session ID`

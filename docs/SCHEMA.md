@@ -4,7 +4,7 @@ Canonical database schema reference. This is the single source of truth for all 
 
 **Database:** Supabase (Postgres + pgvector)
 **Project:** Separate Supabase project (not shared with Insights Bank)
-**Last updated:** February 2026
+**Last updated:** March 2026
 
 ---
 
@@ -165,7 +165,6 @@ Conversation logs. Each visitor session is identified by a client-generated UUID
   "role": "user" | "assistant",
   "content": "string",
   "timestamp": "ISO 8601",
-  "suggestion_chips": ["string"],  // Assistant messages only
   "gap_detected": false,           // Assistant messages only
   "matched_qa_ids": ["uuid"],      // Assistant messages only
   "confidence": 0.85,              // Assistant messages only
@@ -221,7 +220,6 @@ The `settings` column on `workspaces` stores all customizable configuration as a
   // ── AI ──
   "personality_prompt": "...",                   // System prompt for LLM (see default below)
   "confidence_threshold": 0.78,                 // Below this → gap detected (range: 0.5–0.95)
-  "max_suggestion_chips": 3,                    // Number of chips per response (range: 1–5)
 
   // ── Escalation ──
   "escalation_enabled": true,                   // Whether to offer booking link on intent

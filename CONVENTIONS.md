@@ -310,7 +310,7 @@ For routes that return variable response shapes, use discriminated unions:
 ```typescript
 // When response type varies by context
 export type ChatEngineResponse =
-  | { type: 'answer'; answer: string; chips: string[]; confidence: number }
+  | { type: 'answer'; answer: string; confidence: number }
   | { type: 'escalation'; answer: string; booking_url: string }
   | { type: 'gap'; answer: string; gap_detected: true };
 ```
@@ -524,7 +524,7 @@ while (true) {
 
 **SSE Event Format:**
 - `{ type: 'token', content: 'chunk' }` — streamed content
-- `{ type: 'done', suggestion_chips: [...], escalation_offered: bool }` — final metadata
+- `{ type: 'done', escalation_offered: bool }` — final metadata
 - `{ type: 'error', message: 'reason' }` — error state
 
 ---
@@ -660,5 +660,6 @@ if (context.settings.hubspot_enabled) {
 | v1.1 Session 1 | Complete | Bulk operations, test-match pattern, iframe-responsive layout |
 | v1.1 Session 2 | Complete | File parsing (mammoth, pdf-parse), auto-resolve gaps, AI summaries, interview guide export |
 | v1.1 Session 7A | Complete | SSE streaming, onboarding gate, settings live preview, after() background processing |
-| v1.1 Session 8 | Complete | Shadow DOM widget layouts, LLM-generated suggestion chips, widget mode system, `[Summary Debug]` logging for streaming postProcess |
+| v1.1 Session 8 | Complete | Shadow DOM widget layouts, widget mode system, `[Summary Debug]` logging for streaming postProcess |
 | v1.1 Session 9A | Complete | CORS allowlist, integration gating (HubSpot), email capture from chat messages, dynamic import for optional integrations |
+| v1.1 Session 9B | Complete | Suggestion chips removal, HubSpot lead_source/sessionUrl fixes, `[HubSpot Debug]` logging |

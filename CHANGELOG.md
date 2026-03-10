@@ -23,6 +23,24 @@ Public chat route built at `/chat/[workspaceId]` for iframe embedding and direct
 
 ---
 
+## v1.1 Session 9A — CE Go-Live Infrastructure
+**Status:** ✅ COMPLETE
+**Date:** March 7, 2026
+
+CE go-live infrastructure for production deployment. **Email capture** — regex extraction from visitor messages in postProcess, stored once per session on `visitor_email`. **HubSpot contact sync** — `upsertHubSpotContact()` via REST API batch upsert, gated by `hubspot_enabled` toggle + `HUBSPOT_API_KEY` env var, fail-silent with `[HubSpot]` log prefix, 500-char summary truncation. **CORS on /api/chat** — allowlist-based origin headers for cross-origin widget embedding (chatbot.jakevibes.dev, cloudemployee.com/io, localhost). **HubSpot settings toggle** — `hubspot_enabled` boolean in AI tab under Integrations section.
+
+---
+
+## v1.1 Session 9B — Cleanup + HubSpot Fixes
+**Status:** ✅ COMPLETE
+**Date:** March 8, 2026
+
+**Suggestion chips fully removed** — stripped LLM-generated suggestion chips from the entire codebase. Deleted `suggestion-chips.tsx` component. Removed `generateFollowUpChips()` function and `FOLLOWUP_SYSTEM_PROMPT` from engine.ts. Removed chip rendering from widget.js (both Command Bar and Side Whisper Shadow DOM layouts), chat-window.tsx, panel-chat.tsx, and session-detail.tsx. Removed `suggestion_chips_enabled` and `max_suggestion_chips` from WorkspaceSettings type and defaults. Removed `suggestion_chips` from ChatMessage and ChatResponse types. Removed settings UI toggle and slider from ai-tab.tsx. Removed chip fields from public settings API response. ~570 lines deleted across 11 files.
+
+**HubSpot fixes:** Changed `lead_source` from `'Clara Chatbot'` (invalid dropdown value causing 400 validation errors) to `'Website'` (standard HubSpot value). Fixed `sessionUrl` to deep-link to specific session (`/dashboard/sessions/${id}`) instead of generic list page. Added `[HubSpot Debug]` logging across engine.ts and hubspot.ts to trace contact creation flow.
+
+---
+
 ## v1.1 Session 8 — Widget Layouts
 **Status:** ✅ COMPLETE
 **Date:** March 3, 2026
@@ -47,4 +65,4 @@ Intelligence features (docx/pdf upload, gap auto-resolution, conversation summar
 
 ---
 
-**v1.1 Session 8 Complete.** Clara is live at https://chatbot.jakevibes.dev
+**v1.1 Session 9B Complete.** Clara is live at https://chatbot.jakevibes.dev

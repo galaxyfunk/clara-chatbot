@@ -394,6 +394,40 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
           {settings.welcome_message}
         </div>
 
+        {/* Suggested message chips (pre-conversation only) */}
+        {messages.length === 0 && (settings.suggested_messages || []).filter((m) => m.trim()).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {(settings.suggested_messages || []).filter((m) => m.trim()).map((msg, i) => (
+              <button
+                key={i}
+                onClick={() => sendMessage(msg)}
+                disabled={isDisabled}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '999px',
+                  border: `1px solid ${CE.teal}`,
+                  background: 'transparent',
+                  color: CE.teal,
+                  fontSize: '13px',
+                  cursor: isDisabled ? 'default' : 'pointer',
+                  opacity: isDisabled ? 0.5 : 1,
+                  fontFamily: 'inherit',
+                  lineHeight: 1.4,
+                  transition: 'background 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(42, 127, 127, 0.06)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                {msg}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Conversation messages */}
         {messages.map((msg) => (
           <div key={msg.id}>
