@@ -1,5 +1,7 @@
 import { upsertHubSpotContact } from '@/lib/integrations/hubspot';
+import { summarizeConversation } from '@/lib/chat/summarize';
 import { createClient } from '@supabase/supabase-js';
+import type { ChatMessage } from '@/types/chat';
 
 interface CalendlyBookingPayload {
   email: string;
@@ -33,17 +35,20 @@ export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Pr
       try {
         const { data: chatSession } = await supabase
           .from('chat_sessions')
-          .select('id, metadata')
+          .select('id, messages')
           .eq('session_token', payload.sessionToken)
           .single();
 
         if (chatSession) {
-          const metadata = chatSession.metadata as Record<string, unknown> | null;
-          const summaryData = metadata?.summary as Record<string, unknown> | null;
-          if (typeof summaryData?.summary === 'string') {
-            claraChatSummary = summaryData.summary.slice(0, 500);
-          }
           claraSessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions/${chatSession.id}`;
+
+          const messages = chatSession.messages as ChatMessage[] | null;
+          if (messages && messages.length > 0) {
+            const result = await summarizeConversation(messages);
+            if (result.success && result.summary?.summary) {
+              claraChatSummary = result.summary.summary.slice(0, 500);
+            }
+          }
         }
       } catch (e) {
         console.error('[Calendly] Session lookup failed:', e);
