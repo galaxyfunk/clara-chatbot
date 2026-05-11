@@ -9,6 +9,7 @@ import {
   AlertCircle,
   MessageSquare,
   Play,
+  Sparkles,
   Settings,
   LogOut,
   X,
@@ -27,6 +28,7 @@ const navItems = [
   { href: '/dashboard/gaps', label: 'Flagged Questions', icon: AlertCircle, exact: false },
   { href: '/dashboard/sessions', label: 'Sessions', icon: MessageSquare, exact: false },
   { href: '/dashboard/chat', label: 'Chat Playground', icon: Play, exact: false },
+  { href: '/dashboard/agent-settings/prompts', label: 'Agent Prompts', icon: Sparkles, exact: false },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings, exact: false },
 ];
 
