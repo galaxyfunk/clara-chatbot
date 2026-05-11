@@ -4,6 +4,14 @@ Track of what shipped in each version. One paragraph per release.
 
 ---
 
+## sales-coach Session 1 — Agent Prompts Foundation
+**Status:** ✅ COMPLETE
+**Date:** May 11, 2026
+
+Added the `agent_prompts` table and the Agent Settings → Prompts UI. Generic, workspace-scoped prompt store keyed by `(workspace_id, slug)` and tagged with `agent_type` — usable by any future Clara agent without schema changes. Lib loader at `src/lib/agent-prompts/loader.ts` exposes `loadPromptContent` (60s in-process cache, throws on missing/inactive), `invalidatePrompt`, `listPrompts`, `getPromptBySlug`, `updatePrompt`. API surface is `GET /api/agent-prompts` and `GET/PATCH /api/agent-prompts/[slug]` — no POST/DELETE (new prompts are seeded via SQL). Dashboard pages at `/dashboard/agent-settings/prompts` (list, server component) and `/dashboard/agent-settings/prompts/[slug]` (editor, client component) styled with CE brand tokens to match the existing Q&A pairs table and settings page save button. New `Agent Prompts` flat entry added to the sidebar above Settings using the Sparkles icon. Seeded with the **Sales Coach** prompt for the CE workspace — generic discovery-call coaching template that applies to all sales reps, with `{{company}}`, `{{attendees}}`, `{{transcript}}`, etc. placeholders for interpolation by the engine in sales-coach-2. Foundation only — no Slack output, no Fireflies polling, no scheduled jobs (those land in sales-coach-2).
+
+---
+
 ## v1.0 — Ship by Friday
 **Status:** ✅ SHIPPED
 **Deployed:** February 23, 2026

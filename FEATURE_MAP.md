@@ -457,6 +457,21 @@ Maps every feature to its owning files. Organized by feature area.
 
 ---
 
+## Agent Infrastructure
+
+### Agent Prompts
+- **Description:** Workspace-scoped, slug-keyed prompt store editable from the dashboard. Used by all Clara agents. Generic by design — new agents plug in by inserting a row with a new `agent_type` value, no schema changes. The CE workspace is seeded with the **Sales Coach** prompt (generic discovery-call coaching template that applies to all sales reps).
+- **Pages:** `/dashboard/agent-settings/prompts` (list), `/dashboard/agent-settings/prompts/[slug]` (editor)
+- **API Routes:** `GET /api/agent-prompts` (list), `GET /api/agent-prompts/[slug]` (fetch), `PATCH /api/agent-prompts/[slug]` (update — no POST/DELETE, new prompts seeded via SQL)
+- **Components:** `src/components/agent-prompts/prompt-list.tsx` (server component, list view), `src/components/agent-prompts/prompt-editor.tsx` (client component, edit form)
+- **Lib Modules:** `src/lib/agent-prompts/loader.ts` — `loadPromptContent` (60s in-process cache, throws on missing/inactive), `invalidatePrompt`, `listPrompts`, `getPromptBySlug`, `updatePrompt`
+- **DB Tables:** `agent_prompts` (workspace_id, slug, name, description, agent_type, content, metadata, is_active)
+- **Types:** `src/types/agent-prompts.ts` — `AGENT_TYPES`, `AgentType`, `AgentPrompt`, `AgentPromptListItem`, `AgentPromptUpdate`
+- **Sidebar:** Flat entry "Agent Prompts" added above "Settings" with `Sparkles` icon in `src/components/sidebar.tsx`
+- **Track / Session:** sales-coach-1
+
+---
+
 ## v1.1 Session 9C Changes ✅ Complete
 
 ### Calendly Webhook Metadata Fix

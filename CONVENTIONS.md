@@ -649,6 +649,54 @@ if (context.settings.hubspot_enabled) {
 
 ---
 
+## Agent Prompt Loader Pattern
+
+For agent system prompts (any prompt an agent loads at runtime), store them in the `agent_prompts` table — never hardcode in `.ts` files. The lib loader gives every agent a uniform read path with a short in-process cache.
+
+```typescript
+// In an agent's lib function:
+import { loadPromptContent } from '@/lib/agent-prompts/loader';
+
+const promptTemplate = await loadPromptContent(workspaceId, 'sales-coach');
+const filledPrompt = interpolate(promptTemplate, { transcript, attendees, /* ... */ });
+```
+
+**Rules:**
+- Look up by `(workspaceId, slug)` — slugs are workspace-scoped and slug-validated (`^[a-z0-9-]+$`) at the DB layer
+- `loadPromptContent` caches for 60s per `(workspaceId, slug)` in module-level memory; `updatePrompt` invalidates the cache on the editing instance immediately. Other Vercel instances pick up changes within 60s (acceptable latency)
+- The loader throws on missing or inactive prompts — let it propagate. Inactive = soft-disabled agent
+- Interpolation (`{{variable}}` substitution) is the **agent's** responsibility, not the loader's — keep the store generic
+- New agents = new `agent_type` value + new seed INSERT, no schema change. Editing UI is fully generic; nothing to wire up per agent
+
+## In-Memory Cache Pattern
+
+For data that's read on every request but rarely changes (system prompts, feature flags, etc.):
+
+```typescript
+interface CacheEntry { value: T; expiresAt: number; }
+const cache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 60_000;
+
+export async function loadX(key: string): Promise<T> {
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const value = await fetchFromDB(key);
+  cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+  return value;
+}
+
+export function invalidate(key: string): void { cache.delete(key); }
+```
+
+**Rules:**
+- Module-level `Map`, never `globalThis` — Next.js process boundaries handle isolation naturally
+- TTL in the 30-300s range — short enough that stale data clears fast, long enough to absorb burst reads
+- Always export an `invalidate` function; call it from any update flow on the same instance
+- Cache is per-instance — accept the cross-instance staleness window (TTL) as the consistency model
+- Don't cache anything user-scoped (sessions, auth) — only workspace-or-global config
+
+---
+
 ## Version History
 
 | Version | Status | Key Patterns Established |
@@ -664,3 +712,4 @@ if (context.settings.hubspot_enabled) {
 | v1.1 Session 9A | Complete | CORS allowlist, integration gating (HubSpot), email capture from chat messages, dynamic import for optional integrations |
 | v1.1 Session 9B | Complete | Suggestion chips removal, HubSpot lead_source/sessionUrl fixes, `[HubSpot Debug]` logging |
 | v1.1 Session 9C | Complete | Calendly metadata fix, summary threshold tuning, staffing-focused summary prompt, widget scroll targeting `cb-body` parent |
+| sales-coach-1 | Complete | Agent prompt loader pattern, in-memory cache with TTL + invalidate, generic prompt store keyed by `(workspace_id, slug)` with `agent_type` discriminator |

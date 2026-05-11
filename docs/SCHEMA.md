@@ -4,7 +4,7 @@ Canonical database schema reference. This is the single source of truth for all 
 
 **Database:** Supabase (Postgres + pgvector)
 **Project:** Separate Supabase project (not shared with Insights Bank)
-**Last updated:** March 2026
+**Last updated:** May 2026
 
 ---
 
@@ -28,19 +28,19 @@ Canonical database schema reference. This is the single source of truth for all 
 │ settings (jsonb) ← content + style + AI      │
 │ onboarding_completed_steps (jsonb) [v1.1]    │
 │ created_at, updated_at                       │
-└──┬──────────────┬──────────────┬────────────┘
-   │ 1:many       │ 1:many       │ 1:many
-   ▼              ▼              ▼
-┌──────────┐  ┌──────────────┐  ┌──────────────┐
-│ qa_pairs │  │chat_sessions │  │  api_keys    │
-│          │  │              │  │              │
-│ question │  │ session_token│  │ provider     │
-│ answer   │  │ messages     │  │ encrypted_key│
-│ category │  │ summary [v1.1]│ │ model        │
-│ embedding│  │ escalated    │  │ is_default   │
-│ source   │  │ metadata     │  │ is_active    │
-│ metadata │  │              │  │              │
-└──────────┘  └──────┬───────┘  └──────────────┘
+└──┬──────────┬──────────────┬──────────────┬──────────────┐
+   │ 1:many   │ 1:many       │ 1:many       │ 1:many       │
+   ▼          ▼              ▼              ▼              │
+┌──────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────▼──────┐
+│ qa_pairs │  │chat_sessions │  │  api_keys    │  │ agent_prompts │
+│          │  │              │  │              │  │               │
+│ question │  │ session_token│  │ provider     │  │ slug          │
+│ answer   │  │ messages     │  │ encrypted_key│  │ name          │
+│ category │  │ summary [v1.1]│ │ model        │  │ agent_type    │
+│ embedding│  │ escalated    │  │ is_default   │  │ content       │
+│ source   │  │ metadata     │  │ is_active    │  │ metadata      │
+│ metadata │  │              │  │              │  │ is_active     │
+└──────────┘  └──────┬───────┘  └──────────────┘  └───────────────┘
                      │ 1:many
                      ▼
                 ┌──────────┐
@@ -197,6 +197,38 @@ Low-confidence questions flagged for human review. Created automatically when th
 
 ---
 
+### 6. agent_prompts
+
+Workspace-scoped, slug-keyed prompt store usable by any Clara agent. Edits invalidate the in-process loader cache immediately on the editing instance; other Vercel instances pick up changes within 60 seconds (cache TTL).
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | uuid | NOT NULL | `gen_random_uuid()` | Primary key |
+| `workspace_id` | uuid | NOT NULL | — | FK → workspaces(id) ON DELETE CASCADE |
+| `slug` | text | NOT NULL | — | CHECK: `^[a-z0-9-]+$`. Looked up by agents at runtime. |
+| `name` | text | NOT NULL | — | Human-readable label shown in the dashboard |
+| `description` | text | YES | — | Optional notes about what this prompt does |
+| `agent_type` | text | NOT NULL | — | Tags which agent owns this prompt (e.g. `sales_coach`). New agents = new value, no schema change. |
+| `content` | text | NOT NULL | — | The prompt body. CHECK: `length(trim(content)) > 0`. Supports `{{variable}}` placeholders, interpolated by agents at runtime. |
+| `metadata` | jsonb | NOT NULL | `'{}'` | Flexible store (variable schemas, version notes, etc.) |
+| `is_active` | boolean | NOT NULL | `true` | Inactive prompts throw on load — used to soft-disable an agent without deleting its prompt |
+| `created_at` | timestamptz | NOT NULL | `now()` | |
+| `updated_at` | timestamptz | NOT NULL | `now()` | Auto-updated via trigger |
+
+**Column count:** 11
+
+**Unique constraint:** `(workspace_id, slug)` — slugs are unique per workspace.
+
+**Seeded prompts (CE workspace):**
+
+| Slug | Name | Agent Type | Notes |
+|------|------|------------|-------|
+| `sales-coach` | Sales Coach | `sales_coach` | Generic discovery-call coaching prompt. Applies to all sales reps. Output destined for Slack in sales-coach-2. |
+
+**Adding new prompts:** Insert via SQL (seed-style) — no POST endpoint exists. Self-service creation is intentionally out of scope until there's a real use case for it.
+
+---
+
 ## Settings JSONB Structure
 
 The `settings` column on `workspaces` stores all customizable configuration as a single JSONB object. This avoids a separate settings table and keeps workspace reads as one query.
@@ -261,6 +293,7 @@ You are Clara, a friendly and knowledgeable virtual assistant. Your primary role
 | `idx_qa_gaps_workspace` | qa_gaps | B-tree | `workspace_id` | |
 | `idx_qa_gaps_workspace_status` | qa_gaps | B-tree | `workspace_id, status` | Composite for status-filtered queries |
 | `idx_api_keys_workspace` | api_keys | B-tree | `workspace_id` | |
+| `idx_agent_prompts_workspace` | agent_prompts | B-tree | `workspace_id` | |
 
 **Scaling note:** The IVFFlat vector index is optimal up to ~100K rows with `lists = 50`. At that scale, rebuild with `lists = 300` (one SQL command). At 500K+ rows, consider switching to HNSW.
 
@@ -349,6 +382,7 @@ $$;
 | `set_updated_at_api_keys` | api_keys | BEFORE UPDATE | `set_updated_at()` |
 | `set_updated_at_qa_pairs` | qa_pairs | BEFORE UPDATE | `set_updated_at()` |
 | `set_updated_at_chat_sessions` | chat_sessions | BEFORE UPDATE | `set_updated_at()` |
+| `set_updated_at_agent_prompts` | agent_prompts | BEFORE UPDATE | `set_updated_at()` |
 
 **Note:** `qa_gaps` has no `updated_at` column and no trigger — gaps are insert-once and status is transitioned via direct update.
 
@@ -356,7 +390,7 @@ $$;
 
 ## Row Level Security (RLS)
 
-All five tables have RLS enabled. Policies enforce workspace ownership.
+All six tables have RLS enabled. Policies enforce workspace ownership.
 
 | Table | Policy Name | Operation | Rule |
 |-------|-------------|-----------|------|
@@ -365,6 +399,7 @@ All five tables have RLS enabled. Policies enforce workspace ownership.
 | qa_pairs | `qa_pairs_owner` | ALL | `workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())` |
 | chat_sessions | `chat_sessions_owner` | ALL | `workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())` |
 | qa_gaps | `qa_gaps_owner` | ALL | `workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())` |
+| agent_prompts | `agent_prompts_owner` | ALL | `workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())` |
 
 **Important:** The API routes that need to bypass RLS (e.g., `POST /api/chat` which is public) use the service role client (`createServerClient()`). Dashboard routes that go through user auth use the auth client.
 
@@ -664,6 +699,63 @@ CREATE POLICY "Users can delete own chatbot assets"
   );
 ```
 
+### Migration: agent_prompts (sales-coach-1)
+
+Run in the Supabase SQL Editor for the Clara project. Adds the generic, workspace-scoped prompt store used by all Clara agents.
+
+```sql
+-- ============================================
+-- Migration: agent_prompts
+-- Workspace-scoped, slug-keyed prompt store usable by any Clara agent.
+-- ============================================
+
+CREATE TABLE agent_prompts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  slug text NOT NULL,
+  name text NOT NULL,
+  description text,
+  agent_type text NOT NULL,
+  content text NOT NULL,
+  metadata jsonb NOT NULL DEFAULT '{}',
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT agent_prompts_workspace_slug_unique UNIQUE (workspace_id, slug),
+  CONSTRAINT agent_prompts_slug_format CHECK (slug ~ '^[a-z0-9-]+$'),
+  CONSTRAINT agent_prompts_content_nonempty CHECK (length(trim(content)) > 0)
+);
+
+CREATE INDEX idx_agent_prompts_workspace ON agent_prompts(workspace_id);
+
+CREATE TRIGGER set_updated_at_agent_prompts
+  BEFORE UPDATE ON agent_prompts
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+ALTER TABLE agent_prompts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY agent_prompts_owner ON agent_prompts
+  FOR ALL USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+  );
+```
+
+**Seed (CE workspace) — Sales Coach (generic, applies to all sales reps):**
+
+The prompt content is a discovery-call coaching template with `{{company}}`, `{{attendees}}`, `{{transcript}}`, etc. placeholders that will be interpolated by the Sales Coach engine in sales-coach-2. Insert via SQL — there is no POST endpoint.
+
+```sql
+INSERT INTO agent_prompts (workspace_id, slug, name, description, agent_type, content)
+VALUES (
+  '09aa62df-5af6-4cec-b565-c335e907327d',
+  'sales-coach',
+  'Sales Coach',
+  'Coaches sales reps on discovery calls. Output posts to Slack.',
+  'sales_coach',
+  $PROMPT$<full prompt body — see live row>$PROMPT$
+);
+```
+
 ---
 
 ## Column Count Summary
@@ -675,7 +767,8 @@ CREATE POLICY "Users can delete own chatbot assets"
 | qa_pairs | 10 |
 | chat_sessions | 11 |
 | qa_gaps | 9 |
-| **Total** | **47** |
+| agent_prompts | 11 |
+| **Total** | **58** |
 
 ---
 

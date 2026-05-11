@@ -8,7 +8,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 **Tagline:** "Your AI-Powered Chatbot, Built in Minutes"
 
 ## Current Version
-**v1.1: IN PROGRESS** — Session 9C complete (Mar 10, 2026). Calendly webhook fix, summary prompt rewrite, widget scroll fixes.
+**v1.1: IN PROGRESS** — sales-coach-1 complete (May 11, 2026). Generic, workspace-scoped `agent_prompts` table + Agent Prompts dashboard editor. Foundation for the Sales Coach agent landing in sales-coach-2.
 
 **v1.0: DEPLOYED** — Live at https://chatbot.jakevibes.dev (Feb 23, 2026)
 - Dashboard app at chatbot.jakevibes.dev
@@ -40,12 +40,13 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | Integrations | HubSpot API (contact upsert via REST) |
 | Hosting | Vercel |
 
-## Database Tables (5)
+## Database Tables (6)
 1. **workspaces** — One per user. Settings JSONB stores content (display_name, welcome_message, suggested_messages, placeholder_text, booking_url), style (primary_color, bubble_color, bubble_position, avatar_url, chat_icon_url, widget_layout, trigger_text, status_messages, hint_messages), AI config (personality_prompt, confidence_threshold, escalation_enabled), integrations (hubspot_enabled), widget (powered_by_clara), knowledge base (custom_categories), and onboarding (onboarding_completed_steps).
 2. **api_keys** — User LLM API keys encrypted with AES-256-GCM. Fields: provider, model, encrypted_key, key_last4, label, is_default, is_active.
 3. **qa_pairs** — Knowledge base. Fields: question, answer, category, embedding (vector 1536d), source (manual/csv_import/transcript_extraction), is_active, metadata.
 4. **chat_sessions** — Conversation logs. Fields: session_token (client UUID), messages (JSONB array with message_id per message), summary (JSONB), metadata (JSONB), visitor_name, visitor_email, escalated, escalated_at. Unique on (workspace_id, session_token).
 5. **qa_gaps** — Low-confidence questions flagged for review. Fields: question, ai_answer, best_match_id, similarity_score, session_id, status (open/resolved/dismissed), resolved_qa_id.
+6. **agent_prompts** — Generic, workspace-scoped, slug-keyed prompt store usable by any Clara agent. Fields: slug, name, description, agent_type (e.g. `sales_coach`), content (with `{{variable}}` placeholders), metadata, is_active. Unique on (workspace_id, slug). Seeded with `sales-coach` for the CE workspace.
 
 ## Key API Routes
 | Route | Method | Auth | Purpose |
@@ -71,6 +72,8 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | /api/sessions | GET | Auth | Chat session browser |
 | /api/sessions/summarize | POST | Auth | Generate AI summary for a session |
 | /api/dashboard/stats | GET | Auth | Dashboard aggregate stats |
+| /api/agent-prompts | GET | Auth | List agent prompts for the workspace |
+| /api/agent-prompts/[slug] | GET/PATCH | Auth | Fetch or update a single agent prompt by slug |
 
 ## Pages (10)
 | Route | Purpose |
@@ -84,6 +87,8 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | /dashboard/sessions | Conversation browser |
 | /dashboard/chat | Chat playground (styled to match widget) |
 | /dashboard/settings | 5 tabs: Content, Style, AI, API Keys, Embed |
+| /dashboard/agent-settings/prompts | List of agent prompts for the workspace |
+| /dashboard/agent-settings/prompts/[slug] | Editor for a single agent prompt |
 | /chat/[workspaceId] | Public chat page (widget iframe target) |
 
 ## Architecture Rules
@@ -108,6 +113,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 - CORS on /api/chat — allowlist-based origin headers for cross-origin widget embedding (chatbot.jakevibes.dev, cloudemployee.com/io, localhost)
 - HubSpot integration — upsert-only via REST API, gated by hubspot_enabled toggle, fail silently, [HubSpot] log prefix, 500-char summary truncation
 - Email capture — regex extraction from user messages in postProcess, stored once per session on visitor_email, triggers HubSpot upsert when enabled
+- Agent prompts — generic, workspace-scoped, slug-keyed store (`agent_prompts` table). All agent system prompts live in this table, never hardcoded. Loaded via `loadPromptContent(workspaceId, slug)` in `src/lib/agent-prompts/loader.ts` with a 60s in-process cache; edits via the dashboard invalidate the cache on the editing instance immediately. New agents plug in by inserting a row with a new `agent_type` value — no schema changes.
 
 ## Version Roadmap
 | Version | Focus | Status |
@@ -136,6 +142,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | 9A (v1.1-5) | CE Go-Live Infrastructure | 4 features | **✅ COMPLETE — Mar 7, 2026** |
 | 9B (v1.1-6) | Cleanup + HubSpot Fixes | 4 changes | **✅ COMPLETE — Mar 8, 2026** |
 | 9C (v1.1-7) | Calendly Fix + Summary Rewrite + Widget Polish | 5 changes | **✅ COMPLETE — Mar 10, 2026** |
+| sales-coach-1 | Agent Prompts Foundation | `agent_prompts` table, lib loader with cache, GET/PATCH API, dashboard editor, sidebar entry | **✅ COMPLETE — May 11, 2026** |
 
 ## v1.1 Session 1 Features (Complete)
 1. Deploy fixes — remotePatterns + maxDuration
@@ -183,6 +190,14 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 2. HubSpot lead_source fix — Changed from 'Clara Chatbot' (invalid dropdown value causing 400 errors) to 'Website' (standard HubSpot value) in hubspot.ts and both engine.ts paths
 3. HubSpot sessionUrl deep link — Changed generic `/dashboard/sessions` to `/dashboard/sessions/${session.id}` for direct session linking in CRM
 4. HubSpot debug logging — Added `[HubSpot Debug]` console.log statements across engine.ts and hubspot.ts to trace contact creation flow
+
+## sales-coach-1 Changes (Complete)
+1. `agent_prompts` table — workspace-scoped, slug-keyed generic prompt store with `agent_type` discriminator, content + metadata JSONB, slug format CHECK (`^[a-z0-9-]+$`), non-empty content CHECK, unique `(workspace_id, slug)`, RLS on workspace ownership, `set_updated_at` trigger, `idx_agent_prompts_workspace` index
+2. Seed — `sales-coach` (generic, applies to all sales reps), agent_type `sales_coach`, full discovery-call coaching prompt with `{{company}}`/`{{attendees}}`/`{{transcript}}`/etc. placeholders for sales-coach-2 interpolation
+3. Lib loader — `src/lib/agent-prompts/loader.ts` exposes `loadPromptContent` (60s in-process cache, throws on missing/inactive), `invalidatePrompt`, `listPrompts`, `getPromptBySlug`, `updatePrompt`. Cache invalidates on the editing instance immediately on update; other Vercel instances pick up changes within 60s
+4. API routes — `GET /api/agent-prompts` lists for the authenticated user's workspace; `GET /api/agent-prompts/[slug]` returns the full prompt; `PATCH /api/agent-prompts/[slug]` updates editable fields with defensive type coercion and a 400 response on empty content. No POST/DELETE — new prompts seeded via SQL
+5. Dashboard UI — `/dashboard/agent-settings/prompts` lists prompts in a table styled to match the Q&A pairs table (`bg-white shadow-sm`, `bg-ce-muted` header, mobile cards), `/dashboard/agent-settings/prompts/[slug]` is the editor (client component with name/description/content/active fields, `bg-ce-navy` save button matching settings page pattern). Both pages are `force-dynamic` server components with auth + workspace lookup. Next.js 16 Promise params syntax used throughout
+6. Sidebar — Added flat `Agent Prompts` entry (Sparkles icon) directly above `Settings` in `src/components/sidebar.tsx`
 
 ## v1.1 Session 9C Changes (Complete)
 1. Calendly metadata fix — Changed Supabase select from `summary` column to `metadata` column in handleCalendlyBooking(), updated extraction path to `metadata.summary.summary` matching how engine.ts stores summaries
