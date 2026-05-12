@@ -77,6 +77,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | /api/agent-prompts/[slug] | GET/PATCH | Auth | Fetch or update a single agent prompt by slug |
 | /api/agents/sales-coach/run | POST | Auth | Trigger a Sales Coach run (background via after(); pre-flights env vars, returns 200 then runs orchestrator) |
 | /api/agents/sales-coach/reanalyze/[meetingId] | POST | Auth | Re-analyze a single meeting (deletes prior row, fetches transcript, posts new Slack output) |
+| /api/cron/sales-coach/run | GET | CRON_SECRET | Vercel cron entry point (every 15 min). Same orchestrator, `triggeredBy: 'cron'` so idle runs stay silent. |
 
 ## Pages (10)
 | Route | Purpose |
@@ -117,7 +118,8 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 - HubSpot integration — upsert-only via REST API, gated by hubspot_enabled toggle, fail silently, [HubSpot] log prefix, 500-char summary truncation
 - Email capture — regex extraction from user messages in postProcess, stored once per session on visitor_email, triggers HubSpot upsert when enabled
 - Agent prompts — generic, workspace-scoped, slug-keyed store (`agent_prompts` table). All agent system prompts live in this table, never hardcoded. Loaded via `loadPromptContent(workspaceId, slug)` in `src/lib/agent-prompts/loader.ts` with a 60s in-process cache; edits via the dashboard invalidate the cache on the editing instance immediately. New agents plug in by inserting a row with a new `agent_type` value — no schema changes.
-- Sales Coach — single rep (Shawnee) hardcoded via env vars in v1; multi-rep refactor deferred to sales-coach-3. Orchestrator lives at `src/lib/agents/sales-coach/run.ts`; runs inside `after()` so the API route returns 200 immediately. Idempotency on `(workspace_id, fireflies_meeting_id)`: `analyzed` and `skipped` rows persist, failures do NOT insert (allow natural retry next run). All errors post to `#clara-errors`. Every run posts a completion summary to `#sales-coach-test`, including empty runs (confirms aliveness). Re-analyze deletes the prior row and processes the single meeting.
+- Sales Coach — single rep (Shawnee) hardcoded via env vars in v1; multi-rep refactor deferred to sales-coach-3. Orchestrator lives at `src/lib/agents/sales-coach/run.ts`; runs inside `after()` so the API route returns 200 immediately. Idempotency on `(workspace_id, fireflies_meeting_id)`: `analyzed` and `skipped` rows persist, failures do NOT insert (allow natural retry next run). All errors post to `#clara-errors`. Re-analyze deletes the prior row and processes the single meeting.
+- Sales Coach triggers — three entry points share the orchestrator: (1) manual "Run Now" button at `/dashboard/agent-settings/prompts/sales-coach` → `POST /api/agents/sales-coach/run`, (2) re-analyze a specific meeting → `POST /api/agents/sales-coach/reanalyze/[meetingId]`, (3) Vercel cron every 15 min → `GET /api/cron/sales-coach/run` (bearer-auth via `CRON_SECRET`). Run-complete summary always posts on manual + reanalyze paths; on cron path it's suppressed unless there's NEW activity (`analyzed > 0` OR `failed > 0` OR `skipped_filter > 0`) — prevents 96 idle-summary posts/day to `#sales-coach-test`.
 
 ## Env Vars (Sales Coach)
 | Var | Purpose |
@@ -133,6 +135,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | `SALES_COACH_FIRST_RUN_DAYS` | Extended lookback window on first run (default 7) |
 | `SALES_COACH_FIRST_RUN_MAX` | Max calls to process on first run (default 5) |
 | `SALES_COACH_SUBSEQUENT_DAYS` | Standard lookback window after first run (default 2) |
+| `CRON_SECRET` | Bearer token used by Vercel cron to authenticate against `/api/cron/sales-coach/run`. **Vercel Production env only** — not Preview/Development. Vercel auto-injects this into the `Authorization: Bearer …` header when the cron fires. |
 
 ## Version Roadmap
 | Version | Focus | Status |
@@ -163,6 +166,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | 9C (v1.1-7) | Calendly Fix + Summary Rewrite + Widget Polish | 5 changes | **✅ COMPLETE — Mar 10, 2026** |
 | sales-coach-1 | Agent Prompts Foundation | `agent_prompts` table, lib loader with cache, GET/PATCH API, dashboard editor, sidebar entry | **✅ COMPLETE — May 11, 2026** |
 | sales-coach-2 | Sales Coach Engine | `sales_call_analyses` table, Fireflies + Slack clients, filter/prompt-builder/orchestrator, Run Now button, manual trigger + re-analyze routes, cron stub disabled | **✅ COMPLETE — May 12, 2026** |
+| sales-coach-2.1 | Cron Auto-Trigger | `/api/cron/sales-coach/run` (CRON_SECRET bearer auth), `vercel.json` cron enabled at 15-min cadence, `triggeredBy: 'cron'` option on orchestrator with idle-run summary suppression | **✅ COMPLETE — May 12, 2026** |
 
 ## v1.1 Session 1 Features (Complete)
 1. Deploy fixes — remotePatterns + maxDuration
@@ -229,7 +233,13 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 7. Error helper — `src/lib/agents/sales-coach/post-error.ts` `postSalesCoachError({context, meetingId?, error})`. Structured message format, fail-silent on outer post failure.
 8. API routes — `POST /api/agents/sales-coach/run` (auth-gated, pre-flights env vars returning 400 on missing, runs orchestrator inside `after()`, top-level after() catch posts to BOTH `#clara-errors` AND `#sales-coach-test` so the user's expected channel never goes silent). `POST /api/agents/sales-coach/reanalyze/[meetingId]` same shape with single-meeting orchestrator path. Both routes: `runtime = 'nodejs'`, `maxDuration = 300`, `dynamic = 'force-dynamic'`.
 9. UI — `src/components/agent-prompts/sales-coach-actions.tsx` client component renders "Run Now" card above the prompt editor with success/error inline state. Conditionally rendered in `prompts/[slug]/page.tsx` when `prompt.slug === 'sales-coach'` — editor stays generic for all other slugs.
-10. Cron stub — `vercel.json` records the cron schedule under an underscored key so it's a no-op for Vercel. Enabled in sales-coach-3 by moving to canonical `crons` key.
+10. Cron stub — `vercel.json` records the cron schedule under an underscored key so it's a no-op for Vercel. Enabled in sales-coach-2.1 by moving to canonical `crons` key.
+
+## sales-coach-2.1 Changes (Complete)
+1. Cron-only route — `src/app/api/cron/sales-coach/run/route.ts`. GET handler, `CRON_SECRET` bearer auth (Vercel auto-injects header when env var is set), hardcoded `workspaceId` from `SALES_COACH_WORKSPACE_ID`, calls `runSalesCoach({workspaceId, triggeredBy: 'cron'})` inside `after()`. Failures post to `#clara-errors` only.
+2. `triggeredBy` orchestrator option — `'manual' | 'cron'` (defaults to `'manual'`). On `'cron'` path, run-complete summary is suppressed unless `analyzed > 0` OR `failed > 0` OR `skipped_filter > 0` (any NEW activity). Prevents 96 idle-summary posts per day. Manual + reanalyze paths unchanged (always post summary).
+3. `vercel.json` — moved cron from `_disabled_crons_example` to canonical `crons` key. Schedule `*/15 * * * *` (every 15 minutes, UTC). Path `/api/cron/sales-coach/run`.
+4. `CRON_SECRET` env var — added to `.env.local` (local testing) and Vercel Production env vars only (NOT Preview/Development). Used by Vercel to authenticate cron invocations; we verify via constant string compare on `Authorization: Bearer <secret>` header.
 
 ## v1.1 Session 9C Changes (Complete)
 1. Calendly metadata fix — Changed Supabase select from `summary` column to `metadata` column in handleCalendlyBooking(), updated extraction path to `metadata.summary.summary` matching how engine.ts stores summaries

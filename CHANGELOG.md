@@ -4,6 +4,14 @@ Track of what shipped in each version. One paragraph per release.
 
 ---
 
+## sales-coach Session 2.1 — Cron Auto-Trigger
+**Status:** ✅ COMPLETE
+**Date:** May 12, 2026
+
+Sales Coach now runs automatically every 15 minutes via Vercel cron. New route `GET /api/cron/sales-coach/run` is bearer-auth'd with `CRON_SECRET` (Vercel auto-injects the header when the env var is set in the project). Hardcodes `workspaceId` from `SALES_COACH_WORKSPACE_ID` since cron has no user session. Shares the orchestrator with the manual Run Now button via a new `triggeredBy: 'manual' | 'cron'` option. On the cron path, the run-complete summary is suppressed unless there's NEW activity (analyzed > 0 OR failed > 0 OR skipped_filter > 0) — prevents 96 idle-summary posts per day to `#sales-coach-test`. The polling approach uses Shawnee's API key which already returns team-wide calls (verified during sales-coach-2 UI test), so this sidesteps Fireflies' per-owner webhook scope limitation. `vercel.json` moved cron from `_disabled_crons_example` to canonical `crons` key. `CRON_SECRET` lives in Vercel Production env only, not Preview/Development.
+
+---
+
 ## sales-coach Session 2 — Engine
 **Status:** ✅ COMPLETE
 **Date:** May 12, 2026

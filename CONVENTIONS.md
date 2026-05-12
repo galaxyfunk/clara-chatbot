@@ -736,6 +736,59 @@ export async function doThing(token: string, params: DoThingParams): Promise<DoT
 - No DB writes in integration libs. They read from external APIs and return data; persistence is the agent's job.
 - Types live in `src/types/<service>.ts` (separate file per service).
 
+## Vercel Cron Pattern
+
+For background tasks that should run on a schedule (poll an external API, garbage-collect stale rows, periodic catch-up), use Vercel cron + a dedicated `/api/cron/<job>/run` route. Don't try to share a route with user-facing endpoints — auth boundaries diverge.
+
+```typescript
+// src/app/api/cron/<job>/run/route.ts
+import { NextResponse, after } from 'next/server';
+
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: Request) {
+  // Vercel auto-injects "Authorization: Bearer ${CRON_SECRET}" when the env var
+  // CRON_SECRET is set in the Vercel project. Verify before doing anything.
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Resolve workspace/tenant from env (no user session in cron context)
+  // Pre-flight other env vars synchronously so a 500 returns clearly
+
+  after(async () => {
+    try {
+      await doScheduledWork({ triggeredBy: 'cron' });
+    } catch (error) {
+      // Post to error channel; do not throw — cron has no caller to surface to
+    }
+  });
+
+  return NextResponse.json({ success: true });
+}
+```
+
+```jsonc
+// vercel.json
+{
+  "crons": [
+    { "path": "/api/cron/<job>/run", "schedule": "*/15 * * * *" }
+  ]
+}
+```
+
+**Rules:**
+- `CRON_SECRET` lives in **Vercel Production env only** — not Preview/Development. Local dev curls the route directly with the secret manually for testing.
+- Cron route uses **GET** (Vercel's default cron method). POST works if explicitly configured, but GET is the convention.
+- Always verify the bearer token in constant time (string compare is OK here since `CRON_SECRET` is high-entropy and not user-controlled — timing-leak isn't a meaningful concern at this scale).
+- Workspace/tenant ID comes from env, not from auth. Cron has no user session.
+- Pass a `triggeredBy: 'cron'` flag through to the shared business logic so it can adjust noisy outputs (suppress idle-run summaries, etc.). User-facing routes pass `'manual'` (or omit, defaulting to manual).
+- After-deploy verification: confirm the cron appears in Vercel's project dashboard under **Settings → Crons** within ~2 minutes. If it doesn't, the schedule string is invalid for Vercel's parser.
+
 ## In-Memory Cache Pattern
 
 For data that's read on every request but rarely changes (system prompts, feature flags, etc.):
@@ -782,3 +835,4 @@ export function invalidate(key: string): void { cache.delete(key); }
 | v1.1 Session 9C | Complete | Calendly metadata fix, summary threshold tuning, staffing-focused summary prompt, widget scroll targeting `cb-body` parent |
 | sales-coach-1 | Complete | Agent prompt loader pattern, in-memory cache with TTL + invalidate, generic prompt store keyed by `(workspace_id, slug)` with `agent_type` discriminator |
 | sales-coach-2 | Complete | Agent orchestrator pattern (`lib/agents/<agent>/run.ts`), external integration pattern (`lib/integrations/<service>.ts`), idempotency rule (persist success + skip, don't persist failure), background work via `after()` with pre-flight env validation in the synchronous response path, run-complete summary always posts (aliveness), dual-channel posting on top-level failure |
+| sales-coach-2.1 | Complete | Vercel cron pattern (`/api/cron/<job>/run` with `CRON_SECRET` bearer auth, GET handler, env-var workspace resolution), `triggeredBy: 'manual' \| 'cron'` flag to adjust noisy outputs (idle-run summary suppression), `CRON_SECRET` scoped to Vercel Production env only |
