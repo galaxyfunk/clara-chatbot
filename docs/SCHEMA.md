@@ -229,6 +229,46 @@ Workspace-scoped, slug-keyed prompt store usable by any Clara agent. Edits inval
 
 ---
 
+### 7. sales_call_analyses
+
+Per-call Sales Coach output. One row per Fireflies meeting that the orchestrator has processed (successfully analyzed or intentionally skipped). Failed runs do NOT insert a row — that lets the next run retry naturally.
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| `id` | uuid | NOT NULL | `gen_random_uuid()` | Primary key |
+| `workspace_id` | uuid | NOT NULL | — | FK → workspaces(id) ON DELETE CASCADE |
+| `fireflies_meeting_id` | text | NOT NULL | — | Fireflies transcript ID. UNIQUE per workspace (idempotency key). |
+| `rep_email` | text | NOT NULL | — | Snapshot of `SALES_COACH_REP_EMAIL` at the time of analysis |
+| `rep_name` | text | NOT NULL | — | Snapshot of `SALES_COACH_REP_NAME` at the time of analysis |
+| `call_title` | text | YES | — | Fireflies meeting title |
+| `call_date` | timestamptz | YES | — | Meeting start time (converted from Fireflies unix ms) |
+| `duration_seconds` | integer | YES | — | Call length in seconds (Fireflies returns minutes; converted on write) |
+| `prospect_domain` | text | YES | — | Most common external email domain among attendees. `NULL` for skipped/internal-only calls. |
+| `attendees` | jsonb | NOT NULL | `'[]'` | Array of `{ email, name }` — snapshot of Fireflies `meeting_attendees` |
+| `fireflies_url` | text | YES | — | Direct link to the Fireflies recording |
+| `prompt_slug` | text | NOT NULL | — | Always `'sales-coach'` in v1 (in `agent_prompts.slug`) |
+| `claude_output` | text | YES | — | Full Claude response. NULL for skipped rows. Used for re-analyze + debugging. |
+| `slack_channel_id` | text | YES | — | The `SLACK_SALES_COACH_CHANNEL` ID the message was posted to |
+| `slack_parent_ts` | text | YES | — | Slack timestamp of the parent message |
+| `slack_thread_ts` | text | YES | — | Slack timestamp of the thread reply with the full coaching |
+| `status` | text | NOT NULL | — | CHECK: `'analyzed'`, `'failed'`, or `'skipped'`. (`failed` reserved — failures don't currently insert, but kept in the CHECK for forward-compat.) |
+| `error_message` | text | YES | — | For `skipped` rows: the filter reason (`no_external_attendee` / `no_attendees`). Reserved for `failed` if we ever start persisting them. |
+| `analyzed_at` | timestamptz | NOT NULL | `now()` | When this analysis was produced. Re-analyze writes a new value. |
+| `created_at` | timestamptz | NOT NULL | `now()` | First-insert timestamp |
+
+**Column count:** 20
+
+**Unique constraint:** `(workspace_id, fireflies_meeting_id)` — one analysis per meeting per workspace (re-analyze deletes the old row before inserting the new one).
+
+**No `updated_at` trigger** — this table is insert-only from a row-lifecycle perspective. Re-analyze deletes + inserts rather than updating in place.
+
+**Idempotency rules:**
+- `analyzed` rows: skipped by next run (no re-processing)
+- `skipped` rows: skipped by next run (internal-only calls won't become external)
+- Failures: NO row written — natural retry on next click
+
+---
+
 ## Settings JSONB Structure
 
 The `settings` column on `workspaces` stores all customizable configuration as a single JSONB object. This avoids a separate settings table and keeps workspace reads as one query.
@@ -754,6 +794,55 @@ VALUES (
   'sales_coach',
   $PROMPT$<full prompt body — see live row>$PROMPT$
 );
+```
+
+### Migration: sales_call_analyses (sales-coach-2)
+
+Run in the Supabase SQL Editor. Stores Sales Coach output per Fireflies meeting.
+
+```sql
+-- ============================================
+-- Migration: sales_call_analyses
+-- Per-call Sales Coach output. Failures do NOT insert (allow natural retry).
+-- ============================================
+
+CREATE TABLE sales_call_analyses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  fireflies_meeting_id text NOT NULL,
+  rep_email text NOT NULL,
+  rep_name text NOT NULL,
+  call_title text,
+  call_date timestamptz,
+  duration_seconds integer,
+  prospect_domain text,
+  attendees jsonb NOT NULL DEFAULT '[]',
+  fireflies_url text,
+  prompt_slug text NOT NULL,
+  claude_output text,
+  slack_channel_id text,
+  slack_parent_ts text,
+  slack_thread_ts text,
+  status text NOT NULL,
+  error_message text,
+  analyzed_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT sales_call_analyses_meeting_unique UNIQUE (workspace_id, fireflies_meeting_id),
+  CONSTRAINT sales_call_analyses_status_check CHECK (status IN ('analyzed', 'failed', 'skipped'))
+);
+
+CREATE INDEX idx_sales_call_analyses_workspace_created
+  ON sales_call_analyses(workspace_id, created_at DESC);
+
+CREATE INDEX idx_sales_call_analyses_workspace_status
+  ON sales_call_analyses(workspace_id, status);
+
+ALTER TABLE sales_call_analyses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY sales_call_analyses_owner ON sales_call_analyses
+  FOR ALL USING (
+    workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())
+  );
 ```
 
 ---
