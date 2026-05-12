@@ -298,11 +298,26 @@ async function postRunCompleteSummary(
   }
 }
 
+async function maybePostRunCompleteSummary(
+  env: ValidatedEnv,
+  result: SalesCoachRunResult,
+  triggeredBy: 'manual' | 'cron'
+): Promise<void> {
+  if (triggeredBy === 'cron') {
+    const hasNewActivity =
+      result.analyzed > 0 || result.failed > 0 || result.skipped_filter > 0;
+    if (!hasNewActivity) return;
+  }
+  await postRunCompleteSummary(env, result);
+}
+
 export async function runSalesCoach(options: {
   workspaceId: string;
   reanalyzeMeetingId?: string;
+  triggeredBy?: 'manual' | 'cron';
 }): Promise<SalesCoachRunResult> {
   const env = validateSalesCoachEnv();
+  const triggeredBy = options.triggeredBy ?? 'manual';
   const ctx: ProcessContext = { workspaceId: options.workspaceId, env };
   const result: SalesCoachRunResult = {
     fetched: 0,
@@ -330,7 +345,7 @@ export async function runSalesCoach(options: {
         error: err,
       });
     }
-    await postRunCompleteSummary(env, result);
+    await maybePostRunCompleteSummary(env, result, triggeredBy);
     return result;
   }
 
@@ -348,7 +363,7 @@ export async function runSalesCoach(options: {
       context: 'listRecentTranscripts',
       error: err,
     });
-    await postRunCompleteSummary(env, result);
+    await maybePostRunCompleteSummary(env, result, triggeredBy);
     return result;
   }
 
@@ -376,6 +391,6 @@ export async function runSalesCoach(options: {
     }
   }
 
-  await postRunCompleteSummary(env, result);
+  await maybePostRunCompleteSummary(env, result, triggeredBy);
   return result;
 }
