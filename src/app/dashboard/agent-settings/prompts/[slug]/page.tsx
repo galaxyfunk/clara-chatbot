@@ -3,6 +3,7 @@ import { createAuthClient } from '@/lib/supabase/auth-server';
 import { createServerClient } from '@/lib/supabase/server';
 import { getPromptBySlug } from '@/lib/agent-prompts/loader';
 import { PromptEditor } from '@/components/agent-prompts/prompt-editor';
+import { SalesCoachActions } from '@/components/agent-prompts/sales-coach-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,7 @@ export default async function AgentPromptEditPage({ params }: PageProps) {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {prompt.slug === 'sales-coach' && <SalesCoachActions />}
       <PromptEditor prompt={prompt} />
     </div>
   );
