@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "_comment_sales_coach_cron": "Sales Coach cron is disabled in v1. Enabled in sales-coach-3 once manual run is trusted. To enable, uncomment the crons key below and redeploy.",
+  "_disabled_crons_example": [
+    { "path": "/api/agents/sales-coach/run", "schedule": "0 */2 * * *" }
+  ]
+}
