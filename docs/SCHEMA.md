@@ -31,16 +31,16 @@ Canonical database schema reference. This is the single source of truth for all 
 └──┬──────────┬──────────────┬──────────────┬──────────────┐
    │ 1:many   │ 1:many       │ 1:many       │ 1:many       │
    ▼          ▼              ▼              ▼              │
-┌──────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────▼──────┐
-│ qa_pairs │  │chat_sessions │  │  api_keys    │  │ agent_prompts │
-│          │  │              │  │              │  │               │
-│ question │  │ session_token│  │ provider     │  │ slug          │
-│ answer   │  │ messages     │  │ encrypted_key│  │ name          │
-│ category │  │ summary [v1.1]│ │ model        │  │ agent_type    │
-│ embedding│  │ escalated    │  │ is_default   │  │ content       │
-│ source   │  │ metadata     │  │ is_active    │  │ metadata      │
-│ metadata │  │              │  │              │  │ is_active     │
-└──────────┘  └──────┬───────┘  └──────────────┘  └───────────────┘
+┌──────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────▼──────┐  ┌────────────────────┐
+│ qa_pairs │  │chat_sessions │  │  api_keys    │  │ agent_prompts │  │sales_call_analyses │
+│          │  │              │  │              │  │               │  │                    │
+│ question │  │ session_token│  │ provider     │  │ slug          │  │ fireflies_meeting_id│
+│ answer   │  │ messages     │  │ encrypted_key│  │ name          │  │ rep_email, rep_name │
+│ category │  │ summary [v1.1]│ │ model        │  │ agent_type    │  │ call_title, date    │
+│ embedding│  │ escalated    │  │ is_default   │  │ content       │  │ claude_output       │
+│ source   │  │ metadata     │  │ is_active    │  │ metadata      │  │ slack_*_ts          │
+│ metadata │  │              │  │              │  │ is_active     │  │ status, attendees   │
+└──────────┘  └──────┬───────┘  └──────────────┘  └───────────────┘  └────────────────────┘
                      │ 1:many
                      ▼
                 ┌──────────┐
@@ -334,6 +334,8 @@ You are Clara, a friendly and knowledgeable virtual assistant. Your primary role
 | `idx_qa_gaps_workspace_status` | qa_gaps | B-tree | `workspace_id, status` | Composite for status-filtered queries |
 | `idx_api_keys_workspace` | api_keys | B-tree | `workspace_id` | |
 | `idx_agent_prompts_workspace` | agent_prompts | B-tree | `workspace_id` | |
+| `idx_sales_call_analyses_workspace_created` | sales_call_analyses | B-tree | `workspace_id, created_at DESC` | History queries (newest first) |
+| `idx_sales_call_analyses_workspace_status` | sales_call_analyses | B-tree | `workspace_id, status` | Filter by status (analyzed/skipped) |
 
 **Scaling note:** The IVFFlat vector index is optimal up to ~100K rows with `lists = 50`. At that scale, rebuild with `lists = 300` (one SQL command). At 500K+ rows, consider switching to HNSW.
 
@@ -430,7 +432,7 @@ $$;
 
 ## Row Level Security (RLS)
 
-All six tables have RLS enabled. Policies enforce workspace ownership.
+All seven tables have RLS enabled. Policies enforce workspace ownership.
 
 | Table | Policy Name | Operation | Rule |
 |-------|-------------|-----------|------|
@@ -440,6 +442,7 @@ All six tables have RLS enabled. Policies enforce workspace ownership.
 | chat_sessions | `chat_sessions_owner` | ALL | `workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())` |
 | qa_gaps | `qa_gaps_owner` | ALL | `workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())` |
 | agent_prompts | `agent_prompts_owner` | ALL | `workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())` |
+| sales_call_analyses | `sales_call_analyses_owner` | ALL | `workspace_id IN (SELECT id FROM workspaces WHERE owner_id = auth.uid())` |
 
 **Important:** The API routes that need to bypass RLS (e.g., `POST /api/chat` which is public) use the service role client (`createServerClient()`). Dashboard routes that go through user auth use the auth client.
 
@@ -857,7 +860,8 @@ CREATE POLICY sales_call_analyses_owner ON sales_call_analyses
 | chat_sessions | 11 |
 | qa_gaps | 9 |
 | agent_prompts | 11 |
-| **Total** | **58** |
+| sales_call_analyses | 20 |
+| **Total** | **78** |
 
 ---
 

@@ -668,6 +668,74 @@ const filledPrompt = interpolate(promptTemplate, { transcript, attendees, /* ...
 - Interpolation (`{{variable}}` substitution) is the **agent's** responsibility, not the loader's — keep the store generic
 - New agents = new `agent_type` value + new seed INSERT, no schema change. Editing UI is fully generic; nothing to wire up per agent
 
+## Agent Orchestrator Pattern
+
+When an agent does more than a single LLM call — fetches external data, runs a pipeline per item, writes results to its own table, posts somewhere — the main loop belongs in `src/lib/agents/<agent>/run.ts`. The API route stays thin; the orchestrator owns the business logic.
+
+```typescript
+// src/lib/agents/<agent>/run.ts
+export async function runMyAgent(options: { workspaceId: string; /* ... */ }): Promise<MyAgentResult> {
+  const env = validateMyAgentEnv();       // throws on missing — see below
+  const ctx = { workspaceId, env, /* ... */ };
+  const result: MyAgentResult = { /* zeroed counters */ };
+
+  // ... fetch list of items ...
+  for (const item of items) {
+    try {
+      await processItem(ctx, item, result);
+    } catch (err) {
+      result.failed += 1;
+      await postAgentError({ context: 'per-item', itemId: item.id, error: err });
+      // do NOT insert a "failed" row — allows natural retry on next run
+    }
+  }
+
+  await postRunCompleteSummary(env, result);  // always — confirms aliveness
+  return result;
+}
+
+// Export the env validator separately so the API route can pre-flight
+// before entering after() and return a clean 400 instead of failing silently
+// 2 minutes later.
+export function validateMyAgentEnv(): MyAgentEnv { /* throw on missing */ }
+```
+
+**Rules:**
+- The orchestrator is called from inside `after()` in the API route. Always returns 200 quickly; never blocks the response.
+- Pre-flight env validation lives in the route handler (synchronous path) so the user sees `400 Missing required env vars: X, Y` immediately. The orchestrator re-validates internally too — defense in depth.
+- Idempotency: persist `analyzed` and `skipped` rows so the next run skips them. Do **NOT** persist `failed` rows — failures retry naturally on the next click.
+- Always post a run-complete summary at the end of the run, even on zero-work runs. Silence is worse than "nothing to do."
+- On top-level `after()` failure: post to BOTH the agent's normal output channel AND the error channel. The user's expected feedback channel must never be silent.
+- Per-iteration errors don't abort the whole run — `catch`, log, increment `failed`, `continue`.
+
+## External Integration Pattern
+
+Third-party API clients (Fireflies, Slack, HubSpot, etc.) live in `src/lib/integrations/<service>.ts`. One file per service. Thin wrappers; no business logic.
+
+```typescript
+// src/lib/integrations/<service>.ts
+const SERVICE_URL = 'https://api.example.com/...';
+
+async function serviceRequest<T>(token: string, body: unknown): Promise<T> {
+  const res = await fetch(SERVICE_URL, { /* ... */ });
+  if (!res.ok) throw new Error(`[Service] HTTP ${res.status}: ${await res.text()}`);
+  // ... parse, error-check ...
+  return data;
+}
+
+export async function doThing(token: string, params: DoThingParams): Promise<DoThingResult> {
+  // wrap the API call, return typed result
+}
+```
+
+**Rules:**
+- One file per third-party service. Don't mix Slack + Fireflies in the same file.
+- Accept the token/api-key as a function argument, not via `process.env` inside the lib — keeps the integration testable and makes the dependency explicit at the call site.
+- Throw on non-OK responses with a `[Service]` log prefix so failures grep cleanly.
+- No retries here — the orchestrator decides retry semantics.
+- No DB writes in integration libs. They read from external APIs and return data; persistence is the agent's job.
+- Types live in `src/types/<service>.ts` (separate file per service).
+
 ## In-Memory Cache Pattern
 
 For data that's read on every request but rarely changes (system prompts, feature flags, etc.):
@@ -713,3 +781,4 @@ export function invalidate(key: string): void { cache.delete(key); }
 | v1.1 Session 9B | Complete | Suggestion chips removal, HubSpot lead_source/sessionUrl fixes, `[HubSpot Debug]` logging |
 | v1.1 Session 9C | Complete | Calendly metadata fix, summary threshold tuning, staffing-focused summary prompt, widget scroll targeting `cb-body` parent |
 | sales-coach-1 | Complete | Agent prompt loader pattern, in-memory cache with TTL + invalidate, generic prompt store keyed by `(workspace_id, slug)` with `agent_type` discriminator |
+| sales-coach-2 | Complete | Agent orchestrator pattern (`lib/agents/<agent>/run.ts`), external integration pattern (`lib/integrations/<service>.ts`), idempotency rule (persist success + skip, don't persist failure), background work via `after()` with pre-flight env validation in the synchronous response path, run-complete summary always posts (aliveness), dual-channel posting on top-level failure |

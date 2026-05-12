@@ -470,6 +470,18 @@ Maps every feature to its owning files. Organized by feature area.
 - **Sidebar:** Flat entry "Agent Prompts" added above "Settings" with `Sparkles` icon in `src/components/sidebar.tsx`
 - **Track / Session:** sales-coach-1
 
+### Sales Coach (v1)
+- **Description:** Coaches sales reps on Fireflies-recorded discovery calls. Polls Fireflies, filters for external attendees, runs each transcript through the editable `sales-coach` prompt via Claude Sonnet 4, posts parent + thread message per call to a Slack channel. Manual trigger via "Run Now" button on the prompt edit page; runs in the background via `after()`. Idempotency: skips meetings already analyzed (`analyzed`/`skipped` rows persist); failures don't insert rows so they retry naturally next click. Run-complete summary always posts (even on empty runs) to confirm aliveness. Single rep (Shawnee) hardcoded via env vars in v1; multi-rep refactor deferred to sales-coach-3.
+- **Pages:** `/dashboard/agent-settings/prompts/sales-coach` ("Run Now" button rendered above the prompt editor)
+- **API Routes:** `POST /api/agents/sales-coach/run` (manual trigger, pre-flights env, returns 200 then runs orchestrator in `after()`), `POST /api/agents/sales-coach/reanalyze/[meetingId]` (delete prior row + reprocess single meeting)
+- **Components:** `src/components/agent-prompts/sales-coach-actions.tsx` (client component, conditionally rendered when slug === 'sales-coach')
+- **Lib Modules:** `src/lib/agents/sales-coach/run.ts` (orchestrator + `validateSalesCoachEnv`), `filter.ts` (pure `shouldAnalyze`), `build-prompt.ts` (`buildPromptVariables`, `interpolatePrompt`, `pickProspectDomain`), `post-error.ts` (`postSalesCoachError`); integrations: `src/lib/integrations/fireflies.ts` (`listRecentTranscripts`, `getTranscriptDetail`, `normalizeDurationPct`), `slack-bot.ts` (`postParentMessage`, `postThreadReply`)
+- **DB Tables:** `sales_call_analyses` (workspace_id, fireflies_meeting_id [UNIQUE per workspace], rep_email/name, call metadata, attendees JSONB, claude_output, slack_*_ts, status, error_message). Reads from `agent_prompts`.
+- **Types:** `src/types/sales-coach.ts` (filter, prompt variables, row shape, run result), `src/types/fireflies.ts` (transcript summary/detail, attendees, sentences, speaker analytics — duration fields documented as decimal minutes)
+- **Env Vars:** `SLACK_BOT_TOKEN`, `SLACK_SALES_COACH_CHANNEL`, `SLACK_ERRORS_CHANNEL`, `FIREFLIES_API_KEY_SHAWNEE`, `SALES_COACH_REP_EMAIL`, `SALES_COACH_REP_NAME`, `SALES_COACH_TEAM_DOMAINS`, `SALES_COACH_WORKSPACE_ID`, `SALES_COACH_FIRST_RUN_DAYS`, `SALES_COACH_FIRST_RUN_MAX`, `SALES_COACH_SUBSEQUENT_DAYS`
+- **Cron:** Stubbed in `vercel.json` under `_disabled_crons_example` (disabled in v1; canonical `crons` key in sales-coach-3 once trusted)
+- **Track / Session:** sales-coach-2
+
 ---
 
 ## v1.1 Session 9C Changes ✅ Complete

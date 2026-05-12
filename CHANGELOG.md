@@ -4,6 +4,16 @@ Track of what shipped in each version. One paragraph per release.
 
 ---
 
+## sales-coach Session 2 — Engine
+**Status:** ✅ COMPLETE
+**Date:** May 12, 2026
+
+Sales Coach engine shipped. Manual trigger via "Run Now" button on the Sales Coach prompt edit page → orchestrator fetches Shawnee's recent Fireflies calls (extended 7d/5 max on first run, standard 2d/20 max thereafter — auto-detected via `sales_call_analyses` row count) → filters for external attendees → loads the `sales-coach` prompt from `agent_prompts` → interpolates `{{company}}`/`{{attendees}}`/`{{transcript}}`/etc. → calls Claude Sonnet 4 (`max_tokens: 2000`) → posts parent message (call metadata + Fireflies link) + threaded coaching breakdown to `#sales-coach-test`. Failures post to `#clara-errors`. Every run posts a completion summary so the system confirms aliveness on empty runs. New table `sales_call_analyses` with `UNIQUE(workspace_id, fireflies_meeting_id)` idempotency key — `analyzed`/`skipped` rows persist, failures do NOT (allows natural retry next click). Re-analyze route deletes prior row + reprocesses single meeting. New libs: `src/lib/integrations/fireflies.ts` (GraphQL wrapper), `src/lib/integrations/slack-bot.ts` (chat.postMessage with threading), `src/lib/agents/sales-coach/{filter,build-prompt,run,post-error}.ts`. API routes: `POST /api/agents/sales-coach/run` and `POST /api/agents/sales-coach/reanalyze/[meetingId]` (both Node runtime, `maxDuration: 300`, `after()` background work with pre-flight env validation returning 400 on missing). UI: `SalesCoachActions` card rendered above the prompt editor when slug is `sales-coach`. Cron stubbed in `vercel.json` under an underscored key (disabled in v1; enabled in sales-coach-3). Single rep (Shawnee) hardcoded via env vars; multi-rep refactor deferred.
+
+**Three fixes applied during implementation vs the draft brief:** (1) Fireflies `duration` field is decimal minutes, not seconds — verified via 0.8 introspection; type comments and prompt builder updated. (2) Fireflies' `meeting_attendees` excludes the authenticated user, so the rep is prepended manually with `(rep)` annotation in the prompt's `{{attendees}}` variable. (3) `pickProspectDomain` picks the most-common external domain (not first match) to handle multi-attendee prospect calls correctly.
+
+---
+
 ## sales-coach Session 1 — Agent Prompts Foundation
 **Status:** ✅ COMPLETE
 **Date:** May 11, 2026

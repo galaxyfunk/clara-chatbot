@@ -8,7 +8,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 **Tagline:** "Your AI-Powered Chatbot, Built in Minutes"
 
 ## Current Version
-**v1.1: IN PROGRESS** — sales-coach-1 complete (May 11, 2026). Generic, workspace-scoped `agent_prompts` table + Agent Prompts dashboard editor. Foundation for the Sales Coach agent landing in sales-coach-2.
+**v1.1: IN PROGRESS** — sales-coach-2 complete (May 12, 2026). Sales Coach engine ships: Fireflies polling + Claude analysis + Slack output, single rep (Shawnee) hardcoded via env vars, manual trigger from the prompt editor, re-analyze route supported, cron stubbed but disabled.
 
 **v1.0: DEPLOYED** — Live at https://chatbot.jakevibes.dev (Feb 23, 2026)
 - Dashboard app at chatbot.jakevibes.dev
@@ -37,16 +37,17 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | AI — Embeddings | OpenAI text-embedding-3-small — app-level key |
 | AI — Extraction | Claude Sonnet — app-level key |
 | Encryption | AES-256-GCM (Node.js crypto) |
-| Integrations | HubSpot API (contact upsert via REST) |
+| Integrations | HubSpot API (contact upsert via REST), Fireflies GraphQL API (transcripts), Slack Bot API (chat.postMessage) |
 | Hosting | Vercel |
 
-## Database Tables (6)
+## Database Tables (7)
 1. **workspaces** — One per user. Settings JSONB stores content (display_name, welcome_message, suggested_messages, placeholder_text, booking_url), style (primary_color, bubble_color, bubble_position, avatar_url, chat_icon_url, widget_layout, trigger_text, status_messages, hint_messages), AI config (personality_prompt, confidence_threshold, escalation_enabled), integrations (hubspot_enabled), widget (powered_by_clara), knowledge base (custom_categories), and onboarding (onboarding_completed_steps).
 2. **api_keys** — User LLM API keys encrypted with AES-256-GCM. Fields: provider, model, encrypted_key, key_last4, label, is_default, is_active.
 3. **qa_pairs** — Knowledge base. Fields: question, answer, category, embedding (vector 1536d), source (manual/csv_import/transcript_extraction), is_active, metadata.
 4. **chat_sessions** — Conversation logs. Fields: session_token (client UUID), messages (JSONB array with message_id per message), summary (JSONB), metadata (JSONB), visitor_name, visitor_email, escalated, escalated_at. Unique on (workspace_id, session_token).
 5. **qa_gaps** — Low-confidence questions flagged for review. Fields: question, ai_answer, best_match_id, similarity_score, session_id, status (open/resolved/dismissed), resolved_qa_id.
 6. **agent_prompts** — Generic, workspace-scoped, slug-keyed prompt store usable by any Clara agent. Fields: slug, name, description, agent_type (e.g. `sales_coach`), content (with `{{variable}}` placeholders), metadata, is_active. Unique on (workspace_id, slug). Seeded with `sales-coach` for the CE workspace.
+7. **sales_call_analyses** — Per-call Sales Coach output. Fields: fireflies_meeting_id, rep_email, rep_name, call_title, call_date, duration_seconds, prospect_domain, attendees (JSONB), fireflies_url, prompt_slug, claude_output, slack_channel_id, slack_parent_ts, slack_thread_ts, status (analyzed/failed/skipped), error_message, analyzed_at. Unique on (workspace_id, fireflies_meeting_id) — idempotency key. Failures don't insert (natural retry on next run); only `analyzed` and `skipped` statuses persist.
 
 ## Key API Routes
 | Route | Method | Auth | Purpose |
@@ -74,6 +75,8 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | /api/dashboard/stats | GET | Auth | Dashboard aggregate stats |
 | /api/agent-prompts | GET | Auth | List agent prompts for the workspace |
 | /api/agent-prompts/[slug] | GET/PATCH | Auth | Fetch or update a single agent prompt by slug |
+| /api/agents/sales-coach/run | POST | Auth | Trigger a Sales Coach run (background via after(); pre-flights env vars, returns 200 then runs orchestrator) |
+| /api/agents/sales-coach/reanalyze/[meetingId] | POST | Auth | Re-analyze a single meeting (deletes prior row, fetches transcript, posts new Slack output) |
 
 ## Pages (10)
 | Route | Purpose |
@@ -114,6 +117,22 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 - HubSpot integration — upsert-only via REST API, gated by hubspot_enabled toggle, fail silently, [HubSpot] log prefix, 500-char summary truncation
 - Email capture — regex extraction from user messages in postProcess, stored once per session on visitor_email, triggers HubSpot upsert when enabled
 - Agent prompts — generic, workspace-scoped, slug-keyed store (`agent_prompts` table). All agent system prompts live in this table, never hardcoded. Loaded via `loadPromptContent(workspaceId, slug)` in `src/lib/agent-prompts/loader.ts` with a 60s in-process cache; edits via the dashboard invalidate the cache on the editing instance immediately. New agents plug in by inserting a row with a new `agent_type` value — no schema changes.
+- Sales Coach — single rep (Shawnee) hardcoded via env vars in v1; multi-rep refactor deferred to sales-coach-3. Orchestrator lives at `src/lib/agents/sales-coach/run.ts`; runs inside `after()` so the API route returns 200 immediately. Idempotency on `(workspace_id, fireflies_meeting_id)`: `analyzed` and `skipped` rows persist, failures do NOT insert (allow natural retry next run). All errors post to `#clara-errors`. Every run posts a completion summary to `#sales-coach-test`, including empty runs (confirms aliveness). Re-analyze deletes the prior row and processes the single meeting.
+
+## Env Vars (Sales Coach)
+| Var | Purpose |
+|-----|---------|
+| `SLACK_BOT_TOKEN` | Bot OAuth token (`xoxb-…`) — posts to coaching + errors channels |
+| `SLACK_SALES_COACH_CHANNEL` | Channel ID for coaching output (e.g. `#sales-coach-test`) |
+| `SLACK_ERRORS_CHANNEL` | Channel ID for orchestrator errors (e.g. `#clara-errors`) |
+| `FIREFLIES_API_KEY_SHAWNEE` | Shawnee's personal Fireflies key — authenticates as her, returns only her calls |
+| `SALES_COACH_WORKSPACE_ID` | CE workspace UUID — defensive constant (matches workspaces table) |
+| `SALES_COACH_REP_EMAIL` | Rep email (used for the `(rep)` annotation in prompt + DB rows) |
+| `SALES_COACH_REP_NAME` | Rep first name — used for fuzzy speaker matching in talk-ratio breakdown |
+| `SALES_COACH_TEAM_DOMAINS` | Comma-separated team email domains — drives the external-attendee filter |
+| `SALES_COACH_FIRST_RUN_DAYS` | Extended lookback window on first run (default 7) |
+| `SALES_COACH_FIRST_RUN_MAX` | Max calls to process on first run (default 5) |
+| `SALES_COACH_SUBSEQUENT_DAYS` | Standard lookback window after first run (default 2) |
 
 ## Version Roadmap
 | Version | Focus | Status |
@@ -143,6 +162,7 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 | 9B (v1.1-6) | Cleanup + HubSpot Fixes | 4 changes | **✅ COMPLETE — Mar 8, 2026** |
 | 9C (v1.1-7) | Calendly Fix + Summary Rewrite + Widget Polish | 5 changes | **✅ COMPLETE — Mar 10, 2026** |
 | sales-coach-1 | Agent Prompts Foundation | `agent_prompts` table, lib loader with cache, GET/PATCH API, dashboard editor, sidebar entry | **✅ COMPLETE — May 11, 2026** |
+| sales-coach-2 | Sales Coach Engine | `sales_call_analyses` table, Fireflies + Slack clients, filter/prompt-builder/orchestrator, Run Now button, manual trigger + re-analyze routes, cron stub disabled | **✅ COMPLETE — May 12, 2026** |
 
 ## v1.1 Session 1 Features (Complete)
 1. Deploy fixes — remotePatterns + maxDuration
@@ -198,6 +218,18 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 4. API routes — `GET /api/agent-prompts` lists for the authenticated user's workspace; `GET /api/agent-prompts/[slug]` returns the full prompt; `PATCH /api/agent-prompts/[slug]` updates editable fields with defensive type coercion and a 400 response on empty content. No POST/DELETE — new prompts seeded via SQL
 5. Dashboard UI — `/dashboard/agent-settings/prompts` lists prompts in a table styled to match the Q&A pairs table (`bg-white shadow-sm`, `bg-ce-muted` header, mobile cards), `/dashboard/agent-settings/prompts/[slug]` is the editor (client component with name/description/content/active fields, `bg-ce-navy` save button matching settings page pattern). Both pages are `force-dynamic` server components with auth + workspace lookup. Next.js 16 Promise params syntax used throughout
 6. Sidebar — Added flat `Agent Prompts` entry (Sparkles icon) directly above `Settings` in `src/components/sidebar.tsx`
+
+## sales-coach-2 Changes (Complete)
+1. `sales_call_analyses` table — per-call output store, UNIQUE `(workspace_id, fireflies_meeting_id)` idempotency key, status CHECK `(analyzed/failed/skipped)`, RLS on workspace ownership, `idx_..._workspace_created` + `idx_..._workspace_status` indexes. Failures do NOT insert — allows natural retry on next run.
+2. Fireflies client — `src/lib/integrations/fireflies.ts` with `listRecentTranscripts(fromDate, limit)` and `getTranscriptDetail(id)`. Wraps GraphQL with bearer auth. Schema verified via 0.8 introspection: `transcripts.fromDate` accepted, `meeting_attendees { email, name, location }`, `analytics.speakers { name, duration, duration_pct, longest_monologue, questions, word_count }`. **Duration unit gotcha:** `transcript.duration` and `speaker.duration` are decimal minutes (not seconds); `longest_monologue` is seconds. Type comments document this; call sites multiply by 60 before formatting.
+3. Slack bot client — `src/lib/integrations/slack-bot.ts` with `postParentMessage` and `postThreadReply`. Both use `chat.postMessage` with `unfurl_links: false`. Errors throw on `ok: false`.
+4. Filter — `src/lib/agents/sales-coach/filter.ts` `shouldAnalyze()` is pure (no I/O). Returns `{ok: true, externalAttendees}` if at least one attendee email domain isn't in `teamDomains`; otherwise `{ok: false, reason: 'no_external_attendee' | 'no_attendees'}`.
+5. Prompt builder — `src/lib/agents/sales-coach/build-prompt.ts`. **Three corrections vs brief draft:** (a) duration multiplied by 60 (minutes → seconds) before `formatDuration` runs, (b) rep prepended manually with `(rep)` annotation in `formatAttendees` because Fireflies' `meeting_attendees` omits the authenticated user, (c) `pickProspectDomain` picks the most-common external domain (not first-match) for multi-attendee prospect calls — exposed as a named export so the orchestrator can reuse for the `prospect_domain` column.
+6. Orchestrator — `src/lib/agents/sales-coach/run.ts`. `runSalesCoach({workspaceId, reanalyzeMeetingId?})`. Auto-detects mode (zero rows → 7d/5 max, else 2d/20 max). Re-analyze branch deletes prior row, fetches single transcript, skips idempotency check. Per-transcript try/catch posts errors to `#clara-errors` but does NOT insert a row (natural retry). Run-complete summary always posts to `#sales-coach-test` at the end of the run. Claude call mirrors `extract-qa.ts` pattern: inline SDK, `claude-sonnet-4-20250514`, `max_tokens: 2000`. Thread reply truncates at 38500 chars with pointer to `claude_output`. `validateSalesCoachEnv()` exported separately for API route pre-flight.
+7. Error helper — `src/lib/agents/sales-coach/post-error.ts` `postSalesCoachError({context, meetingId?, error})`. Structured message format, fail-silent on outer post failure.
+8. API routes — `POST /api/agents/sales-coach/run` (auth-gated, pre-flights env vars returning 400 on missing, runs orchestrator inside `after()`, top-level after() catch posts to BOTH `#clara-errors` AND `#sales-coach-test` so the user's expected channel never goes silent). `POST /api/agents/sales-coach/reanalyze/[meetingId]` same shape with single-meeting orchestrator path. Both routes: `runtime = 'nodejs'`, `maxDuration = 300`, `dynamic = 'force-dynamic'`.
+9. UI — `src/components/agent-prompts/sales-coach-actions.tsx` client component renders "Run Now" card above the prompt editor with success/error inline state. Conditionally rendered in `prompts/[slug]/page.tsx` when `prompt.slug === 'sales-coach'` — editor stays generic for all other slugs.
+10. Cron stub — `vercel.json` records the cron schedule under an underscored key so it's a no-op for Vercel. Enabled in sales-coach-3 by moving to canonical `crons` key.
 
 ## v1.1 Session 9C Changes (Complete)
 1. Calendly metadata fix — Changed Supabase select from `summary` column to `metadata` column in handleCalendlyBooking(), updated extraction path to `metadata.summary.summary` matching how engine.ts stores summaries
