@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": [
+  "_disabled_crons_example": [
     { "path": "/api/cron/sales-coach/run", "schedule": "*/15 * * * *" }
   ]
 }
