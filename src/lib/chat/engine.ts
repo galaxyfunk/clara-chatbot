@@ -10,6 +10,10 @@ import { v4 as uuidv4 } from 'uuid';
 // Trigger summary after this many messages (3 exchanges = 6 messages)
 const SUMMARY_THRESHOLD = 4;
 
+/** Detects when the LLM offered a booking / human handoff in its reply text. */
+const BOOKING_OFFER_REGEX =
+  /open to a.*call|book a call|schedule a call|talk to a human|speak to a human|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call|grab a time/i;
+
 interface MatchedPair {
   id: string;
   question: string;
@@ -406,7 +410,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         const escalationOffered = false;
 
         // Check if LLM naturally offered escalation via booking-related language
-        const llmOfferedEscalation = /open to a.*call|book a call|schedule a call|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call|grab a time/i.test(fullContent);
+        const llmOfferedEscalation = BOOKING_OFFER_REGEX.test(fullContent);
         const finalEscalation = escalationOffered || llmOfferedEscalation;
 
         // Send final metadata event
@@ -443,7 +447,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       const cleanedText = fullText.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
 
       // Check if LLM naturally offered escalation via booking-related language
-      const llmOfferedEscalation = /open to a.*call|book a call|schedule a call|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call|grab a time/i.test(fullText);
+      const llmOfferedEscalation = BOOKING_OFFER_REGEX.test(fullText);
       const finalEscalation = streamingEscalation || llmOfferedEscalation;
 
       // Gap detection (same logic as non-streaming) with noise filtering

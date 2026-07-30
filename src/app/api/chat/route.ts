@@ -2,45 +2,23 @@ import { NextResponse, after } from 'next/server';
 import { processChat, processChatStream } from '@/lib/chat/engine';
 import { summarizeConversation } from '@/lib/chat/summarize';
 import { createServerClient } from '@/lib/supabase/server';
+import { getCorsHeaders } from '@/lib/cors';
 import type { ChatRequest, ChatMessage } from '@/types/chat';
 
 // Trigger summary after this many messages (3 exchanges = 6 messages)
 const SUMMARY_THRESHOLD = 6;
 
-// ─── CORS ────────────────────────────────────────────────────────────
-
-const ALLOWED_ORIGINS = [
-  'https://chatbot.jakevibes.dev',
-  'https://cloudemployee.com',
-  'https://www.cloudemployee.com',
-  'https://cloudemployee.io',
-  'https://www.cloudemployee.io',
-  'https://clara.cloudemployee.io',
-  'http://localhost:3000',
-];
-
-function getCorsHeaders(requestOrigin: string | null) {
-  const origin = ALLOWED_ORIGINS.includes(requestOrigin ?? '')
-    ? requestOrigin!
-    : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
-}
-
 export async function OPTIONS(request: Request) {
   const origin = request.headers.get('origin');
   return new Response(null, {
     status: 204,
-    headers: getCorsHeaders(origin),
+    headers: getCorsHeaders(origin, 'POST, OPTIONS'),
   });
 }
 
 export async function POST(request: Request) {
   const origin = request.headers.get('origin');
-  const cors = getCorsHeaders(origin);
+  const cors = getCorsHeaders(origin, 'POST, OPTIONS');
 
   try {
     const body: ChatRequest & { stream?: boolean } = await request.json();
