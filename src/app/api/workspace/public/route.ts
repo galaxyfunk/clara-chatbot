@@ -1,34 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
-
-// ─── CORS ────────────────────────────────────────────────────────────
-
-const ALLOWED_ORIGINS = [
-  'https://chatbot.jakevibes.dev',
-  'https://cloudemployee.com',
-  'https://www.cloudemployee.com',
-  'https://cloudemployee.io',
-  'https://www.cloudemployee.io',
-  'https://clara.cloudemployee.io',
-  'http://localhost:3000',
-];
-
-function getCorsHeaders(requestOrigin: string | null) {
-  const origin = ALLOWED_ORIGINS.includes(requestOrigin ?? '')
-    ? requestOrigin!
-    : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
-}
+import { getCorsHeaders } from '@/lib/cors';
 
 export async function OPTIONS(request: Request) {
   const origin = request.headers.get('origin');
   return new Response(null, {
     status: 204,
-    headers: getCorsHeaders(origin),
+    headers: getCorsHeaders(origin, 'GET, OPTIONS'),
   });
 }
 
@@ -39,7 +17,7 @@ export async function OPTIONS(request: Request) {
  */
 export async function GET(request: Request) {
   const origin = request.headers.get('origin');
-  const cors = getCorsHeaders(origin);
+  const cors = getCorsHeaders(origin, 'GET, OPTIONS');
 
   try {
     const { searchParams } = new URL(request.url);
