@@ -15,7 +15,7 @@ interface ApiKeyForm {
 
 const INITIAL_FORM: ApiKeyForm = {
   provider: 'anthropic',
-  model: 'claude-sonnet-4-20250514',
+  model: 'claude-sonnet-4-6',
   customModel: '',
   apiKey: '',
   label: '',

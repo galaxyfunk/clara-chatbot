@@ -9,9 +9,9 @@ export interface LLMModel {
 
 export const SUPPORTED_MODELS: LLMModel[] = [
   // Anthropic models
-  { id: 'claude-opus-4-20250514', name: 'Claude Opus 4', provider: 'anthropic', description: 'Most capable, best for complex tasks' },
-  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic', description: 'Best balance of speed and quality' },
-  { id: 'claude-haiku-4-20250514', name: 'Claude Haiku 4', provider: 'anthropic', description: 'Fast and affordable' },
+  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic', description: 'Best balance of speed and quality (recommended)' },
+  { id: 'claude-opus-4-5-20251101', name: 'Claude Opus 4.5', provider: 'anthropic', description: 'Most capable, best for complex tasks' },
+  { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', provider: 'anthropic', description: 'Fast and affordable' },
   { id: 'custom-anthropic', name: 'Custom Model', provider: 'anthropic', description: 'Enter any model ID' },
   // OpenAI models - GPT-5 family
   { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'openai', description: 'Latest and most capable' },
