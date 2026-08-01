@@ -7,7 +7,7 @@ import {
   normalizeDurationPct,
 } from '@/lib/integrations/fireflies';
 import { postParentMessage, postThreadReply } from '@/lib/integrations/slack-bot';
-import { shouldAnalyze } from './filter';
+import { classifyCall } from './classify';
 import {
   buildPromptVariables,
   interpolatePrompt,
@@ -22,7 +22,7 @@ import type {
 import type { SalesCoachRunResult } from '@/types/sales-coach';
 
 const PROMPT_SLUG = 'sales-coach';
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
 const CLAUDE_MAX_TOKENS = 2000;
 const SLACK_TEXT_TRUNCATE_LIMIT = 38500;
 
@@ -140,6 +140,7 @@ async function callClaude(promptText: string): Promise<string> {
 interface ProcessContext {
   workspaceId: string;
   env: ValidatedEnv;
+  skipClassifier?: boolean;
 }
 
 async function processTranscript(
@@ -150,12 +151,11 @@ async function processTranscript(
   const supabase = createServerClient();
   const { env } = ctx;
 
-  const filter = shouldAnalyze({
-    attendees: detail.meeting_attendees.map((a) => ({ email: a.email, name: a.name })),
-    teamDomains: env.teamDomains,
-  });
+  const classification = ctx.skipClassifier
+    ? { call_type: 'sales' as const, reason: 'reanalyze: classifier bypassed' }
+    : await classifyCall(detail, env.teamDomains);
 
-  if (!filter.ok) {
+  if (classification.call_type !== 'sales') {
     const { error: insertErr } = await supabase
       .from('sales_call_analyses')
       .insert({
@@ -175,7 +175,8 @@ async function processTranscript(
         slack_parent_ts: null,
         slack_thread_ts: null,
         status: 'skipped',
-        error_message: filter.reason ?? null,
+        call_type: classification.call_type,
+        error_message: null,
       });
     if (insertErr) {
       throw new Error(`[SalesCoach] Failed to insert skipped row: ${insertErr.message}`);
@@ -227,6 +228,7 @@ async function processTranscript(
       slack_parent_ts: parentTs,
       slack_thread_ts: threadTs,
       status: 'analyzed',
+      call_type: 'sales',
       error_message: null,
     });
   if (insertErr) {
@@ -285,7 +287,7 @@ async function postRunCompleteSummary(
     `Fetched: ${result.fetched} · ` +
     `Analyzed: ${result.analyzed} · ` +
     `Already done: ${result.skipped_already_analyzed} · ` +
-    `Internal-only: ${result.skipped_filter} · ` +
+    `Non-sales: ${result.skipped_filter} · ` +
     `Failed: ${result.failed}`;
   try {
     await postParentMessage({
@@ -336,7 +338,7 @@ export async function runSalesCoach(options: {
         throw new Error(`[SalesCoach] Transcript not found for meeting ${meetingId}`);
       }
       result.fetched = 1;
-      await processTranscript(ctx, detail, result);
+      await processTranscript({ ...ctx, skipClassifier: true }, detail, result);
     } catch (err) {
       result.failed += 1;
       await postSalesCoachError({

@@ -1,12 +1,8 @@
-export interface SalesCoachFilterInput {
-  attendees: { email: string; name: string | null }[];
-  teamDomains: string[];
-}
+export type CallType = 'sales' | 'internal' | 'recruitment' | 'other';
 
-export interface SalesCoachFilterResult {
-  ok: boolean;
-  reason?: 'no_external_attendee' | 'no_attendees';
-  externalAttendees?: { email: string; name: string | null }[];
+export interface ClassifyResult {
+  call_type: CallType;
+  reason: string;
 }
 
 export interface SalesCoachPromptVariables {
@@ -37,6 +33,7 @@ export interface SalesCallAnalysis {
   slackParentTs: string | null;
   slackThreadTs: string | null;
   status: 'analyzed' | 'failed' | 'skipped';
+  callType: CallType | null;
   errorMessage: string | null;
   analyzedAt: string;
   createdAt: string;
