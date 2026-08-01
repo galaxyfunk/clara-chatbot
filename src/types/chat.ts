@@ -19,6 +19,7 @@ export interface ChatSession {
   visitorEmail: string | null;
   escalated: boolean;
   escalatedAt: string | null;
+  slackThreadTs: string | null;
   createdAt: string;
   updatedAt: string;
 }

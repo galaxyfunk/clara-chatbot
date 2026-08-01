@@ -1,8 +1,10 @@
+import { after } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
 import { chatCompletion, chatCompletionStream, type LLMMessage } from '@/lib/llm/provider';
 import { decrypt } from '@/lib/encryption';
 import { summarizeConversation } from '@/lib/chat/summarize';
+import { notifyChatStarted, notifyChatSummary } from '@/lib/integrations/chat-activity-slack';
 import type { ChatRequest, ChatResponse, ChatMessage } from '@/types/chat';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { v4 as uuidv4 } from 'uuid';
@@ -285,6 +287,19 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     console.error('[Session Upsert Error]', sessionError);
   }
 
+  // ── Chat activity Slack: parent message on first message of a new session ──
+  if (upsertedSession && context.existingSession === null) {
+    const sessionId = upsertedSession.id;
+    after(() =>
+      notifyChatStarted({
+        workspaceId: request.workspace_id,
+        sessionId,
+        firstUserMessage: request.message,
+        workspaceDisplayName: context.settings.display_name,
+      })
+    );
+  }
+
   // ── Email capture + HubSpot upsert ──
   if (upsertedSession) {
     const detectedEmail = extractEmail(request.message);
@@ -523,6 +538,16 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       const upsertedSession = upsertResult.data;
 
+      // ── Chat activity Slack: parent message on first message of a new session ──
+      if (upsertedSession && context.existingSession === null) {
+        await notifyChatStarted({
+          workspaceId: request.workspace_id,
+          sessionId: upsertedSession.id,
+          firstUserMessage: request.message,
+          workspaceDisplayName: context.settings.display_name,
+        });
+      }
+
       // Summary generation (same logic as non-streaming path)
       if (upsertedSession && updatedMessages.length >= SUMMARY_THRESHOLD) {
         console.log('[Summary Debug] Entering summary block', {
@@ -559,6 +584,13 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                 .eq('id', upsertedSession.id);
 
               console.log('[Summary Debug] Metadata update result:', JSON.stringify(updateResult, null, 2));
+
+              // ── Chat activity Slack: thread reply with summary ──
+              await notifyChatSummary({
+                workspaceId: request.workspace_id,
+                sessionId: upsertedSession.id,
+                summary: result.summary,
+              });
 
               // Second HubSpot upsert — push summary to existing contact
               if (context.settings.hubspot_enabled) {

@@ -3,6 +3,7 @@ import { processChat, processChatStream } from '@/lib/chat/engine';
 import { summarizeConversation } from '@/lib/chat/summarize';
 import { createServerClient } from '@/lib/supabase/server';
 import { getCorsHeaders } from '@/lib/cors';
+import { notifyChatSummary } from '@/lib/integrations/chat-activity-slack';
 import type { ChatRequest, ChatMessage } from '@/types/chat';
 
 // Trigger summary after this many messages (3 exchanges = 6 messages)
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
     // Trigger summary generation in background after enough messages
     if (response.session_id && response.message_count && response.message_count >= SUMMARY_THRESHOLD) {
       const sessionId = response.session_id;
+      const workspaceId = body.workspace_id;
       after(async () => {
         try {
           const supabase = createServerClient();
@@ -86,6 +88,12 @@ export async function POST(request: Request) {
                 },
               })
               .eq('id', sessionId);
+
+            await notifyChatSummary({
+              workspaceId,
+              sessionId,
+              summary: result.summary,
+            });
           }
         } catch {
           // Silently fail - this is background work
