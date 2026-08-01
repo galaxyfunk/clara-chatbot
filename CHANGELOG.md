@@ -4,6 +4,22 @@ Track of what shipped in each version. One paragraph per release.
 
 ---
 
+## chat-activity-slack Session 1 — Live Chat Notifications in Slack
+**Status:** ✅ COMPLETE
+**Date:** May 15, 2026
+
+Chat sessions on the CE workspace now post real-time activity into a public Slack channel so the team can see conversations as they happen without opening the dashboard. When a visitor sends their first message, a parent Slack message goes out with the workspace name in the header, the visitor's first message in a blockquote (truncated at 200 chars), and a "View session →" link pointing at `/dashboard/sessions?session=<id>`. The Slack `ts` returned by that post is stored on a new `slack_thread_ts` column on `chat_sessions`. When the AI summary later persists (at message 4 in streaming, message 6 in non-streaming, mirroring the existing thresholds), a thread reply lands under the same parent containing visitor intent, visitor email, the paragraph summary, and action-item bullets (capped at 6). New module `src/lib/integrations/chat-activity-slack.ts` exposes `notifyChatStarted` and `notifyChatSummary` — both gated on `CHAT_ACTIVITY_WORKSPACE_ID` (a new env var, independent of `SALES_COACH_WORKSPACE_ID` so the two features can decouple later) plus `SLACK_BOT_TOKEN` and `SLACK_CHAT_ACTIVITY_CHANNEL`. Fail-silent: hard errors mirror to `#clara-errors`; if the start post fails, `slack_thread_ts` stays NULL and the summary hook silently no-ops. Three engine hooks: non-streaming start uses `after()` inside `processChat` (after the session upsert, gated on `context.existingSession === null`); streaming start + summary hooks run inline within `processChatStream`'s `postProcess` (which is already wrapped in `after()` by the route handler). Non-streaming summary hook lives in `src/app/api/chat/route.ts` inside the existing summary `after()` block. New `GET /api/sessions/[id]` route supports the deep link by returning a single session — used by the dashboard sessions page (`src/app/dashboard/sessions/page.tsx`) to hydrate a deep-linked session that's not in the recent-list window. The page reads `?session=<id>` via `window.location.search` inside a mount-time `useEffect` (sidesteps the Suspense-boundary requirement that `useSearchParams` would impose on a client-component root page). DB migration (manual SQL): `ALTER TABLE chat_sessions ADD COLUMN slack_thread_ts TEXT NULL;`. Multi-tenant per-customer Slack config is explicitly out of scope — same gating pattern as Sales Coach.
+
+---
+
+## sales-coach Session 2.2 — Call-Type Classifier
+**Status:** ✅ COMPLETE
+**Date:** May 13, 2026
+
+Shawnee's Fireflies key returns all of her recorded calls — sales, internal standups, recruitment interviews, vendor chats — so `#sales-coach-test` was getting coaching breakdowns for calls that aren't sales conversations. This change adds an LLM-powered classifier that audits every fetched call before analysis. New module `src/lib/agents/sales-coach/classify.ts` calls Claude Haiku 4.5 with a compact prompt (title, attendees tagged `[team]`/`[external]`, duration, first 30 transcript sentences capped at 3000 chars) and returns one of four labels: `sales | internal | recruitment | other`. Only the `sales` label proceeds to the existing coaching pipeline; the other three labels insert a `status='skipped'` row with the new `call_type` column populated and post NOTHING to Slack. The classifier replaces the previous external-attendee filter entirely — `src/lib/agents/sales-coach/filter.ts` is deleted along with its types. Schema change: added `call_type TEXT` column to `sales_call_analyses` (nullable for pre-classifier rows, CHECK constraint enforces the 4 values) plus an index on `(workspace_id, call_type)`. The re-analyze route bypasses the classifier (forces `sales`) since the user explicitly requested that meeting be processed. Run-summary label `Internal-only:` renamed to `Non-sales:` to reflect the broader meaning of `skipped_filter`. Classifier errors (parse failure, invalid label, missing API key) post to `#clara-errors` and skip the insert — same natural-retry behavior as other transcript-level failures.
+
+---
+
 ## sales-coach Session 2.1 — Cron Auto-Trigger
 **Status:** ✅ COMPLETE
 **Date:** May 12, 2026
