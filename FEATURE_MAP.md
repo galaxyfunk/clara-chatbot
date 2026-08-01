@@ -532,10 +532,11 @@ Maps every feature to its owning files. Organized by feature area.
 - **Page:** N/A (consumed by CE's `/ask`, a separate app)
 - **API Routes:** `src/app/api/chat/route.ts` (unchanged — the event rides the existing stream)
 - **Components:** None. **No widget changes.**
-- **Lib Modules:** `src/lib/chat/extract-brief.ts` (Haiku 4.5 extraction, coerce-or-drop validation, merge over stored brief, deterministic `strength`, `shouldExtractBrief` spend gate, `isBriefExtractionEnabled` workspace gate, `persistBrief`), `src/lib/chat/engine.ts` (emission in `processChatStream`, persistence in `postProcess`, background mirror in `processChat`)
+- **Lib Modules:** `src/lib/chat/extract-brief.ts` (Haiku 4.5 extraction, coerce-or-drop validation, merge over stored brief, deterministic `strength`, `briefCoreFacts` readiness rule, `shouldExtractBrief` spend gate, `isBriefExtractionEnabled` workspace gate, `persistBrief`), `src/lib/chat/engine.ts` (emission in `processChatStream`, persistence in `postProcess`, background mirror in `processChat`)
 - **Types:** `src/types/brief.ts` — mirror of CE's `site/src/lib/ask/brief.ts`. **Keep in sync field-for-field.**
 - **DB Tables:** `chat_sessions.metadata.brief` (no DDL — existing JSONB column)
 - **Env Vars:** `ASK_BRIEF_WORKSPACE_IDS` (optional; unset = every workspace extracts)
+- **Readiness rule:** `strength` is capped at 69 until all five core facts are present (role title, headcount, stack, seniority, timeline — worth 70 between them). Context fields total 30 and cannot cross the line alone. `intent` is unweighted. **This is a sales judgement, not an engineering one — change it with the director, and see PHASE_HISTORY "Readiness threshold" for why each weight is what it is.**
 - **Track / Session:** CLARA-2
 
 ### CORS Allow-List for CE Origins

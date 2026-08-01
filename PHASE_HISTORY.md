@@ -921,8 +921,8 @@ versioned payload and unknown fields ignorable, rather than a shared package.
 - Coerce-or-drop validation for every field, with length/count caps.
 - `mergeBriefContent` — previous brief as base, extracted fields overwrite where
   present. `'unknown'` intent never overwrites a known one.
-- `computeBriefStrength` — weighted completeness summing to 100. `roles` OR
-  `suggestedPod` satisfies the "who" weighting so product briefs can also reach ready.
+- `briefCoreFacts` / `computeBriefStrength` — weighted completeness summing to 100, held
+  below the ready line until all five core facts are in. See "Readiness threshold" below.
 - `stableStringify` — key-sorted comparison, because `jsonb` reorders keys.
 - `readBriefFromMetadata` / `persistBrief`.
 
@@ -948,6 +948,50 @@ versioned payload and unknown fields ignorable, rather than a shared package.
 | `intent` contradiction | **Found in testing:** correcting "3 React devs" to 2 made the model relabel a four-person brief `single_hire`. Now forced to `team_hire` in code when the brief describes >1 person. |
 | Invented must-haves | **Found in testing:** "we're a fintech" became a must-have of "Fintech experience". Prompt now says a fact about the visitor's own company is not a must-have. |
 
+### Readiness threshold
+
+The first weighting was placeholder engineering judgement standing in for a sales
+decision. Reviewed with the director and replaced.
+
+**The five core facts** — role title, how many, tech stack, seniority, timeline. These are
+what a rep cannot run a call without: no title means nothing to source, no timeline means
+no way to separate a live deal from browsing, seniority is a large rate and pipeline
+difference. Everything else only changes how the call is pitched.
+
+**The flaw this fixed.** The original score was purely additive, so soft context alone
+could cross the line. A visitor giving industry, goals, stack, timeline, region,
+engagement, team and must-haves — but never naming a role — scored 75 and would have told
+CE the brief was ready to quote. Weighting alone does not close this either: a brief
+missing only seniority still reaches 85. So `computeBriefStrength` now **caps the score at
+69 while any core fact is missing**. The one number crossing the wire carries the whole
+rule, and CE needs no second check.
+
+| | Field | Was | Now |
+|---|---|---|---|
+| Core | Role title | 15 | 15 |
+| Core | Tech stack | 12 | 15 |
+| Core | Timeline | 10 | 15 |
+| Core | Seniority | **0 — not scored** | 15 |
+| Core | Headcount / counts | 10 | 10 |
+| Context | Goals / why now | 8 | 10 |
+| Context | Company context | 6 | 7 |
+| Context | Engagement type | 8 | 5 |
+| Context | Existing team | 4 | 4 |
+| Context | Region | 8 | **2** |
+| Context | Must-haves | 4 | 2 |
+| — | `intent` | 15 | **0 — removed** |
+
+Core sums to exactly 70, so all five core facts alone means ready and context takes it
+towards 100. Context sums to 30 and can never reach the line by itself.
+
+Two calls worth recording. `intent` stopped scoring because it is *derived* from the other
+fields rather than being something the visitor said, so it was inflating every brief by 15
+for free. `regions` dropped to near-nothing because Cloud Employee largely determines where
+staff come from — a stated preference is information, not qualification.
+
+`seniority` has no meaning for a `product_build` brief, which describes a delivery team
+rather than named seats, so `goals` stands in for it there.
+
 ### Verification
 
 Ran three real turns against the CE workspace on the dev server, then deleted the test
@@ -957,9 +1001,12 @@ session and its three gap rows:
    Turn with new info → version 2, headcount 2 → 3, GDPR captured, earlier facts intact.
 3. `chat_sessions.metadata` held `brief` at version 2 **and** `summary` — the write
    ordering was the thing most likely to break silently.
-4. Unit-level checks on the gate, the strength thresholds, and coercion of invalid
-   intents / regions / engagement types / untitled roles.
-5. Every commit typechecked in isolation via `git worktree`; `npm run build` passed.
+4. Unit-level checks on the gate and on coercion of invalid intents / regions /
+   engagement types / untitled roles.
+5. Scored seven briefs against the readiness rule: all-context-no-role → 60 (not ready);
+   core only → 70 (ready); everything but seniority → capped 69 (not ready); product
+   build with a pod → 87 (ready); one role alone → 25; empty → 0.
+6. Every commit typechecked in isolation via `git worktree`; `npm run build` passed.
 
 ### Files
 

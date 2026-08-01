@@ -83,19 +83,43 @@ Read the WHOLE conversation. Where the visitor corrected themselves, use their m
 
 Output STRICT JSON only: no prose, no explanation, no markdown fences. If there is nothing you are confident about, return {"intent":"unknown"}.`;
 
-/** Weighted field completeness. Sums to 100; CE treats 70+ as "brief ready". */
+/** CE's page treats this as "brief ready" and offers the call. */
+export const BRIEF_READY_THRESHOLD = 70;
+
+/** Ceiling while any core fact is missing — one below the ready line. */
+const BRIEF_INCOMPLETE_CORE_CAP = BRIEF_READY_THRESHOLD - 1;
+
+/**
+ * Weighted field completeness, summing to 100 and split by what the number is
+ * for. Core is what a salesperson cannot run a call without — no role title
+ * means nothing to source, no timeline means no way to tell a live deal from
+ * browsing. Context only changes how they pitch.
+ *
+ * Core sums to exactly BRIEF_READY_THRESHOLD, so a brief carrying all five core
+ * facts is ready on the strength of those alone and context takes it towards
+ * 100. Context sums to the remaining 30 and can therefore never reach the line
+ * by itself. `people` is worth least because a named role already answers it.
+ *
+ * `intent` is deliberately unweighted: it is derived from these fields rather
+ * than being something the visitor told us, so scoring it inflated every brief
+ * by 15 for free.
+ */
 const STRENGTH_WEIGHTS = {
-  intent: 15,
+  // Core — deal-shaping. 70 total.
   roleShape: 15,
+  techStacks: 15,
+  timeline: 15,
+  seniority: 15,
   people: 10,
-  techStacks: 12,
-  timeline: 10,
-  regions: 8,
-  engagement: 8,
-  goals: 8,
-  companyContext: 6,
+  // Context — pitch-shaping. 30 total. Regions rank lowest because Cloud
+  // Employee largely determines where staff come from, so a stated preference is
+  // information but not qualification.
+  goals: 10,
+  companyContext: 7,
+  engagement: 5,
   teamContext: 4,
-  mustHaves: 4,
+  regions: 2,
+  mustHaves: 2,
 } as const;
 
 /** One conversation turn as the extractor needs it — role and text, nothing else. */
@@ -334,6 +358,33 @@ function briefContent(brief: Brief): BriefContent {
   return content;
 }
 
+/** The five facts a salesperson needs before the call is worth taking. */
+export interface BriefCoreFacts {
+  role: boolean;
+  people: boolean;
+  stack: boolean;
+  seniority: boolean;
+  timeline: boolean;
+}
+
+export function briefCoreFacts(content: BriefContent): BriefCoreFacts {
+  // A product build has a pod where a hire has roles; either answers "who".
+  const role = (content.roles?.length ?? 0) + (content.suggestedPod?.length ?? 0) > 0;
+
+  return {
+    role,
+    people: typeof content.headcount === 'number' || role,
+    stack: (content.techStacks?.length ?? 0) > 0,
+    // A delivery team is not quoted per seat, so no seniority is ever stated for
+    // one. What the build is for carries the same weight there, and stands in.
+    seniority:
+      content.intent === 'product_build'
+        ? Boolean(content.goals)
+        : (content.roles ?? []).some((role) => Boolean(role.seniority)),
+    timeline: Boolean(content.timeline),
+  };
+}
+
 /**
  * Deterministic strength, computed here rather than asked of the model: a
  * model-invented 0-100 wanders between turns, and this number drives a progress
@@ -344,25 +395,31 @@ function briefContent(brief: Brief): BriefContent {
  */
 export function computeBriefStrength(content: BriefContent): number {
   const W = STRENGTH_WEIGHTS;
+  const core = briefCoreFacts(content);
   let score = 0;
 
-  if (content.intent !== 'unknown') score += W.intent;
+  if (core.role) score += W.roleShape;
+  if (core.people) score += W.people;
+  if (core.stack) score += W.techStacks;
+  if (core.seniority) score += W.seniority;
+  if (core.timeline) score += W.timeline;
 
-  // A product build has a pod where a hire has roles; either answers "who".
-  const hasRoleShape = (content.roles?.length ?? 0) + (content.suggestedPod?.length ?? 0) > 0;
-  if (hasRoleShape) score += W.roleShape;
-  if (typeof content.headcount === 'number' || hasRoleShape) score += W.people;
-
-  if ((content.techStacks?.length ?? 0) > 0) score += W.techStacks;
-  if (content.timeline) score += W.timeline;
-  if ((content.regions?.length ?? 0) > 0) score += W.regions;
-  if (content.engagement) score += W.engagement;
   if (content.goals) score += W.goals;
   if (content.companyContext) score += W.companyContext;
+  if (content.engagement) score += W.engagement;
   if (content.teamContext) score += W.teamContext;
+  if ((content.regions?.length ?? 0) > 0) score += W.regions;
   if ((content.mustHaves?.length ?? 0) > 0) score += W.mustHaves;
 
-  return Math.min(100, score);
+  score = Math.min(100, score);
+
+  // Hold the score under the ready line until every core fact is in, so the one
+  // number crossing the wire carries the whole rule and CE needs no second
+  // check. Weighting alone would not do it: a brief missing only seniority still
+  // reaches 90, and would announce itself ready to quote.
+  return Object.values(core).every(Boolean)
+    ? score
+    : Math.min(score, BRIEF_INCOMPLETE_CORE_CAP);
 }
 
 /** How many people the brief describes, by whichever field says the most. */
