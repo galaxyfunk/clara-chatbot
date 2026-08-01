@@ -4,6 +4,22 @@ Track of what shipped in each version. One paragraph per release.
 
 ---
 
+## CLARA-2 — `brief_update` for Cloud Employee's /ask page
+**Status:** ✅ COMPLETE
+**Date:** July 30, 2026
+
+Cloud Employee's `/ask` page builds a structured hiring brief beside the conversation and had nothing to build it from — Clara emitted only `token`, `done` and `error`. This adds a per-turn extraction pass and one new SSE event, `brief_update`, enqueued after the token loop and before `done`. The **complete** brief goes over the wire every time rather than a patch: merging partials across a network is where drift and irreproducible bugs live, and a brief is a few hundred bytes. CE replaces wholesale when `version` increases and ignores anything stale. New `src/types/brief.ts` mirrors the contract from CE's `site/src/lib/ask/brief.ts` field-for-field (decision D3 — two hand-maintained copies, versioned payload, unknown fields ignorable). New `src/lib/chat/extract-brief.ts` is built in the image of `summarize.ts` but on Claude Haiku 4.5 rather than Sonnet, because it runs every meaningful turn instead of once per session; it carries an 8s timeout (`done` queues behind it), `maxRetries: 1`, `temperature: 0`, and never throws — a failed extraction costs the visitor nothing but a missing canvas update. Only fields the visitor actually stated are filled; every field is coerced or dropped, never repaired, because CE renders absent fields as dashed "Clara will ask next" prompts and a human reads this brief before a sales call. `strength` (0-100, CE treats 70+ as "brief ready") is computed from weighted field completeness in code, not asked of the model, because it drives a meter that must only climb as the visitor says more. Extraction is skipped on turns that cannot move the brief (`shouldExtractBrief` rejects greetings, bare emails, and pure Q&A like "what are your terms?"), and an unchanged brief is still re-sent at its existing version so a client that reloaded mid-conversation repaints. Persisted to `chat_sessions.metadata.brief` via `persistBrief()`, which re-reads `metadata` immediately before writing so it cannot clobber the summary written earlier in the same turn — and is deliberately ordered after the summary block in `postProcess` for the same reason. Non-streaming path persists the brief in `after()` but does not add it to the JSON response: `/ask` uses streaming, so blocking every non-streaming reply on an extraction call would buy latency nobody reads. New env var `ASK_BRIEF_WORKSPACE_IDS` (comma-separated) restricts which workspaces spend app-level Anthropic credit; unset means all, so `/ask` works without configuration. One behavioural guard found in testing: correcting "3 React devs" down to 2 made the model relabel a four-person brief as `single_hire`, which would have swapped CE's team board for a one-person card — a brief describing more than one person is now forced to `team_hire` in code. Verified live against the CE workspace over three real turns (event order, version increment, spend gate, and `metadata.brief` coexisting with `metadata.summary`), with the test rows deleted afterwards. No widget changes; HubSpot and Calendly untouched (the existing Calendly webhook already closes that loop). `personality_prompt` — teaching Clara to *ask* one question at a time rather than *answer* — is a dashboard edit, not part of this change.
+
+---
+
+## Maintenance — Claude model IDs refreshed to the 4.5/4.6 generation
+**Status:** ✅ COMPLETE
+**Date:** July 30, 2026
+
+App-level extraction calls (`summarize.ts`, `extract-qa.ts`, `improve-qa.ts`) were pinned to `claude-sonnet-4-20250514` and now use `claude-sonnet-4-6`. The user-facing model picker (`src/types/api-keys.ts`, plus the defaults in the API Keys tab and onboarding wizard) now offers Sonnet 4.6, Opus 4.5 and Haiku 4.5. Existing rows in `api_keys` keep whatever model ID they were saved with — this changes the menu and the app-level defaults, not stored user selections. No schema change.
+
+---
+
 ## chat-activity-slack Session 1 — Live Chat Notifications in Slack
 **Status:** ✅ COMPLETE
 **Date:** May 15, 2026

@@ -85,7 +85,7 @@ User-provided LLM API keys, encrypted at rest with AES-256-GCM. Only `key_last4`
 | `id` | uuid | NOT NULL | `gen_random_uuid()` | Primary key |
 | `workspace_id` | uuid | NOT NULL | — | FK → workspaces(id) ON DELETE CASCADE |
 | `provider` | text | NOT NULL | — | CHECK: `'openai'` or `'anthropic'` |
-| `model` | text | NOT NULL | — | e.g. `claude-sonnet-4-20250514`, `gpt-4o` |
+| `model` | text | NOT NULL | — | e.g. `claude-sonnet-4-6`, `gpt-4o` |
 | `encrypted_key` | text | NOT NULL | — | AES-256-GCM encrypted. Format: `iv:authTag:ciphertext` (hex-encoded) |
 | `key_last4` | text | NOT NULL | — | Last 4 characters of the raw key (for display) |
 | `label` | text | YES | — | User-defined label (e.g. "Production Key") |
@@ -100,8 +100,9 @@ User-provided LLM API keys, encrypted at rest with AES-256-GCM. Only `key_last4`
 
 | Provider | Model ID | Display Name |
 |----------|----------|-------------|
-| anthropic | `claude-sonnet-4-20250514` | Claude Sonnet |
-| anthropic | `claude-haiku-4-5-20251001` | Claude Haiku |
+| anthropic | `claude-sonnet-4-6` | Claude Sonnet 4.6 |
+| anthropic | `claude-opus-4-5-20251101` | Claude Opus 4.5 |
+| anthropic | `claude-haiku-4-5-20251001` | Claude Haiku 4.5 |
 | openai | `gpt-4o` | GPT-4o |
 | openai | `gpt-4o-mini` | GPT-4o Mini |
 | openai | `gpt-4.1` | GPT-4.1 |
@@ -144,18 +145,36 @@ Conversation logs. Each visitor session is identified by a client-generated UUID
 | `workspace_id` | uuid | NOT NULL | — | FK → workspaces(id) ON DELETE CASCADE |
 | `session_token` | text | NOT NULL | — | Client-generated UUID (stored in sessionStorage) |
 | `messages` | jsonb | NOT NULL | `'[]'` | Array of ChatMessage objects (see below) |
-| `summary` | jsonb | YES | `NULL` | **v1.1 forward-compat.** AI-generated session summary. Not used in v1.0. |
-| `metadata` | jsonb | YES | `'{}'` | Flexible store |
+| `summary` | jsonb | YES | `NULL` | **Never written.** Kept from the v1.0 schema. The live summary is `metadata.summary` — see the warning below. |
+| `metadata` | jsonb | YES | `'{}'` | Flexible store. Keys in active use listed below. |
 | `visitor_name` | text | YES | — | Optional visitor identification |
 | `visitor_email` | text | YES | — | Optional visitor identification |
 | `escalated` | boolean | NOT NULL | `false` | Whether escalation was offered |
 | `escalated_at` | timestamptz | YES | — | Timestamp of first escalation |
+| `slack_thread_ts` | text | YES | `NULL` | Slack `ts` of the chat-activity parent message (chat-activity-slack-1). Set only on the workspace matching `CHAT_ACTIVITY_WORKSPACE_ID`; NULL elsewhere and when the start post failed. |
 | `created_at` | timestamptz | NOT NULL | `now()` | |
 | `updated_at` | timestamptz | NOT NULL | `now()` | Auto-updated via trigger |
 
-**Column count:** 11
+**Column count:** 12
 
 **Unique constraint:** `(workspace_id, session_token)` — one session per workspace per token.
+
+> **Read `metadata.summary`, not the `summary` column.** The `summary` column has never
+> been written to. Reading it instead of `metadata.summary` is a real bug that shipped
+> once already (the Calendly handler in v1.1 Session 9C).
+
+**`metadata` keys in active use:**
+
+| Key | Written by | Shape |
+|-----|-----------|-------|
+| `summary` | `summarizeConversation()` via the engine | `ConversationSummary` (`src/types/chat.ts`) |
+| `summarized_at` | same | ISO timestamp — also the "already summarised" guard |
+| `brief` | `persistBrief()` (CLARA-2) | `Brief` (`src/types/brief.ts`), complete document including its own `version` |
+| `brief_updated_at` | same | ISO timestamp |
+
+Anything writing to `metadata` must spread the **current** value rather than a copy read
+earlier in the same request, or it will silently drop a sibling key. `persistBrief()`
+re-reads the column immediately before writing for exactly this reason.
 
 **ChatMessage JSONB structure** (each element in the `messages` array):
 
@@ -252,11 +271,12 @@ Per-call Sales Coach output. One row per Fireflies meeting that the orchestrator
 | `slack_parent_ts` | text | YES | — | Slack timestamp of the parent message |
 | `slack_thread_ts` | text | YES | — | Slack timestamp of the thread reply with the full coaching |
 | `status` | text | NOT NULL | — | CHECK: `'analyzed'`, `'failed'`, or `'skipped'`. (`failed` reserved — failures don't currently insert, but kept in the CHECK for forward-compat.) |
-| `error_message` | text | YES | — | For `skipped` rows: the filter reason (`no_external_attendee` / `no_attendees`). Reserved for `failed` if we ever start persisting them. |
+| `call_type` | text | YES | `NULL` | CHECK: `NULL` or `'sales'` / `'internal'` / `'recruitment'` / `'other'`. Classifier verdict (sales-coach-2.2). NULL on rows written before the classifier existed. |
+| `error_message` | text | YES | — | Reserved for `failed` if we ever start persisting them. **No longer holds a skip reason** — since sales-coach-2.2 a non-sales skip is recorded in `call_type` and this stays NULL. |
 | `analyzed_at` | timestamptz | NOT NULL | `now()` | When this analysis was produced. Re-analyze writes a new value. |
 | `created_at` | timestamptz | NOT NULL | `now()` | First-insert timestamp |
 
-**Column count:** 20
+**Column count:** 21
 
 **Unique constraint:** `(workspace_id, fireflies_meeting_id)` — one analysis per meeting per workspace (re-analyze deletes the old row before inserting the new one).
 
@@ -336,6 +356,7 @@ You are Clara, a friendly and knowledgeable virtual assistant. Your primary role
 | `idx_agent_prompts_workspace` | agent_prompts | B-tree | `workspace_id` | |
 | `idx_sales_call_analyses_workspace_created` | sales_call_analyses | B-tree | `workspace_id, created_at DESC` | History queries (newest first) |
 | `idx_sales_call_analyses_workspace_status` | sales_call_analyses | B-tree | `workspace_id, status` | Filter by status (analyzed/skipped) |
+| `idx_sales_call_analyses_workspace_call_type` | sales_call_analyses | B-tree | `workspace_id, call_type` | Filter by classifier verdict (sales-coach-2.2) |
 
 **Scaling note:** The IVFFlat vector index is optimal up to ~100K rows with `lists = 50`. At that scale, rebuild with `lists = 300` (one SQL command). At 500K+ rows, consider switching to HNSW.
 

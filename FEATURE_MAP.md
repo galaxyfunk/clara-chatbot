@@ -522,3 +522,35 @@ Maps every feature to its owning files. Organized by feature area.
 - **Description:** Fixed scrollToBottom() to target correct scrollable parent (`body`/`cb-body` with `overflow-y: auto`), added scroll calls after message insertion, added spacing below suggestion chips
 - **Files Modified:** `public/widget.js` (scrollToBottom target, addUserMessage, addAssistantMessage, suggestionsContainer margin)
 - **Session:** v1.1-9C
+
+---
+
+## Ask Clara Integration
+
+### Hiring Brief Extraction (`brief_update`)
+- **Description:** Per-turn extraction of a structured hiring brief from the conversation, emitted to Cloud Employee's `/ask` page as a `brief_update` SSE event between the token loop and `done`. Complete brief every time, never a patch. Only fields the visitor actually stated are filled — absent fields render on CE as dashed "Clara will ask next" prompts.
+- **Page:** N/A (consumed by CE's `/ask`, a separate app)
+- **API Routes:** `src/app/api/chat/route.ts` (unchanged — the event rides the existing stream)
+- **Components:** None. **No widget changes.**
+- **Lib Modules:** `src/lib/chat/extract-brief.ts` (Haiku 4.5 extraction, coerce-or-drop validation, merge over stored brief, deterministic `strength`, `shouldExtractBrief` spend gate, `isBriefExtractionEnabled` workspace gate, `persistBrief`), `src/lib/chat/engine.ts` (emission in `processChatStream`, persistence in `postProcess`, background mirror in `processChat`)
+- **Types:** `src/types/brief.ts` — mirror of CE's `site/src/lib/ask/brief.ts`. **Keep in sync field-for-field.**
+- **DB Tables:** `chat_sessions.metadata.brief` (no DDL — existing JSONB column)
+- **Env Vars:** `ASK_BRIEF_WORKSPACE_IDS` (optional; unset = every workspace extracts)
+- **Track / Session:** CLARA-2
+
+### CORS Allow-List for CE Origins
+- **Description:** Shared origin allow-list so `/ask` can reach Clara from CE staging and preview hosts. Lifted out of two duplicated copies.
+- **Lib Modules:** `src/lib/cors.ts`
+- **API Routes:** `src/app/api/chat/route.ts`, `src/app/api/workspace/public/route.ts`
+- **Env Vars:** `CLARA_EXTRA_ALLOWED_ORIGINS` (comma-separated)
+- **Known wart:** an unrecognised origin is echoed the FIRST allowed origin rather than refused — permissive by accident, inherited, documented in `cors.ts`.
+- **Track / Session:** CLARA-1
+
+---
+
+## Maintenance
+
+### Claude Model IDs — 4.5/4.6 Generation
+- **Description:** App-level extraction calls moved from `claude-sonnet-4-20250514` to `claude-sonnet-4-6`; model picker now offers Sonnet 4.6, Opus 4.5, Haiku 4.5. Stored `api_keys.model` values are untouched.
+- **Files Modified:** `src/lib/chat/summarize.ts`, `src/lib/chat/extract-qa.ts`, `src/lib/chat/improve-qa.ts`, `src/types/api-keys.ts`, `src/components/settings/api-keys-tab.tsx`, `src/components/onboarding/onboarding-wizard.tsx`
+- **Session:** July 30, 2026

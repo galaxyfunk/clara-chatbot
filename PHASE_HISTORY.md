@@ -885,3 +885,107 @@ public/widget.js                    — scrollToBottom fix + chip spacing
 3. `config: set lead_source to Clara for chatbot-originated bookings`
 4. `feat: rewrite summary prompt for staffing sales context with detailed output`
 5. `fix: add spacing below suggestion chips and auto-scroll on message insert`
+
+---
+
+## CLARA-2 — `brief_update` for Cloud Employee's /ask
+**Date:** July 30, 2026
+**Status:** ✅ Complete
+**Consumer:** `galaxyfunk/mygratr` → `/ask` (a separate app hitting the same API)
+
+### Why
+
+CE's `/ask` page shows a conversation on the left and a hiring brief that fills in on
+the right. The frontend was built and signed off against fixtures. Clara emitted only
+`token`, `done` and `error`, so there was nothing real to fill the brief with. This was
+the whole Clara-side build; CLARA-1 (CORS + booking regex) had already shipped.
+
+### What Was Built
+
+**`src/types/brief.ts`** — mirror of the contract in CE's `site/src/lib/ask/brief.ts`:
+`Brief`, `BriefIntent`, `BriefRegion`, `BriefEngagement`, `BriefRole`, `BriefMustHave`,
+`BriefPodSlot`, plus `BriefContent` (a Brief minus `version`, used for change detection)
+and `BriefUpdateEvent`. Decision D3 was settled as two hand-maintained copies with a
+versioned payload and unknown fields ignorable, rather than a shared package.
+
+**`src/lib/chat/extract-brief.ts`** — cloned from `summarize.ts` in shape, with:
+- `claude-haiku-4-5-20251001`, `max_tokens: 900`, `temperature: 0`, `timeout: 8000`,
+  `maxRetries: 1`. Haiku not Sonnet because this runs every meaningful turn.
+- `shouldExtractBrief(message)` — pure spend gate. Rejects sub-3-char messages,
+  greetings/acks, bare emails, and questions about CE that say nothing about the
+  visitor. Biased towards running: a missed brief update is more visible than one
+  wasted call.
+- `isBriefExtractionEnabled(workspaceId)` — `ASK_BRIEF_WORKSPACE_IDS` gate, unset = all.
+- `extractBrief(conversation, previousBrief)` — never throws; returns
+  `{ success, brief?, changed, error? }`.
+- Coerce-or-drop validation for every field, with length/count caps.
+- `mergeBriefContent` — previous brief as base, extracted fields overwrite where
+  present. `'unknown'` intent never overwrites a known one.
+- `computeBriefStrength` — weighted completeness summing to 100. `roles` OR
+  `suggestedPod` satisfies the "who" weighting so product briefs can also reach ready.
+- `stableStringify` — key-sorted comparison, because `jsonb` reorders keys.
+- `readBriefFromMetadata` / `persistBrief`.
+
+**`src/lib/chat/engine.ts`** — three wiring points:
+- `prepareChatContext` now selects `metadata` and carries it on `context.existingSession`.
+- `processChatStream`: extraction runs inside the stream after the token loop, the
+  `brief_update` event is enqueued before `done`, and the new brief is handed to
+  `postProcess` through a closure variable so it is not computed twice.
+- `postProcess`: `persistBrief` runs **after** the summary block, because the summary
+  writes `metadata` by spreading a copy it read earlier; `persistBrief` re-reads the
+  column, so that order lets both survive the same turn.
+- `processChat` (non-streaming): same extraction in `after()`, persistence only, not
+  added to the JSON response.
+
+### Decisions and Corrections
+
+| Thing | Call |
+|---|---|
+| Patch vs whole document | Whole document every time. Merging partials across a network is where drift lives. |
+| Who computes `strength` | Clara, deterministically. A model-generated score wanders between turns and this drives a meter. |
+| Unchanged brief | Still re-emitted at its existing version, so a client that reloaded repaints for free. |
+| Empty first turn | Emit nothing rather than publish an empty brief and burn version 1. |
+| `intent` contradiction | **Found in testing:** correcting "3 React devs" to 2 made the model relabel a four-person brief `single_hire`. Now forced to `team_hire` in code when the brief describes >1 person. |
+| Invented must-haves | **Found in testing:** "we're a fintech" became a must-have of "Fintech experience". Prompt now says a fact about the visitor's own company is not a must-have. |
+
+### Verification
+
+Ran three real turns against the CE workspace on the dev server, then deleted the test
+session and its three gap rows:
+1. Event order on the wire: 8 × `token`, then `brief_update`, then `done`.
+2. Turn 1 → version 1. Pure Q&A turn → version 1 re-sent, no extraction spent.
+   Turn with new info → version 2, headcount 2 → 3, GDPR captured, earlier facts intact.
+3. `chat_sessions.metadata` held `brief` at version 2 **and** `summary` — the write
+   ordering was the thing most likely to break silently.
+4. Unit-level checks on the gate, the strength thresholds, and coercion of invalid
+   intents / regions / engagement types / untitled roles.
+5. Every commit typechecked in isolation via `git worktree`; `npm run build` passed.
+
+### Files
+
+```
+src/types/brief.ts             — NEW. Contract mirror.
+src/lib/chat/extract-brief.ts  — NEW. Extraction, merge, strength, gates, persistence.
+src/lib/chat/engine.ts         — metadata on context; emit in stream; persist in postProcess
+```
+
+### Not In Scope
+
+Widget UI. HubSpot/Calendly (the existing Calendly webhook already links a booking to a
+session via `utm_content`; CE only has to pass the session token). `personality_prompt`
+— teaching Clara to *ask* rather than *answer* is a dashboard edit, and it is the
+change that will most affect how `/ask` feels.
+
+### Shipped alongside
+
+Three phases that had been sitting uncommitted in the working tree were committed in the
+same PR, because CLARA-2's engine changes share a file with the chat-activity hooks and
+would not have built alone: the Claude model-ID refresh, sales-coach-2.2 (call-type
+classifier), and chat-activity-slack-1.
+
+### Git Commits
+1. `chore(models): refresh Claude model IDs to the 4.5/4.6 generation`
+2. `feat(sales-coach): classify call type before analysing, not just attendees`
+3. `feat(chat): post chat sessions to Slack and deep-link back to the dashboard`
+4. `feat(ask): emit brief_update so CE can paint a hiring brief live (CLARA-2)`
+5. `docs: record sales-coach-2.2 and chat-activity-slack-1`
