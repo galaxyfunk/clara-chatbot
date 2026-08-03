@@ -12,6 +12,14 @@ Cloud Employee's `/ask` page builds a structured hiring brief beside the convers
 
 ---
 
+## Chat — qualifying questions are now conditional, not compulsory
+**Status:** ✅ COMPLETE
+**Date:** August 3, 2026
+
+Response rule 4 in the engine's system prompt hardcoded "End every response with a qualifying question", unconditionally, for every workspace. Clara therefore could not simply answer a question: someone asking what regions we hire from got a qualification attempt bolted onto the answer, which reads as pushy and defeats the FAQ half of what the CE `/ask` page is for. The rule now distinguishes the two cases — when the visitor is describing their own situation, end with one question that moves it forward; when they ask a general question about the company, process or industry, answer it and stop. It also keeps the existing one-question-at-a-time constraint, which was previously only enforced by individual workspace prompts. The hardcoded field list ("role type, tech stack, team size, timeline, hiring experience") was dropped rather than corrected: it had already drifted from the brief contract (no seniority, and "hiring experience" maps to nothing), and duplicating the qualification list in both the engine and each `personality_prompt` is what let it drift. The list now lives only in the workspace prompt, which is where it can be edited without a deploy. Note that a workspace prompt can still force a question on every turn independently of this rule, so the CE prompt needs the matching change to see the benefit.
+
+---
+
 ## Maintenance — Claude model IDs refreshed to the 4.5/4.6 generation
 **Status:** ✅ COMPLETE
 **Date:** July 30, 2026

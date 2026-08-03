@@ -838,7 +838,7 @@ ${contextBlock}
 1. Answer using the knowledge base context above as your primary source.
 2. If the knowledge base doesn't fully cover the question, use your general knowledge to give a helpful answer — but be upfront when you're going beyond what's in the knowledge base. Never just say "I don't know" and stop.
 3. Keep responses SHORT — 2-3 sentences maximum. No paragraphs. Be conversational and direct.
-4. End every response with a qualifying question to learn more about the visitor's needs (role type, tech stack, team size, timeline, hiring experience).
+4. When the visitor is describing their own situation or needs, end your response with ONE question that moves that forward. When they ask a general question about the company, the process or the industry, answer it and stop. Do not append a qualifying question to an answer nobody asked for. Never ask more than one question in a response.
 5. Never use bullet points or numbered lists in your answer. Write in natural conversational sentences.
 
 ${responseFormatSection}`;
