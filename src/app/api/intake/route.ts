@@ -2,7 +2,17 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { getCorsHeaders } from '@/lib/cors';
 import { parseFile } from '@/lib/files/parse';
-import { capJobDescription, generateIntakeOpening } from '@/lib/chat/intake-brief';
+import {
+  capJobDescription,
+  generateIntakeOpening,
+  generateIntakeOpeningFromVisual,
+} from '@/lib/chat/intake-brief';
+import {
+  buildVisualBlock,
+  extensionOf,
+  imageMediaType,
+  isAcceptedExtension,
+} from '@/lib/files/intake-document';
 import type { ChatMessage } from '@/types/chat';
 
 /**
@@ -28,7 +38,6 @@ import type { ChatMessage } from '@/types/chat';
 
 /** Must not exceed parseFile's own 4MB ceiling, and the CE form must match it. */
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = ['pdf', 'docx'] as const;
 
 /** Uploads per IP per window. Deliberately tight: a real visitor uploads once. */
 const RATE_LIMIT_MAX = 5;
@@ -96,9 +105,12 @@ export async function POST(request: Request) {
     // Validate before spending anything. Extension first: it is the cheapest
     // check and the one the browser's `accept` attribute cannot be trusted for,
     // because a drag-and-drop bypasses it entirely.
-    const ext = file.name.toLowerCase().split('.').pop() ?? '';
-    if (!ALLOWED_EXTENSIONS.includes(ext as (typeof ALLOWED_EXTENSIONS)[number])) {
-      return fail('Please upload a PDF or DOCX file.', 400);
+    const ext = extensionOf(file.name);
+    if (!isAcceptedExtension(ext)) {
+      return fail(
+        'Please upload a PDF, Word, Pages, or text document - or a screenshot of the role.',
+        400
+      );
     }
     if (file.size > MAX_FILE_BYTES) {
       return fail('That file is too large. The limit is 4MB.', 400);
@@ -118,23 +130,59 @@ export async function POST(request: Request) {
       return fail('Workspace not found', 404);
     }
 
-    // ── Extract ──
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const parsed = await parseFile(buffer, file.name);
-
-    if (!parsed.success || !parsed.text) {
-      // parseFile's errors are already visitor-safe ("convert your .doc", "the
-      // document appears to be empty") and describe the file, never its content.
-      return fail(parsed.error ?? 'We could not read that document.', 422);
-    }
-
-    const jobDescription = capJobDescription(parsed.text);
-
     // ── Read it ──
-    const opening = await generateIntakeOpening(jobDescription);
-    if (!opening.success || !opening.opening) {
-      console.error('[Intake] Opening generation failed for', file.name, opening.error);
-      return fail('We could not read that document. Please try again.', 502);
+    //
+    // Two routes. Text is extracted locally where the bytes contain text at all;
+    // anything that is a PICTURE of a document - a screenshot, a scan, a Pages
+    // preview - goes to Claude, which reads PDFs and images natively.
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const directImageType = imageMediaType(ext);
+
+    let jobDescription: string;
+    let openingText: string;
+    // True when we could only read part of the document - currently the .pages
+    // case, where Apple's embedded preview covers the first page alone.
+    let partialRead = false;
+
+    if (directImageType) {
+      const visual = await generateIntakeOpeningFromVisual(
+        buildVisualBlock(directImageType, buffer)
+      );
+      if (!visual.success || !visual.opening) {
+        console.error('[Intake] Visual read failed for', file.name, visual.error);
+        return fail('We could not read that image. Please try again.', 502);
+      }
+      jobDescription = visual.jobDescription ?? '';
+      openingText = visual.opening;
+    } else {
+      const parsed = await parseFile(buffer, file.name);
+
+      if (parsed.success && parsed.text) {
+        jobDescription = capJobDescription(parsed.text);
+        const opening = await generateIntakeOpening(jobDescription);
+        if (!opening.success || !opening.opening) {
+          console.error('[Intake] Opening generation failed for', file.name, opening.error);
+          return fail('We could not read that document. Please try again.', 502);
+        }
+        openingText = opening.opening;
+      } else if (parsed.visualFallback) {
+        // No selectable text, but the bytes are readable by eye: a scanned PDF,
+        // or the preview lifted out of a .pages bundle.
+        const visual = await generateIntakeOpeningFromVisual(
+          buildVisualBlock(parsed.visualFallback.mediaType, parsed.visualFallback.buffer)
+        );
+        if (!visual.success || !visual.opening) {
+          console.error('[Intake] Visual fallback failed for', file.name, visual.error);
+          return fail(parsed.error ?? 'We could not read that document.', 422);
+        }
+        jobDescription = visual.jobDescription ?? '';
+        openingText = visual.opening;
+        partialRead = Boolean(parsed.visualFallback.partial) && Boolean(jobDescription);
+      } else {
+        // parseFile's errors are already visitor-safe ("export it as a PDF", "the
+        // document appears to be empty") and describe the file, never its content.
+        return fail(parsed.error ?? 'We could not read that document.', 422);
+      }
     }
 
     // ── Seed the session ──
@@ -149,17 +197,29 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const sessionToken = crypto.randomUUID();
 
+    // An upload we could open but not read as a job description (a screenshot of
+    // something else, an illegible scan) still opens a conversation - Clara's
+    // opening says so and asks them to describe the role. Saying "its full text
+    // follows" with nothing after it would be a lie told to the model.
+    const seedContent = jobDescription
+      ? `[The visitor uploaded a job description: "${file.name}".${
+          partialRead
+            ? ' Only the FIRST PAGE could be read - what follows may be incomplete, so do not assume anything absent from it is genuinely absent from the role.'
+            : ' Its full text follows.'
+        } Treat it as their hiring requirement throughout this conversation.]\n\n${jobDescription}`
+      : `[The visitor uploaded a file ("${file.name}") but no job description could be read from it. Ask them to describe the role instead; do not claim to have read anything.]`;
+
     const messages: ChatMessage[] = [
       {
         message_id: crypto.randomUUID(),
         role: 'user',
-        content: `[The visitor uploaded a job description: "${file.name}". Its full text follows. Treat it as their hiring requirement throughout this conversation.]\n\n${jobDescription}`,
+        content: seedContent,
         timestamp: now,
       },
       {
         message_id: crypto.randomUUID(),
         role: 'assistant',
-        content: opening.opening,
+        content: openingText,
         timestamp: now,
       },
     ];
@@ -192,7 +252,7 @@ export async function POST(request: Request) {
       {
         success: true,
         session_token: sessionToken,
-        greeting: opening.opening,
+        greeting: openingText,
         filename: file.name,
       },
       { headers: cors }
