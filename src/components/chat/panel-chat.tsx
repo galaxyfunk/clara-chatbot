@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { WorkspaceSettings } from '@/types/workspace';
-import type { ChatSeed } from './chat-window';
+import { AttachmentChip, type ChatSeed } from './chat-window';
 
 // ============================================================
 // DESIGN TOKENS — Cloud Employee brand colors (hardcoded)
@@ -433,6 +433,9 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
             ))}
           </div>
         )}
+
+        {/* Uploaded document, shown as a chip rather than as thread text */}
+        {seed?.filename ? <AttachmentChip filename={seed.filename} /> : null}
 
         {/* Conversation messages */}
         {messages.map((msg) => (

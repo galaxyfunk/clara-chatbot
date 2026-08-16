@@ -38,7 +38,11 @@ export default function PublicChatPage() {
   // is the only route by which a seed can arrive here.
   const seedToken = searchParams.get('session');
   const seed = seedToken
-    ? { sessionToken: seedToken, greeting: searchParams.get('greeting') ?? '' }
+    ? {
+        sessionToken: seedToken,
+        greeting: searchParams.get('greeting') ?? '',
+        filename: searchParams.get('filename') ?? '',
+      }
     : null;
 
   const [settings, setSettings] = useState<PublicSettings | null>(null);

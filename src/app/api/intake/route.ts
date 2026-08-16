@@ -185,8 +185,16 @@ export async function POST(request: Request) {
       return fail('We could not start that conversation. Please try again.', 500);
     }
 
+    // `filename` is returned so the widget can show an attachment chip. The JD
+    // text itself is deliberately NOT returned: it is server-side context for
+    // Clara, not something to paint into the thread as a wall of text.
     return NextResponse.json(
-      { success: true, session_token: sessionToken, greeting: opening.opening },
+      {
+        success: true,
+        session_token: sessionToken,
+        greeting: opening.opening,
+        filename: file.name,
+      },
       { headers: cors }
     );
   } catch (error) {
