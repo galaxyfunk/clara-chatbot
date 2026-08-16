@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, Paperclip } from 'lucide-react';
 import { MessageBubble } from './message-bubble';
 import type { WorkspaceSettings } from '@/types/workspace';
 
@@ -26,10 +26,43 @@ interface Message {
   isStreaming?: boolean;
 }
 
+/**
+ * An existing conversation to adopt instead of starting a fresh one, e.g. the
+ * session created by /api/intake when a visitor uploads a job description.
+ * `greeting` is Clara's opening turn; it is already persisted server-side, so it
+ * is rendered here rather than re-requested.
+ */
+export interface ChatSeed {
+  sessionToken: string;
+  greeting: string;
+  /** Shown as a compact attachment chip. Never the document's text. */
+  filename?: string;
+}
+
+/**
+ * Stands in for an uploaded document in the thread. The visitor needs to see
+ * that their file arrived; they do not need to read it back, and pasting a full
+ * job description into the conversation would bury Clara's actual question.
+ */
+export function AttachmentChip({ filename }: { filename: string }) {
+  return (
+    <div className="flex justify-end mb-3">
+      <div
+        role="note"
+        className="inline-flex items-center gap-2 max-w-[85%] px-3 py-2 rounded-[10px] border border-gray-300/60 bg-gray-500/10 text-[13px] leading-tight opacity-90"
+      >
+        <Paperclip className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+        <span className="truncate">{filename}</span>
+      </div>
+    </div>
+  );
+}
+
 interface ChatWindowProps {
   workspaceId: string;
   settings: WorkspaceSettings;
   isPlayground?: boolean;
+  seed?: ChatSeed | null;
 }
 
 function generateId() {
@@ -41,12 +74,17 @@ function stripUrls(text: string): string {
   return text.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
 }
 
-export function ChatWindow({ workspaceId, settings, isPlayground = false }: ChatWindowProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+export function ChatWindow({ workspaceId, settings, isPlayground = false, seed = null }: ChatWindowProps) {
+  // Seeded: adopt the server's session and show its opening turn. Suggested
+  // messages hide themselves once messages is non-empty, which is what we want:
+  // someone who just uploaded a JD should not be offered "How does pricing work?".
+  const [messages, setMessages] = useState<Message[]>(() =>
+    seed?.greeting ? [{ id: generateId(), role: 'assistant', content: seed.greeting }] : []
+  );
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionToken] = useState(() => generateId());
+  const [sessionToken] = useState(() => seed?.sessionToken ?? generateId());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const charQueueRef = useRef<string[]>([]);
@@ -340,6 +378,9 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false }: Chat
             ))}
           </div>
         )}
+
+        {/* Uploaded document, shown as a chip rather than as thread text */}
+        {seed?.filename ? <AttachmentChip filename={seed.filename} /> : null}
 
         {/* Conversation messages */}
         {messages.map((message) => (

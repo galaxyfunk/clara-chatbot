@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { WorkspaceSettings } from '@/types/workspace';
+import { AttachmentChip, type ChatSeed } from './chat-window';
 
 // ============================================================
 // DESIGN TOKENS — Cloud Employee brand colors (hardcoded)
@@ -42,6 +43,8 @@ interface Message {
 interface PanelChatProps {
   workspaceId: string;
   settings: WorkspaceSettings;
+  /** See ChatSeed in chat-window.tsx. */
+  seed?: ChatSeed | null;
 }
 
 // ============================================================
@@ -54,12 +57,15 @@ function generateId(): string {
 // ============================================================
 // PANEL CHAT COMPONENT
 // ============================================================
-export function PanelChat({ workspaceId, settings }: PanelChatProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps) {
+  // See the matching block in chat-window.tsx.
+  const [messages, setMessages] = useState<Message[]>(() =>
+    seed?.greeting ? [{ id: generateId(), role: 'assistant', content: seed.greeting }] : []
+  );
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionToken] = useState(() => generateId());
+  const [sessionToken] = useState(() => seed?.sessionToken ?? generateId());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -427,6 +433,9 @@ export function PanelChat({ workspaceId, settings }: PanelChatProps) {
             ))}
           </div>
         )}
+
+        {/* Uploaded document, shown as a chip rather than as thread text */}
+        {seed?.filename ? <AttachmentChip filename={seed.filename} /> : null}
 
         {/* Conversation messages */}
         {messages.map((msg) => (

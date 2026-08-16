@@ -33,6 +33,18 @@ export default function PublicChatPage() {
   const workspaceId = params.workspaceId as string;
   const mode = searchParams.get('mode') || 'default';
 
+  // A seeded session, handed over by widget.js when the classic layout is used.
+  // The shadow-DOM layouts paint their own DOM and never reach this page; this
+  // is the only route by which a seed can arrive here.
+  const seedToken = searchParams.get('session');
+  const seed = seedToken
+    ? {
+        sessionToken: seedToken,
+        greeting: searchParams.get('greeting') ?? '',
+        filename: searchParams.get('filename') ?? '',
+      }
+    : null;
+
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +162,7 @@ export default function PublicChatPage() {
           <PanelChat
             workspaceId={workspaceId}
             settings={fullSettings}
+            seed={seed}
           />
         );
       case 'command':
@@ -159,6 +172,7 @@ export default function PublicChatPage() {
             workspaceId={workspaceId}
             settings={fullSettings}
             isPlayground={false}
+            seed={seed}
           />
         );
       default:
@@ -167,6 +181,7 @@ export default function PublicChatPage() {
             workspaceId={workspaceId}
             settings={fullSettings}
             isPlayground={false}
+            seed={seed}
           />
         );
     }
