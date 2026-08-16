@@ -26,10 +26,22 @@ interface Message {
   isStreaming?: boolean;
 }
 
+/**
+ * An existing conversation to adopt instead of starting a fresh one, e.g. the
+ * session created by /api/intake when a visitor uploads a job description.
+ * `greeting` is Clara's opening turn; it is already persisted server-side, so it
+ * is rendered here rather than re-requested.
+ */
+export interface ChatSeed {
+  sessionToken: string;
+  greeting: string;
+}
+
 interface ChatWindowProps {
   workspaceId: string;
   settings: WorkspaceSettings;
   isPlayground?: boolean;
+  seed?: ChatSeed | null;
 }
 
 function generateId() {
@@ -41,12 +53,17 @@ function stripUrls(text: string): string {
   return text.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
 }
 
-export function ChatWindow({ workspaceId, settings, isPlayground = false }: ChatWindowProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+export function ChatWindow({ workspaceId, settings, isPlayground = false, seed = null }: ChatWindowProps) {
+  // Seeded: adopt the server's session and show its opening turn. Suggested
+  // messages hide themselves once messages is non-empty, which is what we want:
+  // someone who just uploaded a JD should not be offered "How does pricing work?".
+  const [messages, setMessages] = useState<Message[]>(() =>
+    seed?.greeting ? [{ id: generateId(), role: 'assistant', content: seed.greeting }] : []
+  );
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionToken] = useState(() => generateId());
+  const [sessionToken] = useState(() => seed?.sessionToken ?? generateId());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const charQueueRef = useRef<string[]>([]);

@@ -30,6 +30,31 @@
   var frameEl = null;
   var backdropEl = null;
 
+  // ── Seeded sessions ──
+  //
+  // A host page can hand the widget a conversation that already exists, so the
+  // visitor lands mid-thread instead of in an empty box. See ClaraWidget.open().
+  //
+  // Each layout registers how to apply a seed to itself, because the three have
+  // nothing in common structurally: two build their own shadow DOM and own a
+  // sessionToken variable, while classic delegates to a hosted iframe and can
+  // only be seeded through its URL. `applySeed` is whichever one mounted.
+  var applySeed = null;
+
+  /** Classic only: the seed waiting to be written into the iframe URL. */
+  var pendingFrameSeed = null;
+
+  /** Normalises whatever a caller passed to open(). Returns null if unseeded. */
+  function readSeed(opts) {
+    if (!opts || typeof opts !== 'object') return null;
+    var token = opts.sessionToken || opts.session_token;
+    if (typeof token !== 'string' || !token) return null;
+    return {
+      sessionToken: token,
+      greeting: typeof opts.greeting === 'string' ? opts.greeting : ''
+    };
+  }
+
   // ── Z-Index Constants ──
   var Z_TRIGGER = 2147483645;
   var Z_OVERLAY = 2147483646;
@@ -258,6 +283,18 @@
     } else if (type === 'modal') {
       chatUrl += '?mode=command';
     }
+    // A seeded session reaches the hosted chat page through the URL: this layout
+    // renders in an iframe we do not control the internals of, so there is no
+    // DOM to paint into the way the shadow-DOM layouts have.
+    if (pendingFrameSeed) {
+      chatUrl += (chatUrl.indexOf('?') === -1 ? '?' : '&')
+        + 'session=' + encodeURIComponent(pendingFrameSeed.sessionToken);
+      if (pendingFrameSeed.greeting) {
+        chatUrl += '&greeting=' + encodeURIComponent(pendingFrameSeed.greeting);
+      }
+      pendingFrameSeed = null;
+    }
+
     iframe.src = chatUrl;
     iframe.title = 'Chat with ' + settings.display_name;
     iframe.setAttribute('loading', 'lazy');
@@ -1232,12 +1269,35 @@
     };
     document.addEventListener('keydown', keydownHandler);
 
+    // ── SEEDING ──
+    //
+    // Adopt a session created elsewhere (the JD upload on the hiring pages) and
+    // paint its opening turn, so the modal opens expanded and already in
+    // conversation rather than showing the welcome zone and suggestions.
+    applySeed = function(seed) {
+      sessionToken = seed.sessionToken;
+      hasConversation = true;
+      welcomeZone.style.display = 'none';
+      messagesContainer.style.display = 'block';
+      modal.classList.remove('compact');
+      modal.classList.add('expanded');
+      newChatBtn.classList.add('visible');
+      if (seed.greeting) addAssistantMessage(seed.greeting);
+    };
+
     // ── WINDOW.CLARAWIDGET API ──
 
     window.ClaraWidget = {
-      open: function() { openModal(); },
+      // open() with no argument behaves exactly as it always has. Every existing
+      // CTA on the site calls it that way and none of them may change.
+      open: function(opts) {
+        var seed = readSeed(opts);
+        if (seed) applySeed(seed);
+        openModal();
+      },
       close: function() { closeModal(); },
       destroy: function() {
+        applySeed = null;
         document.removeEventListener('keydown', keydownHandler);
         if (host && host.parentNode) host.parentNode.removeChild(host);
         settings = null;
@@ -1848,11 +1908,25 @@
       }
     });
 
+    // ── SEEDING ── see the matching block in createCommandBar.
+    applySeed = function(seed) {
+      sessionToken = seed.sessionToken;
+      if (welcomeEl && welcomeEl.parentNode) welcomeEl.style.display = 'none';
+      if (seed.greeting) addAssistantBubble(seed.greeting);
+      scrollToBottom();
+    };
+
     // Update window.ClaraWidget API
     window.ClaraWidget = {
-      open: function() { openPanel(); },
+      // Unseeded open() is unchanged. See createCommandBar.
+      open: function(opts) {
+        var seed = readSeed(opts);
+        if (seed) applySeed(seed);
+        openPanel();
+      },
       close: function() { closePanel(); },
       destroy: function() {
+        applySeed = null;
         if (host && host.parentNode) host.parentNode.removeChild(host);
         settings = null;
         isOpen = false;
@@ -1910,9 +1984,19 @@
   }
 
   // ── Public API ──
+  //
+  // This is the classic (iframe) definition. The shadow-DOM layouts replace it
+  // with their own once they mount, so all three must accept the same argument.
   window.ClaraWidget = {
-    open: function() {
+    /**
+     * open()                                    - unchanged, as every CTA calls it.
+     * open({ sessionToken, greeting })          - adopt an existing conversation.
+     */
+    open: function(opts) {
       if (!settings) return;
+      var seed = readSeed(opts);
+      // Must be set BEFORE openChat, which is what builds the iframe.
+      if (seed) pendingFrameSeed = seed;
       var layout = settings.widget_layout || 'classic';
       var type = layout === 'classic' ? 'overlay' :
                  layout === 'side_whisper' ? 'panel' : 'modal';
