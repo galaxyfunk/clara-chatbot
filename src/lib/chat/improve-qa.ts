@@ -6,7 +6,7 @@ export async function improveQAPair(question: string, answer: string): Promise<{
 
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514', max_tokens: 1024, temperature: 0.5,
+    model: 'claude-sonnet-4-6', max_tokens: 1024, temperature: 0.5,
     system: `You improve Q&A pairs for a company knowledge base / chatbot. Your job:
 1. Make the question clearer and more natural
 2. Make the answer professional, concise (2-5 sentences), and self-contained

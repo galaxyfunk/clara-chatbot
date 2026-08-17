@@ -27,7 +27,7 @@ const PROVIDERS = [
     name: 'Claude',
     company: 'Anthropic',
     tagline: 'Best conversational quality',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-6',
     helpUrl: 'https://console.anthropic.com/account/keys',
     placeholder: 'sk-ant-...',
     available: true,
@@ -89,7 +89,7 @@ export function OnboardingWizard({
   // Step 3: Connect AI
   const [selectedProvider, setSelectedProvider] = useState<'anthropic' | 'openai' | 'google' | null>(null);
   const [provider, setProvider] = useState<'anthropic' | 'openai'>('anthropic');
-  const [model, setModel] = useState('claude-sonnet-4-20250514');
+  const [model, setModel] = useState('claude-sonnet-4-6');
   const [apiKey, setApiKey] = useState('');
   const [keyTested, setKeyTested] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);

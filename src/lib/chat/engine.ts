@@ -1,8 +1,18 @@
+import { after } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
 import { chatCompletion, chatCompletionStream, type LLMMessage } from '@/lib/llm/provider';
 import { decrypt } from '@/lib/encryption';
 import { summarizeConversation } from '@/lib/chat/summarize';
+import {
+  extractBrief,
+  isBriefExtractionEnabled,
+  persistBrief,
+  readBriefFromMetadata,
+  shouldExtractBrief,
+} from '@/lib/chat/extract-brief';
+import { notifyChatStarted, notifyChatSummary } from '@/lib/integrations/chat-activity-slack';
+import type { Brief } from '@/types/brief';
 import type { ChatRequest, ChatResponse, ChatMessage } from '@/types/chat';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { v4 as uuidv4 } from 'uuid';
@@ -51,7 +61,13 @@ interface ChatContext {
   confidence: number;
   topMatch: MatchedPair | null;
   previousMessages: ChatMessage[];
-  existingSession: { id: string; escalated: boolean; escalated_at: string | null } | null;
+  existingSession: {
+    id: string;
+    escalated: boolean;
+    escalated_at: string | null;
+    /** Carries metadata.brief and metadata.summary from earlier turns. */
+    metadata: Record<string, unknown> | null;
+  } | null;
   llmMessages: LLMMessage[];
   fallbackAnswer?: string;
 }
@@ -134,7 +150,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   // 7. Get conversation history
   const { data: existingSession } = await supabase
     .from('chat_sessions')
-    .select('id, messages, escalated, escalated_at')
+    .select('id, messages, escalated, escalated_at, metadata')
     .eq('workspace_id', request.workspace_id)
     .eq('session_token', request.session_token).single();
 
@@ -158,6 +174,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
           id: existingSession.id,
           escalated: existingSession.escalated,
           escalated_at: existingSession.escalated_at,
+          metadata: existingSession.metadata ?? null,
         } : null,
         llmMessages: [],
         fallbackAnswer: existingResponse.content,
@@ -181,6 +198,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
       id: existingSession.id,
       escalated: existingSession.escalated,
       escalated_at: existingSession.escalated_at,
+      metadata: existingSession.metadata ?? null,
     } : null,
     llmMessages,
   };
@@ -285,6 +303,19 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     console.error('[Session Upsert Error]', sessionError);
   }
 
+  // ── Chat activity Slack: parent message on first message of a new session ──
+  if (upsertedSession && context.existingSession === null) {
+    const sessionId = upsertedSession.id;
+    after(() =>
+      notifyChatStarted({
+        workspaceId: request.workspace_id,
+        sessionId,
+        firstUserMessage: request.message,
+        workspaceDisplayName: context.settings.display_name,
+      })
+    );
+  }
+
   // ── Email capture + HubSpot upsert ──
   if (upsertedSession) {
     const detectedEmail = extractEmail(request.message);
@@ -325,6 +356,25 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
         console.log('[HubSpot Debug] Non-streaming — skipped: visitor_email already set:', sessionCheck.visitor_email);
       }
     }
+  }
+
+  // ── Ask Clara brief: keep metadata.brief current on this path too ──
+  // Extracted in the background rather than inline, and not added to the JSON
+  // response: /ask consumes the streaming path, so blocking every non-streaming
+  // reply on an extraction call would buy latency nobody reads. The session's
+  // stored brief stays correct either way, and the next streaming turn emits it.
+  if (upsertedSession && isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
+    const sessionId = upsertedSession.id;
+    const previousBrief = readBriefFromMetadata(context.existingSession?.metadata);
+    const conversation = updatedMessages.map((m) => ({ role: m.role, content: m.content }));
+    after(async () => {
+      const briefResult = await extractBrief(conversation, previousBrief);
+      if (briefResult.brief && briefResult.changed) {
+        await persistBrief(sessionId, briefResult.brief);
+      } else if (!briefResult.success) {
+        console.error('[Brief] Non-streaming extraction failed:', briefResult.error);
+      }
+    });
   }
 
   return {
@@ -385,6 +435,13 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
   // SSE padding to push past TCP buffer thresholds (~1460 bytes MSS)
   const SSE_PADDING = `: ${' '.repeat(256)}\n\n`;
 
+  // ── Ask Clara brief ──
+  // The brief is extracted inside the stream so it can ship before `done`, but
+  // written to the session in postProcess alongside the message upsert. This
+  // hands the new brief from one to the other.
+  const previousBrief = readBriefFromMetadata(context.existingSession?.metadata);
+  let briefToPersist: Brief | null = null;
+
   // Create SSE stream that wraps LLM tokens
   const sseStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -412,6 +469,36 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         // Check if LLM naturally offered escalation via booking-related language
         const llmOfferedEscalation = BOOKING_OFFER_REGEX.test(fullContent);
         const finalEscalation = escalationOffered || llmOfferedEscalation;
+
+        // ── brief_update: one per meaningful turn, after the tokens, before `done` ──
+        let briefToEmit: Brief | null = previousBrief;
+        if (isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
+          const briefResult = await extractBrief(
+            [
+              ...context.previousMessages.map((m) => ({ role: m.role, content: m.content })),
+              { role: 'user' as const, content: request.message },
+              { role: 'assistant' as const, content: fullContent },
+            ],
+            previousBrief
+          );
+          if (briefResult.brief) {
+            briefToEmit = briefResult.brief;
+            if (briefResult.changed) briefToPersist = briefResult.brief;
+          } else if (!briefResult.success) {
+            console.error('[Brief] Streaming extraction failed:', briefResult.error);
+          }
+        }
+
+        // An unchanged brief is still worth re-sending: a client that reloaded
+        // mid-conversation is behind on version and repaints from this event.
+        if (briefToEmit) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'brief_update',
+            version: briefToEmit.version,
+            brief: briefToEmit,
+          })}\n\n`));
+          controller.enqueue(encoder.encode(SSE_PADDING));
+        }
 
         // Send final metadata event
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -523,6 +610,16 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       const upsertedSession = upsertResult.data;
 
+      // ── Chat activity Slack: parent message on first message of a new session ──
+      if (upsertedSession && context.existingSession === null) {
+        await notifyChatStarted({
+          workspaceId: request.workspace_id,
+          sessionId: upsertedSession.id,
+          firstUserMessage: request.message,
+          workspaceDisplayName: context.settings.display_name,
+        });
+      }
+
       // Summary generation (same logic as non-streaming path)
       if (upsertedSession && updatedMessages.length >= SUMMARY_THRESHOLD) {
         console.log('[Summary Debug] Entering summary block', {
@@ -559,6 +656,13 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                 .eq('id', upsertedSession.id);
 
               console.log('[Summary Debug] Metadata update result:', JSON.stringify(updateResult, null, 2));
+
+              // ── Chat activity Slack: thread reply with summary ──
+              await notifyChatSummary({
+                workspaceId: request.workspace_id,
+                sessionId: upsertedSession.id,
+                summary: result.summary,
+              });
 
               // Second HubSpot upsert — push summary to existing contact
               if (context.settings.hubspot_enabled) {
@@ -606,6 +710,14 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           messageCount: updatedMessages.length,
           threshold: SUMMARY_THRESHOLD,
         });
+      }
+
+      // ── Ask Clara brief: store the brief that shipped during the stream ──
+      // Runs after the summary block on purpose. The summary writes metadata by
+      // spreading the copy it read from the upsert; persistBrief re-reads the
+      // column, so this order lets both survive on the same turn.
+      if (upsertedSession && briefToPersist) {
+        await persistBrief(upsertedSession.id, briefToPersist);
       }
 
       // ── Email capture + HubSpot upsert ──
@@ -726,7 +838,7 @@ ${contextBlock}
 1. Answer using the knowledge base context above as your primary source.
 2. If the knowledge base doesn't fully cover the question, use your general knowledge to give a helpful answer — but be upfront when you're going beyond what's in the knowledge base. Never just say "I don't know" and stop.
 3. Keep responses SHORT — 2-3 sentences maximum. No paragraphs. Be conversational and direct.
-4. End every response with a qualifying question to learn more about the visitor's needs (role type, tech stack, team size, timeline, hiring experience).
+4. When the visitor is describing their own situation or needs, end your response with ONE question that moves that forward. When they ask a general question about the company, the process or the industry, answer it and stop. Do not append a qualifying question to an answer nobody asked for. Never ask more than one question in a response.
 5. Never use bullet points or numbered lists in your answer. Write in natural conversational sentences.
 
 ${responseFormatSection}`;

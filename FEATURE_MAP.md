@@ -471,16 +471,28 @@ Maps every feature to its owning files. Organized by feature area.
 - **Track / Session:** sales-coach-1
 
 ### Sales Coach (v1)
-- **Description:** Coaches sales reps on Fireflies-recorded discovery calls. Polls Fireflies, filters for external attendees, runs each transcript through the editable `sales-coach` prompt via Claude Sonnet 4, posts parent + thread message per call to a Slack channel. Three trigger paths: (a) manual "Run Now" button, (b) re-analyze a specific meeting, (c) Vercel cron every 15 minutes (auto). Idempotency: skips meetings already analyzed (`analyzed`/`skipped` rows persist); failures don't insert rows so they retry naturally next run. Run-complete summary always posts on manual + reanalyze paths; on cron path it's suppressed unless there's new activity to avoid 96 idle-summary posts per day. Single rep (Shawnee) hardcoded via env vars in v1; multi-rep refactor deferred to sales-coach-3.
+- **Description:** Coaches sales reps on Fireflies-recorded discovery calls. Polls Fireflies, classifies every call via Claude Haiku 4.5 (`sales | internal | recruitment | other`), runs only `sales` calls through the editable `sales-coach` prompt via Claude Sonnet 4, posts parent + thread message per sales call to a Slack channel. Non-sales calls are recorded in the DB with `status='skipped'` and `call_type` populated — NO Slack output. Three trigger paths: (a) manual "Run Now" button, (b) re-analyze a specific meeting (bypasses classifier, forces `sales`), (c) Vercel cron every 15 minutes (auto). Idempotency: skips meetings already analyzed (`analyzed`/`skipped` rows persist); failures don't insert rows so they retry naturally next run. Run-complete summary always posts on manual + reanalyze paths; on cron path it's suppressed unless there's new activity to avoid 96 idle-summary posts per day. Single rep (Shawnee) hardcoded via env vars in v1; multi-rep refactor deferred to sales-coach-3.
 - **Pages:** `/dashboard/agent-settings/prompts/sales-coach` ("Run Now" button rendered above the prompt editor)
-- **API Routes:** `POST /api/agents/sales-coach/run` (manual trigger, pre-flights env, returns 200 then runs orchestrator in `after()`), `POST /api/agents/sales-coach/reanalyze/[meetingId]` (delete prior row + reprocess single meeting), `GET /api/cron/sales-coach/run` (Vercel cron entry, `CRON_SECRET` bearer auth, same orchestrator with `triggeredBy: 'cron'`)
+- **API Routes:** `POST /api/agents/sales-coach/run` (manual trigger, pre-flights env, returns 200 then runs orchestrator in `after()`), `POST /api/agents/sales-coach/reanalyze/[meetingId]` (delete prior row + reprocess single meeting, classifier bypassed), `GET /api/cron/sales-coach/run` (Vercel cron entry, `CRON_SECRET` bearer auth, same orchestrator with `triggeredBy: 'cron'`)
 - **Components:** `src/components/agent-prompts/sales-coach-actions.tsx` (client component, conditionally rendered when slug === 'sales-coach')
-- **Lib Modules:** `src/lib/agents/sales-coach/run.ts` (orchestrator + `validateSalesCoachEnv` + `triggeredBy` option), `filter.ts` (pure `shouldAnalyze`), `build-prompt.ts` (`buildPromptVariables`, `interpolatePrompt`, `pickProspectDomain`), `post-error.ts` (`postSalesCoachError`); integrations: `src/lib/integrations/fireflies.ts` (`listRecentTranscripts`, `getTranscriptDetail`, `normalizeDurationPct`), `slack-bot.ts` (`postParentMessage`, `postThreadReply`)
-- **DB Tables:** `sales_call_analyses` (workspace_id, fireflies_meeting_id [UNIQUE per workspace], rep_email/name, call metadata, attendees JSONB, claude_output, slack_*_ts, status, error_message). Reads from `agent_prompts`.
-- **Types:** `src/types/sales-coach.ts` (filter, prompt variables, row shape, run result), `src/types/fireflies.ts` (transcript summary/detail, attendees, sentences, speaker analytics — duration fields documented as decimal minutes)
-- **Env Vars:** `SLACK_BOT_TOKEN`, `SLACK_SALES_COACH_CHANNEL`, `SLACK_ERRORS_CHANNEL`, `FIREFLIES_API_KEY_SHAWNEE`, `SALES_COACH_REP_EMAIL`, `SALES_COACH_REP_NAME`, `SALES_COACH_TEAM_DOMAINS`, `SALES_COACH_WORKSPACE_ID`, `SALES_COACH_FIRST_RUN_DAYS`, `SALES_COACH_FIRST_RUN_MAX`, `SALES_COACH_SUBSEQUENT_DAYS`, `CRON_SECRET` (Vercel Production only)
+- **Lib Modules:** `src/lib/agents/sales-coach/run.ts` (orchestrator + `validateSalesCoachEnv` + `triggeredBy` option + `skipClassifier` flag), `classify.ts` (`classifyCall` — Claude Haiku 4.5, JSON output), `build-prompt.ts` (`buildPromptVariables`, `interpolatePrompt`, `pickProspectDomain`), `post-error.ts` (`postSalesCoachError`); integrations: `src/lib/integrations/fireflies.ts` (`listRecentTranscripts`, `getTranscriptDetail`, `normalizeDurationPct`), `slack-bot.ts` (`postParentMessage`, `postThreadReply`)
+- **DB Tables:** `sales_call_analyses` (workspace_id, fireflies_meeting_id [UNIQUE per workspace], rep_email/name, call metadata, attendees JSONB, claude_output, slack_*_ts, status, `call_type` [sales/internal/recruitment/other, nullable for pre-classifier rows], error_message). Reads from `agent_prompts`.
+- **Types:** `src/types/sales-coach.ts` (`CallType`, `ClassifyResult`, prompt variables, row shape, run result), `src/types/fireflies.ts` (transcript summary/detail, attendees, sentences, speaker analytics — duration fields documented as decimal minutes)
+- **Env Vars:** `SLACK_BOT_TOKEN`, `SLACK_SALES_COACH_CHANNEL`, `SLACK_ERRORS_CHANNEL`, `FIREFLIES_API_KEY_SHAWNEE`, `SALES_COACH_REP_EMAIL`, `SALES_COACH_REP_NAME`, `SALES_COACH_TEAM_DOMAINS`, `SALES_COACH_WORKSPACE_ID`, `SALES_COACH_FIRST_RUN_DAYS`, `SALES_COACH_FIRST_RUN_MAX`, `SALES_COACH_SUBSEQUENT_DAYS`, `CRON_SECRET` (Vercel Production only), `ANTHROPIC_API_KEY` (used by both classifier and coaching call)
 - **Cron:** Active in `vercel.json` — `*/15 * * * *` pointed at `/api/cron/sales-coach/run`. Bearer-auth via `CRON_SECRET`.
-- **Track / Session:** sales-coach-2 (engine), sales-coach-2.1 (cron auto-trigger)
+- **Track / Session:** sales-coach-2 (engine), sales-coach-2.1 (cron auto-trigger), sales-coach-2.2 (call-type classifier)
+
+### Chat Session Slack Notifications
+- **Description:** Real-time Slack visibility into live chat activity on the CE workspace. On the first visitor message of a brand-new session, a parent message posts to a public Slack channel (workspace display name + first user message blockquoted + "View session →" deep link). When the AI conversation summary later persists, a thread reply lands under that parent with visitor intent, captured email, the paragraph summary, and bulleted next steps. CE-only — env-gated via a dedicated `CHAT_ACTIVITY_WORKSPACE_ID` (independent of the Sales Coach gate). Fail-silent: hard errors mirror to `#clara-errors`; start-post failure → `slack_thread_ts` stays NULL → summary hook silently no-ops. Multi-tenant per-customer Slack config out of scope.
+- **Pages:** `/dashboard/sessions?session=<id>` — existing master-detail page now reads the `?session=<id>` query param on mount and auto-selects (or hydrates via single-session fetch if not in the recent-list window)
+- **API Routes:** `GET /api/sessions/[id]` (NEW — auth-gated, workspace-scoped single-session fetch for deep-link hydration)
+- **Lib Modules:** `src/lib/integrations/chat-activity-slack.ts` — `notifyChatStarted` (posts parent + persists Slack `ts` to `chat_sessions.slack_thread_ts`), `notifyChatSummary` (posts thread reply under stored `ts`), inline `postChatActivityError` helper (mirrors `postSalesCoachError` shape). Reuses `postParentMessage`/`postThreadReply` from `slack-bot.ts`.
+- **Engine Hooks:** Three integration points in `src/lib/chat/engine.ts` + `src/app/api/chat/route.ts`. (1) Non-streaming start hook in `processChat` after session upsert, wrapped in `after()`, gated on `context.existingSession === null`. (2) Streaming start hook in `processChatStream`'s `postProcess` after session upsert (called inline — `postProcess` is already inside `after()` via the route). (3) Streaming summary hook in `postProcess` immediately after `metadata.summary` persists. (4) Non-streaming summary hook in `route.ts` inside the existing summary `after()` block, after the metadata update.
+- **DB Tables:** `chat_sessions` gained `slack_thread_ts TEXT NULL` column (stores parent message `ts`, NULL for non-CE workspaces and failed start posts). Migration run manually in Supabase SQL editor.
+- **Types:** `ChatSession.slackThreadTs: string | null` added to `src/types/chat.ts`. Reuses `ConversationSummary` (intent, summary, contact_info.email, action_items) for the thread reply payload.
+- **Env Vars:** `CHAT_ACTIVITY_WORKSPACE_ID` (CE workspace UUID, same value as `SALES_COACH_WORKSPACE_ID` today but a separate var), `SLACK_CHAT_ACTIVITY_CHANNEL` (channel ID). Reuses `SLACK_BOT_TOKEN`, `SLACK_ERRORS_CHANNEL`, `NEXT_PUBLIC_APP_URL`.
+- **Sessions Page:** `src/app/dashboard/sessions/page.tsx` reads `?session=<id>` via `window.location.search` inside a mount `useEffect` (avoids the Suspense-boundary requirement that `useSearchParams` would impose on a client-component root page). `hydratedDeepLinkRef` guards against re-running on re-renders. Falls back to `/api/sessions/[id]` if the id isn't in the loaded recent list.
+- **Track / Session:** chat-activity-slack-1
 
 ---
 
@@ -510,3 +522,36 @@ Maps every feature to its owning files. Organized by feature area.
 - **Description:** Fixed scrollToBottom() to target correct scrollable parent (`body`/`cb-body` with `overflow-y: auto`), added scroll calls after message insertion, added spacing below suggestion chips
 - **Files Modified:** `public/widget.js` (scrollToBottom target, addUserMessage, addAssistantMessage, suggestionsContainer margin)
 - **Session:** v1.1-9C
+
+---
+
+## Ask Clara Integration
+
+### Hiring Brief Extraction (`brief_update`)
+- **Description:** Per-turn extraction of a structured hiring brief from the conversation, emitted to Cloud Employee's `/ask` page as a `brief_update` SSE event between the token loop and `done`. Complete brief every time, never a patch. Only fields the visitor actually stated are filled — absent fields render on CE as dashed "Clara will ask next" prompts.
+- **Page:** N/A (consumed by CE's `/ask`, a separate app)
+- **API Routes:** `src/app/api/chat/route.ts` (unchanged — the event rides the existing stream)
+- **Components:** None. **No widget changes.**
+- **Lib Modules:** `src/lib/chat/extract-brief.ts` (Haiku 4.5 extraction, coerce-or-drop validation, merge over stored brief, deterministic `strength`, `briefCoreFacts` readiness rule, `shouldExtractBrief` spend gate, `isBriefExtractionEnabled` workspace gate, `persistBrief`), `src/lib/chat/engine.ts` (emission in `processChatStream`, persistence in `postProcess`, background mirror in `processChat`)
+- **Types:** `src/types/brief.ts` — mirror of CE's `site/src/lib/ask/brief.ts`. **Keep in sync field-for-field.**
+- **DB Tables:** `chat_sessions.metadata.brief` (no DDL — existing JSONB column)
+- **Env Vars:** `ASK_BRIEF_WORKSPACE_IDS` (optional; unset = every workspace extracts)
+- **Readiness rule:** `strength` is capped at 69 until all five core facts are present (role title, headcount, stack, seniority, timeline — worth 70 between them). Context fields total 30 and cannot cross the line alone. `intent` is unweighted. **This is a sales judgement, not an engineering one — change it with the director, and see PHASE_HISTORY "Readiness threshold" for why each weight is what it is.**
+- **Track / Session:** CLARA-2
+
+### CORS Allow-List for CE Origins
+- **Description:** Shared origin allow-list so `/ask` can reach Clara from CE staging and preview hosts. Lifted out of two duplicated copies.
+- **Lib Modules:** `src/lib/cors.ts`
+- **API Routes:** `src/app/api/chat/route.ts`, `src/app/api/workspace/public/route.ts`
+- **Env Vars:** `CLARA_EXTRA_ALLOWED_ORIGINS` (comma-separated)
+- **Known wart:** an unrecognised origin is echoed the FIRST allowed origin rather than refused — permissive by accident, inherited, documented in `cors.ts`.
+- **Track / Session:** CLARA-1
+
+---
+
+## Maintenance
+
+### Claude Model IDs — 4.5/4.6 Generation
+- **Description:** App-level extraction calls moved from `claude-sonnet-4-20250514` to `claude-sonnet-4-6`; model picker now offers Sonnet 4.6, Opus 4.5, Haiku 4.5. Stored `api_keys.model` values are untouched.
+- **Files Modified:** `src/lib/chat/summarize.ts`, `src/lib/chat/extract-qa.ts`, `src/lib/chat/improve-qa.ts`, `src/types/api-keys.ts`, `src/components/settings/api-keys-tab.tsx`, `src/components/onboarding/onboarding-wizard.tsx`
+- **Session:** July 30, 2026

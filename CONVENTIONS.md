@@ -463,7 +463,7 @@ When providing model selection, always include a "Custom Model" option for flexi
 
 ```typescript
 export const SUPPORTED_MODELS: LLMModel[] = [
-  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic', ... },
+  { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', provider: 'anthropic', ... },
   { id: 'custom-anthropic', name: 'Custom Model', provider: 'anthropic', description: 'Enter any model ID' },
   // ...
 ];
@@ -524,8 +524,50 @@ while (true) {
 
 **SSE Event Format:**
 - `{ type: 'token', content: 'chunk' }` — streamed content
+- `{ type: 'brief_update', version: n, brief: {...} }` — structured side-channel (CLARA-2)
 - `{ type: 'done', escalation_offered: bool }` — final metadata
 - `{ type: 'error', message: 'reason' }` — error state
+
+**Adding a new event:** enqueue it after the token loop and **before** `done` —
+consumers treat `done` as the end of the stream. If producing it needs an LLM call,
+give that call a timeout well inside the route's `maxDuration`, because `done` now
+queues behind it. Compute inside the stream, persist in `postProcess`, handing the
+value over via a closure variable rather than doing the work twice.
+
+---
+
+## Structured LLM Extraction Pattern
+
+For turning a conversation or document into typed fields (`extract-brief.ts`,
+`classify.ts`, `summarize.ts`). Four rules, each learned the hard way:
+
+**1. Coerce or drop — never repair.** Validate every field out of the model's JSON.
+A value that fails validation is dropped, not defaulted:
+
+```typescript
+const title = coerceString(obj.title, CAP_TITLE);
+if (!title) continue;          // a role with no title is not a role
+```
+
+Leaving a field unset is honest and renders as "we don't know yet". Inventing a
+plausible value puts a wrong fact in front of a human who will act on it.
+
+**2. Never let the model produce a score.** Model-generated 0-100 numbers wander
+between turns on identical input. Compute them from the populated fields instead, so
+the number is reproducible and only moves when the content moves.
+
+**3. Merge over the previous value, don't replace blind.** Re-read the whole source
+each pass and merge the result over what is stored. Corrections still land (the model
+sees the correction); a field that the model simply forgot this pass does not vanish
+from the UI.
+
+**4. Repair contradictions the model cannot see.** If two extracted fields disagree
+arithmetically, fix it in code and comment why. Real example: correcting "3 devs" to 2
+made the model relabel a four-person brief as a single hire.
+
+**Comparing before writing:** Postgres `jsonb` does not preserve key order, so a
+`JSON.stringify` comparison against a stored value reports a change every time. Sort
+keys recursively before comparing, or the version number increments forever.
 
 ---
 

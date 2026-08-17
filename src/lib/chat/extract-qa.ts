@@ -15,7 +15,7 @@ export async function extractQAPairsFromTranscript(
 
   const systemPrompt = buildExtractionPrompt(categories);
   const extractionResponse = await client.messages.create({
-    model: 'claude-sonnet-4-20250514', max_tokens: 16000, temperature: 0.3,
+    model: 'claude-sonnet-4-6', max_tokens: 16000, temperature: 0.3,
     system: systemPrompt,
     messages: [{ role: 'user', content: `Here is the transcript:\n\n${transcript}` }],
   });

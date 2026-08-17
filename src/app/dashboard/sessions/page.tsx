@@ -24,12 +24,19 @@ interface Session {
 }
 
 export default function SessionsPage() {
+  const [deepLinkSessionId, setDeepLinkSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  const hydratedDeepLinkRef = useRef(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setDeepLinkSessionId(params.get('session'));
+  }, []);
 
   const fetchSessions = useCallback(async (search?: string) => {
     setSearching(true);
@@ -48,6 +55,33 @@ export default function SessionsPage() {
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
+
+  // Auto-select session from ?session=<id> deep link
+  useEffect(() => {
+    if (!deepLinkSessionId || hydratedDeepLinkRef.current || loading) return;
+
+    const existing = sessions.find((s) => s.id === deepLinkSessionId);
+    if (existing) {
+      setSelectedSessionId(deepLinkSessionId);
+      hydratedDeepLinkRef.current = true;
+      return;
+    }
+
+    // Not in the loaded list — hydrate via single-session fetch.
+    hydratedDeepLinkRef.current = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/sessions/${deepLinkSessionId}`);
+        const data = await res.json();
+        if (data?.success && data.session) {
+          setSessions((prev) => [data.session, ...prev.filter((s) => s.id !== data.session.id)]);
+          setSelectedSessionId(deepLinkSessionId);
+        }
+      } catch (error) {
+        console.error('Failed to hydrate deep-linked session:', error);
+      }
+    })();
+  }, [deepLinkSessionId, sessions, loading]);
 
   // Debounced search
   useEffect(() => {
