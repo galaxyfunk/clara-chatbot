@@ -124,6 +124,42 @@
     });
   }
 
+  // Host-page analytics. Keyed to session_token so a seeded JD greeting
+  // (which sets hasConversation without a visitor message) cannot count as a
+  // conversation, and so "New chat" can fire again on the new token.
+  var analyticsStartedTokens = {};
+  var analyticsEmailTokens = {};
+
+  function postClaraAnalytics(event, token) {
+    if (!token) return;
+    if (event === 'clara_conversation_started') {
+      if (analyticsStartedTokens[token]) return;
+      analyticsStartedTokens[token] = true;
+    } else if (event === 'clara_email_captured') {
+      if (analyticsEmailTokens[token]) return;
+      analyticsEmailTokens[token] = true;
+    } else {
+      return;
+    }
+    var payload = {
+      source: 'clara-widget',
+      type: 'clara-analytics',
+      event: event,
+      session_token: token
+    };
+    var inIframe = false;
+    try {
+      inIframe = window.self !== window.top;
+    } catch (e) {
+      inIframe = true;
+    }
+    if (inIframe) {
+      window.parent.postMessage(payload, '*');
+    } else {
+      window.postMessage(payload, window.location.origin);
+    }
+  }
+
   // SSE Stream Handler (with line buffering for TCP chunk splits)
   async function handleSSEStream(response, callbacks) {
     var reader = response.body.getReader();
@@ -1189,6 +1225,7 @@
       if (!text.trim() || isSending) return;
       isSending = true;
       disableInput();
+      postClaraAnalytics('clara_conversation_started', sessionToken);
 
       // First message: transition from compact to expanded
       if (!hasConversation) {
@@ -1242,6 +1279,9 @@
             msgResult.textEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
             if (data.booking_url) {
               renderBookingLink(data.booking_url, msgResult.content);
+            }
+            if (data.email_captured) {
+              postClaraAnalytics('clara_email_captured', sessionToken);
             }
             scrollToBottom();
           },
@@ -1851,6 +1891,7 @@
       if (!text.trim() || isSending) return;
       isSending = true;
       disableInput();
+      postClaraAnalytics('clara_conversation_started', sessionToken);
       inputEl.value = '';
       updateSendButton();
 
@@ -1895,6 +1936,9 @@
             assistantEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
             if (data.booking_url) {
               renderBookingLink(data.booking_url, assistantEl);
+            }
+            if (data.email_captured) {
+              postClaraAnalytics('clara_email_captured', sessionToken);
             }
             scrollToBottom();
           },

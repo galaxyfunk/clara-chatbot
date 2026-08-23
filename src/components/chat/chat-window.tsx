@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Loader2, Paperclip } from 'lucide-react';
-import { MessageBubble } from './message-bubble';
+import { postClaraAnalytics } from '@/lib/chat/clara-analytics';
 import type { WorkspaceSettings } from '@/types/workspace';
+import { MessageBubble } from './message-bubble';
 
 // Simple isDark check - returns true if background appears dark
 function isDark(color: string): boolean {
@@ -146,6 +147,9 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false, seed =
 
   const sendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return;
+    if (!isPlayground) {
+      postClaraAnalytics('clara_conversation_started', sessionToken);
+    }
 
     const userMessage: Message = {
       id: generateId(),
@@ -234,6 +238,9 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false, seed =
               // Flush remaining queue instantly and apply final metadata
               flushCharQueue();
               const finalContent = stripUrls(fullContent);
+              if (!isPlayground && data.email_captured) {
+                postClaraAnalytics('clara_email_captured', sessionToken);
+              }
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId

@@ -51,7 +51,12 @@ interface ChatContext {
   confidence: number;
   topMatch: MatchedPair | null;
   previousMessages: ChatMessage[];
-  existingSession: { id: string; escalated: boolean; escalated_at: string | null } | null;
+  existingSession: {
+    id: string;
+    escalated: boolean;
+    escalated_at: string | null;
+    visitor_email: string | null;
+  } | null;
   llmMessages: LLMMessage[];
   fallbackAnswer?: string;
 }
@@ -134,7 +139,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   // 7. Get conversation history
   const { data: existingSession } = await supabase
     .from('chat_sessions')
-    .select('id, messages, escalated, escalated_at')
+    .select('id, messages, escalated, escalated_at, visitor_email')
     .eq('workspace_id', request.workspace_id)
     .eq('session_token', request.session_token).single();
 
@@ -158,6 +163,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
           id: existingSession.id,
           escalated: existingSession.escalated,
           escalated_at: existingSession.escalated_at,
+          visitor_email: existingSession.visitor_email ?? null,
         } : null,
         llmMessages: [],
         fallbackAnswer: existingResponse.content,
@@ -181,6 +187,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
       id: existingSession.id,
       escalated: existingSession.escalated,
       escalated_at: existingSession.escalated_at,
+      visitor_email: existingSession.visitor_email ?? null,
     } : null,
     llmMessages,
   };
@@ -200,8 +207,11 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
       escalation_offered: false,
       booking_url: null,
       matched_pairs: [],
+      email_captured: false,
     };
   }
+
+  const emailCaptured = willCaptureEmail(request.message, context.existingSession?.visitor_email);
 
   const supabase = createServerClient();
 
@@ -336,6 +346,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     matched_pairs: context.matchedPairs.map(m => ({ id: m.id, question: m.question, similarity: m.similarity })),
     session_id: upsertedSession?.id || context.existingSession?.id,
     message_count: updatedMessages.length,
+    email_captured: emailCaptured,
   };
 }
 
@@ -362,6 +373,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
             type: 'done',
             escalation_offered: false,
             booking_url: null,
+            email_captured: false,
           })}\n\n`
         ));
         controller.close();
@@ -372,6 +384,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       postProcess: async () => {},
     };
   }
+
+  const emailCaptured = willCaptureEmail(request.message, context.existingSession?.visitor_email);
 
   // Stream from LLM
   const { stream: llmStream, getFullResponse } = await chatCompletionStream(
@@ -420,6 +434,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           booking_url: finalEscalation
             ? appendUtmParams(context.settings.booking_url, request.session_token)
             : null,
+          email_captured: emailCaptured,
         })}\n\n`));
 
         controller.close();
@@ -662,6 +677,11 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 function extractEmail(text: string): string | null {
   const match = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   return match ? match[0].toLowerCase() : null;
+}
+
+/** True when this turn will newly write visitor_email. Address is never returned. */
+function willCaptureEmail(message: string, existingVisitorEmail: string | null | undefined): boolean {
+  return Boolean(extractEmail(message) && !existingVisitorEmail);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
