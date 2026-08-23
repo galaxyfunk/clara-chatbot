@@ -39,6 +39,8 @@ export interface ChatResponse {
   matched_pairs: { id: string; question: string; similarity: number }[];
   session_id?: string;
   message_count?: number;
+  /** True only when this turn newly saved visitor_email. Never includes the address. */
+  email_captured?: boolean;
 }
 
 export interface ConversationSummary {
