@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { postClaraAnalytics } from '@/lib/chat/clara-analytics';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { AttachmentChip, type ChatSeed } from './chat-window';
 
@@ -82,6 +83,7 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
   // Send message to chat API with streaming
   const sendMessage = async (content: string) => {
     if (!content.trim() || isLoading || isStreaming) return;
+    postClaraAnalytics('clara_conversation_started', sessionToken);
 
     const userMessage: Message = {
       id: generateId(),
@@ -173,6 +175,9 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
               if (rafId) {
                 cancelAnimationFrame(rafId);
                 rafId = null;
+              }
+              if (data.email_captured) {
+                postClaraAnalytics('clara_email_captured', sessionToken);
               }
               setMessages((prev) =>
                 prev.map((m) =>
