@@ -3,6 +3,7 @@ import { generateEmbedding } from '@/lib/embed';
 import { chatCompletion, chatCompletionStream, type LLMMessage } from '@/lib/llm/provider';
 import { decrypt } from '@/lib/encryption';
 import { summarizeConversation } from '@/lib/chat/summarize';
+import { stripAssistantDisplayText } from '@/lib/chat/display-text';
 import {
   buildAskClaraLeadMessage,
   firstNameFromChat,
@@ -61,6 +62,7 @@ interface ChatContext {
     escalated: boolean;
     escalated_at: string | null;
     visitor_email: string | null;
+    visitor_name: string | null;
   } | null;
   llmMessages: LLMMessage[];
   fallbackAnswer?: string;
@@ -144,7 +146,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   // 7. Get conversation history
   const { data: existingSession } = await supabase
     .from('chat_sessions')
-    .select('id, messages, escalated, escalated_at, visitor_email')
+    .select('id, messages, escalated, escalated_at, visitor_email, visitor_name')
     .eq('workspace_id', request.workspace_id)
     .eq('session_token', request.session_token).single();
 
@@ -169,6 +171,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
           escalated: existingSession.escalated,
           escalated_at: existingSession.escalated_at,
           visitor_email: existingSession.visitor_email ?? null,
+          visitor_name: existingSession.visitor_name ?? null,
         } : null,
         llmMessages: [],
         fallbackAnswer: existingResponse.content,
@@ -193,6 +196,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
       escalated: existingSession.escalated,
       escalated_at: existingSession.escalated_at,
       visitor_email: existingSession.visitor_email ?? null,
+      visitor_name: existingSession.visitor_name ?? null,
     } : null,
     llmMessages,
   };
@@ -231,8 +235,8 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
   // Parse response
   const parsed = parseLLMResponse(llmResponse.content);
-  // Strip any hallucinated URLs from LLM answer — booking link is provided separately
-  parsed.answer = parsed.answer.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
+  // Strip leftover CTAs and hallucinated URLs — the Book a Call button is separate
+  parsed.answer = stripAssistantDisplayText(parsed.answer);
 
   // Gap detection with dedup + noise filtering
   const gapDetected = !context.isConfident;
@@ -359,7 +363,9 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     confidence: context.confidence,
     gap_detected: gapDetected,
     escalation_offered: parsed.escalation_offered,
-    booking_url: parsed.escalation_offered ? appendUtmParams(context.settings.booking_url, request.session_token) : null,
+    booking_url: parsed.escalation_offered
+      ? appendUtmParams(context.settings.booking_url, request.session_token, bookingPrefill(request, context))
+      : null,
     matched_pairs: context.matchedPairs.map(m => ({ id: m.id, question: m.question, similarity: m.similarity })),
     session_id: upsertedSession?.id || context.existingSession?.id,
     message_count: updatedMessages.length,
@@ -449,7 +455,11 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           type: 'done',
           escalation_offered: finalEscalation,
           booking_url: finalEscalation
-            ? appendUtmParams(context.settings.booking_url, request.session_token)
+            ? appendUtmParams(
+                context.settings.booking_url,
+                request.session_token,
+                bookingPrefill(request, context),
+              )
             : null,
           email_captured: emailCaptured,
         })}\n\n`));
@@ -476,8 +486,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       // Wait for full response text (plain text in streaming mode)
       const fullText = await getFullResponse();
-      // Strip any hallucinated URLs from LLM answer — booking link is provided separately
-      const cleanedText = fullText.replace(/https?:\/\/[^\s]+/g, '').replace(/  +/g, ' ').trim();
+      const cleanedText = stripAssistantDisplayText(fullText);
 
       // Check if LLM naturally offered escalation via booking-related language
       const llmOfferedEscalation = BOOKING_OFFER_REGEX.test(fullText);
@@ -747,12 +756,78 @@ function willCaptureEmail(message: string, existingVisitorEmail: string | null |
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-function appendUtmParams(url: string | null, sessionToken?: string): string | null {
+function bookingPrefill(
+  request: ChatRequest,
+  context: ChatContext,
+): { email: string | null; name: string | null } {
+  return {
+    email: extractEmail(request.message) || context.existingSession?.visitor_email || null,
+    name: visitorNameFromChat(
+      context.existingSession?.visitor_name,
+      context.previousMessages,
+      request.message,
+    ),
+  };
+}
+
+/** A short name the visitor typed (e.g. "jake"), not an email or a sentence. */
+function visitorNameFromChat(
+  storedName: string | null | undefined,
+  previousMessages: ChatMessage[],
+  currentMessage: string,
+): string | null {
+  if (storedName?.trim()) return storedName.trim();
+
+  const texts = [
+    ...previousMessages.filter((m) => m.role === 'user').map((m) => m.content),
+    currentMessage,
+  ];
+  for (let i = texts.length - 1; i >= 0; i--) {
+    const name = plausibleVisitorName(texts[i]);
+    if (name) return name;
+  }
+  return null;
+}
+
+function plausibleVisitorName(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed || extractEmail(trimmed)) return null;
+  if (/^(hi|hello|hey|thanks|thank you|ok|okay|bye|yes|no|sure|great)[\s!.,]*$/i.test(trimmed)) {
+    return null;
+  }
+  if (trimmed.includes('?')) return null;
+  if (trimmed.split(/\s+/).length > 4) return null;
+  if (!/^[a-zA-Z][a-zA-Z\s'-]{1,39}$/.test(trimmed)) return null;
+
+  return trimmed
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function appendUtmParams(
+  url: string | null,
+  sessionToken?: string,
+  contact?: { email?: string | null; name?: string | null },
+): string | null {
   if (!url) return null;
-  const separator = url.includes('?') ? '&' : '?';
-  let result = `${url}${separator}utm_source=clara&utm_medium=chatbot`;
-  if (sessionToken) result += `&utm_content=${sessionToken}`;
-  return result;
+
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set('utm_source', 'clara');
+    parsed.searchParams.set('utm_medium', 'chatbot');
+    if (sessionToken) parsed.searchParams.set('utm_content', sessionToken);
+    if (contact?.email) parsed.searchParams.set('email', contact.email);
+    if (contact?.name) parsed.searchParams.set('name', contact.name);
+    return parsed.toString();
+  } catch {
+    const separator = url.includes('?') ? '&' : '?';
+    let result = `${url}${separator}utm_source=clara&utm_medium=chatbot`;
+    if (sessionToken) result += `&utm_content=${sessionToken}`;
+    if (contact?.email) result += `&email=${encodeURIComponent(contact.email)}`;
+    if (contact?.name) result += `&name=${encodeURIComponent(contact.name)}`;
+    return result;
+  }
 }
 
 function buildChatPrompt(
@@ -772,7 +847,7 @@ function buildChatPrompt(
     responseFormatSection = `## Response Format
 Respond naturally and conversationally. Do not use JSON format. Just write your answer as plain text.
 Keep responses concise — 2-4 sentences for simple questions, more for complex ones.
-${settings.escalation_enabled && settings.booking_url ? `When the visitor has gathered enough information and seems ready to take the next step, naturally ask: 'Would you be open to a quick call with our team?' — this is the ONLY trigger for the booking button. Do not offer this for general questions. Only ask once you genuinely sense buying intent or readiness. Never write a URL or link in your message text.` : ''}`;
+${settings.escalation_enabled && settings.booking_url ? `When the visitor has gathered enough information and seems ready to take the next step, naturally invite them to a call in plain sentences. This is the ONLY trigger for the booking button. Do not offer this for general questions. Only ask once you genuinely sense buying intent or readiness. Never write a URL, markdown link, or bracketed CTA such as [Book a call] in your message text. The blue Book a Call button is added automatically — do not write the button label.` : ''}`;
   } else {
     responseFormatSection = `${settings.escalation_enabled ? `## Escalation Rules
 Set escalation_offered to true ONLY when the visitor explicitly signals readiness to engage with a human. This means:
@@ -795,7 +870,7 @@ Respond in this exact JSON format (no markdown fences, raw JSON only):
   "escalation_offered": false
 }
 
-${settings.escalation_enabled && settings.booking_url ? `When escalation_offered is true, naturally weave a booking suggestion into your answer. Do NOT write any URL or link in your message text. Never generate or hallucinate a booking URL. The booking link is provided automatically by the system separately from your message.` : ''}`;
+${settings.escalation_enabled && settings.booking_url ? `When escalation_offered is true, naturally weave a booking suggestion into your answer. Do NOT write any URL, markdown link, or bracketed CTA such as [Book a call] in your message text. Never generate or hallucinate a booking URL. The blue Book a Call button is provided automatically by the system separately from your message.` : ''}`;
   }
 
   const systemPrompt = `${settings.personality_prompt}

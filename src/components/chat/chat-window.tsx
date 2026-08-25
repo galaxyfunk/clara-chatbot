@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Loader2, Paperclip } from 'lucide-react';
 import { postClaraAnalytics } from '@/lib/chat/clara-analytics';
+import { stripAssistantDisplayText } from '@/lib/chat/display-text';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { MessageBubble } from './message-bubble';
 
@@ -70,9 +71,8 @@ function generateId() {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Strip any hallucinated URLs from LLM text — booking link is provided separately
 function stripUrls(text: string): string {
-  return text.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
+  return stripAssistantDisplayText(text);
 }
 
 export function ChatWindow({ workspaceId, settings, isPlayground = false, seed = null }: ChatWindowProps) {

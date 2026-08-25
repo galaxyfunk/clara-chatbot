@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { postClaraAnalytics } from '@/lib/chat/clara-analytics';
+import { stripAssistantDisplayText } from '@/lib/chat/display-text';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { AttachmentChip, type ChatSeed } from './chat-window';
 
@@ -155,7 +156,7 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
 
             if (data.type === 'token') {
               fullContent += data.content;
-              pendingContent = fullContent;
+              pendingContent = stripAssistantDisplayText(fullContent);
 
               // Schedule render on next animation frame (batches multiple tokens)
               if (!rafId) {
@@ -184,7 +185,7 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
                   m.id === assistantId
                     ? {
                         ...m,
-                        content: fullContent,
+                        content: stripAssistantDisplayText(fullContent),
                         isStreaming: false,
                       }
                     : m
@@ -202,7 +203,7 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
                   m.id === assistantId
                     ? {
                         ...m,
-                        content: fullContent || 'Sorry, something went wrong. Please try again.',
+                        content: stripAssistantDisplayText(fullContent) || 'Sorry, something went wrong. Please try again.',
                         isStreaming: false,
                       }
                     : m
@@ -221,7 +222,7 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
       }
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: fullContent, isStreaming: false } : m
+          m.id === assistantId ? { ...m, content: stripAssistantDisplayText(fullContent), isStreaming: false } : m
         )
       );
 
