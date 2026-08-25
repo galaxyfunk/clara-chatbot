@@ -3,6 +3,7 @@ import { processChat, processChatStream } from '@/lib/chat/engine';
 import { summarizeConversation } from '@/lib/chat/summarize';
 import { createServerClient } from '@/lib/supabase/server';
 import { getCorsHeaders } from '@/lib/cors';
+import { resolveSourcePage } from '@/lib/integrations/ce-lead';
 import type { ChatRequest, ChatMessage } from '@/types/chat';
 
 // Trigger summary after this many messages (3 exchanges = 6 messages)
@@ -30,6 +31,8 @@ export async function POST(request: Request) {
     if (body.message.length > 2000) {
       return NextResponse.json({ success: false, error: 'Message too long (max 2000 characters)' }, { status: 400, headers: cors });
     }
+
+    body.source_page = resolveSourcePage(body.source_page, request.headers.get('referer'));
 
     // Detect if client wants streaming
     const wantsStream = body.stream === true

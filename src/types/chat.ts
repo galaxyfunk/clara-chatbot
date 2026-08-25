@@ -28,6 +28,8 @@ export interface ChatRequest {
   session_token: string;
   message: string;
   message_id: string;
+  /** Host page path when known (e.g. /pricing). Engine falls back to "/". */
+  source_page?: string;
 }
 
 export interface ChatResponse {
