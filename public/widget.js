@@ -213,6 +213,15 @@
     };
   }
 
+  function stripAssistantDisplayText(text) {
+    return String(text || '')
+      .replace(/\[(?:book\s+a\s+call|book\s+a\s+meeting|schedule\s+a\s+call|talk\s+to\s+(?:a\s+)?human)\](?:\([^)]*\))?/gi, '')
+      .replace(/https?:\/\/[^\s]+/gi, '')
+      .replace(/(?:\s*(?:here|below)):\s*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   // Render a booking URL as a clickable anchor appended to a container element.
   // Safe DOM construction — no innerHTML for user-facing content.
   function renderBookingLink(bookingUrl, containerEl) {
@@ -1272,11 +1281,11 @@
         await handleSSEStream(response, {
           onToken: function(content) {
             fullContent += content;
-            msgResult.textEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
+            msgResult.textEl.textContent = stripAssistantDisplayText(fullContent);
             scrollToBottom();
           },
           onDone: function(data) {
-            msgResult.textEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
+            msgResult.textEl.textContent = stripAssistantDisplayText(fullContent);
             if (data.booking_url) {
               renderBookingLink(data.booking_url, msgResult.content);
             }
@@ -1929,11 +1938,11 @@
         await handleSSEStream(response, {
           onToken: function(content) {
             fullContent += content;
-            assistantEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
+            assistantEl.textContent = stripAssistantDisplayText(fullContent);
             scrollToBottom();
           },
           onDone: function(data) {
-            assistantEl.textContent = fullContent.replace(/https?:\/\/[^\s]+/g, '').replace(/\s+/g, ' ').trim();
+            assistantEl.textContent = stripAssistantDisplayText(fullContent);
             if (data.booking_url) {
               renderBookingLink(data.booking_url, assistantEl);
             }
