@@ -1,5 +1,14 @@
 # CLAUDE.md — Clara Chatbot Project
 
+## Team memory
+
+Before building, read `galaxyfunk/team-brain`: `projects/clara.md` (current
+state of this product), the last three `daily/` reports and any recent
+`calls/` summary. The working agreement is `team-brain/WORKFLOW.md`: no ticket,
+no code; the Jira key (project CE) goes in the branch and the PR title
+(`feat/CE-12-name`, "CE-12: name"); comment on the ticket at milestones.
+Product label for this repo: `clara`.
+
 ## What Clara Is
 Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add Q&A pairs to a knowledge base, configure their own LLM provider (bring your own key), customize the chatbot's appearance and personality, and deploy it on their website via an embeddable widget. Built by Cloud Employee as both a production tool and a free open-source giveaway.
 
