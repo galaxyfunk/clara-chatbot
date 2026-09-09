@@ -37,6 +37,20 @@ export async function GET(request: Request) {
       .eq('id', workspaceId)
       .single();
 
+    if (error && error.code !== 'PGRST116') {
+      // A failed database call, not a missing row (see engine.ts for the
+      // 9 Sep 2026 history). 503 rather than 404 so callers can tell them apart.
+      console.error('[Workspace Public] lookup failed', {
+        workspace_id: workspaceId,
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      });
+      return NextResponse.json(
+        { success: false, error: `Workspace lookup failed: ${error.message}` },
+        { status: 503, headers: cors }
+      );
+    }
     if (error || !workspace) {
       return NextResponse.json(
         { success: false, error: 'Workspace not found' },

@@ -91,7 +91,23 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   // 2. Get workspace
   const { data: workspace, error: wsError } = await supabase
     .from('workspaces').select('*').eq('id', request.workspace_id).single();
-  if (wsError || !workspace) throw new Error('Workspace not found');
+  if (wsError || !workspace) {
+    // Distinguish "no such row" from "the database call failed". Before 9 Sep
+    // 2026 both surfaced as "Workspace not found", which on 8-9 Sep sent the
+    // investigation to the Anthropic account while Clara's Supabase project was
+    // intermittently failing a single-row select. PGRST116 is PostgREST's
+    // "0 rows for .single()"; anything else is a transport or database error.
+    if (wsError && wsError.code !== 'PGRST116') {
+      console.error('[Chat] Workspace lookup failed', {
+        workspace_id: request.workspace_id,
+        code: wsError.code,
+        message: wsError.message,
+        details: wsError.details,
+      });
+      throw new Error(`Workspace lookup failed: ${wsError.message}`);
+    }
+    throw new Error('Workspace not found');
+  }
   const settings: WorkspaceSettings = workspace.settings;
 
   // 3. Zero Q&A gate
