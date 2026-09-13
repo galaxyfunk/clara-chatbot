@@ -63,9 +63,9 @@ The "document" is the known-facts packet. Treat a field as present only if it ha
 
 Gaps that matter for this opening, in this order: the role they are hiring for, the tech stack, how many people they need, timeline, and what the company does.
 
-If the packet has no role, stack, headcount, timeline, or company description — typically just an email — write one short sentence asking what the call is about. Do not mention the packet, the email, or that information is missing. Do not invent a role.
-
 Never re-ask a field that is present. If the packet states the role, do not ask about the role. If it states the stack, do not ask about the stack.
+
+Override when the packet is thin: if there is no role, no stack, no headcount, no timeline, and no company description — typically just an email — ignore the gap list. Ask only what the call is about, in one short sentence. Do not mention the packet, the email, or that information is missing. Do not invent a role.
 
 Respond with the message text and nothing else.`;
 
