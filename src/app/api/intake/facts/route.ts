@@ -98,7 +98,7 @@ export async function POST(request: Request) {
     }
 
     const factsText = formatIntakeFacts(parsed.data);
-    const opening = await generateIntakeOpeningFromFacts(factsText);
+    const opening = await generateIntakeOpeningFromFacts(factsText, parsed.data);
     if (!opening.success || !opening.opening) {
       console.error('[Intake facts] Opening generation failed', opening.error);
       return fail('We could not start that conversation. Please try again.', 502);

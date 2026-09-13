@@ -65,7 +65,17 @@ Gaps that matter for this opening, in this order: the role they are hiring for, 
 
 Never re-ask a field that is present. If the packet states the role, do not ask about the role. If it states the stack, do not ask about the stack.
 
-Override when the packet is thin: if there is no role, no stack, no headcount, no timeline, and no company description — typically just an email — ignore the gap list. Ask only what the call is about, in one short sentence. Do not mention the packet, the email, or that information is missing. Do not invent a role.
+Respond with the message text and nothing else.`;
+
+const THIN_FACTS_OPENING_PROMPT = `You are Clara. Someone has just booked a call with a software engineering staffing company. You only have their contact details. They did not type anything to you.
+
+Write one short sentence asking what the call is about.
+
+Hard rules:
+- Do not greet them with "Hi" or "Hello" and do not introduce yourself.
+- Do not mention their email, a packet, or that information is missing.
+- Do not invent a role, a stack, or a company.
+- No bullet points. Keep it under 20 words.
 
 Respond with the message text and nothing else.`;
 
@@ -114,12 +124,29 @@ export async function generateIntakeOpening(
 
 /**
  * Same model, same opening rules, same cap as the JD path. The packet is JSON
- * facts from a booking page, not a file.
+ * facts from a booking page, not a file. A packet with only contact details
+ * uses a thinner prompt so Clara asks what the call is about instead of
+ * walking the hiring gap list.
  */
 export async function generateIntakeOpeningFromFacts(
-  factsText: string
+  factsText: string,
+  facts: ParsedIntakeFacts
 ): Promise<IntakeOpeningResult> {
-  return runOpening(FACTS_OPENING_PROMPT, factsText, 'No known facts to read');
+  const system = isThinIntakeFacts(facts) ? THIN_FACTS_OPENING_PROMPT : FACTS_OPENING_PROMPT;
+  return runOpening(system, factsText, 'No known facts to read');
+}
+
+/** True when we have contact details but nothing about the hire. */
+export function isThinIntakeFacts(facts: ParsedIntakeFacts): boolean {
+  const brief = facts.brief;
+  if (brief) {
+    for (const value of Object.values(brief)) {
+      if (formatBriefValue(value)) return false;
+    }
+  }
+  if (facts.booking?.event_name) return false;
+  if (facts.booking?.answers?.length) return false;
+  return true;
 }
 
 async function runOpening(
