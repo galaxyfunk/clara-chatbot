@@ -1,3 +1,4 @@
+import { after } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
 import { chatCompletion, chatCompletionStream, type LLMMessage } from '@/lib/llm/provider';
@@ -5,11 +6,28 @@ import { decrypt } from '@/lib/encryption';
 import { summarizeConversation } from '@/lib/chat/summarize';
 import { stripAssistantDisplayText } from '@/lib/chat/display-text';
 import {
+  extractBrief,
+  isBriefExtractionEnabled,
+  persistBrief,
+  persistIntakeSnapshot,
+  readBriefFromMetadata,
+  shouldExtractBrief,
+} from '@/lib/chat/extract-brief';
+import {
+  intakeSystemPrompt,
+  planIntakeTurn,
+  readIntakeSnapshot,
+  suggestionsFor,
+  type IntakeQuestion,
+  type IntakeSnapshot,
+} from '@/lib/chat/intake-plan';
+import {
   buildAskClaraLeadMessage,
   firstNameFromChat,
   notifyAskClaraLead,
 } from '@/lib/integrations/ce-lead';
 import type { ChatRequest, ChatResponse, ChatMessage } from '@/types/chat';
+import type { Brief } from '@/types/brief';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -48,6 +66,15 @@ function checkRateLimit(sessionToken: string): boolean {
 
 // ─── Chat Context (Shared Pre-LLM Logic) ────────────────────────────
 
+interface SessionRef {
+  id: string;
+  escalated: boolean;
+  escalated_at: string | null;
+  visitor_email: string | null;
+  visitor_name: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
 interface ChatContext {
   settings: WorkspaceSettings;
   apiKeyRow: { provider: string; model: string; encrypted_key: string };
@@ -57,15 +84,29 @@ interface ChatContext {
   confidence: number;
   topMatch: MatchedPair | null;
   previousMessages: ChatMessage[];
-  existingSession: {
-    id: string;
-    escalated: boolean;
-    escalated_at: string | null;
-    visitor_email: string | null;
-    visitor_name: string | null;
-  } | null;
+  existingSession: SessionRef | null;
   llmMessages: LLMMessage[];
   fallbackAnswer?: string;
+  intake?: { snapshot: IntakeSnapshot; question: IntakeQuestion | null };
+}
+
+function toSessionRef(row: {
+  id: string;
+  escalated: boolean;
+  escalated_at: string | null;
+  visitor_email: string | null;
+  visitor_name: string | null;
+  metadata?: unknown;
+} | null | undefined): SessionRef | null {
+  if (!row) return null;
+  return {
+    id: row.id,
+    escalated: row.escalated,
+    escalated_at: row.escalated_at,
+    visitor_email: row.visitor_email ?? null,
+    visitor_name: row.visitor_name ?? null,
+    metadata: (row.metadata as Record<string, unknown>) ?? null,
+  };
 }
 
 async function prepareChatContext(request: ChatRequest, streaming: boolean = false): Promise<ChatContext> {
@@ -146,11 +187,12 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   // 7. Get conversation history
   const { data: existingSession } = await supabase
     .from('chat_sessions')
-    .select('id, messages, escalated, escalated_at, visitor_email, visitor_name')
+    .select('id, messages, escalated, escalated_at, visitor_email, visitor_name, metadata')
     .eq('workspace_id', request.workspace_id)
     .eq('session_token', request.session_token).single();
 
   const previousMessages: ChatMessage[] = existingSession?.messages ?? [];
+  const sessionRef = toSessionRef(existingSession);
 
   // 8. Idempotency check
   if (request.message_id && previousMessages.some(m => m.message_id === request.message_id)) {
@@ -166,21 +208,20 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
         confidence,
         topMatch,
         previousMessages,
-        existingSession: existingSession ? {
-          id: existingSession.id,
-          escalated: existingSession.escalated,
-          escalated_at: existingSession.escalated_at,
-          visitor_email: existingSession.visitor_email ?? null,
-          visitor_name: existingSession.visitor_name ?? null,
-        } : null,
+        existingSession: sessionRef,
         llmMessages: [],
         fallbackAnswer: existingResponse.content,
       };
     }
   }
 
+  const storedIntake = readIntakeSnapshot(existingSession?.metadata);
+  const intake = storedIntake ? planIntakeTurn(storedIntake, request.message) : undefined;
+
   // 9. Build LLM messages
-  const llmMessages = buildChatPrompt(settings, request.message, matchedPairs, previousMessages, isConfident, streaming);
+  const llmMessages = intake
+    ? buildIntakeChatPrompt(settings, request.message, matchedPairs, previousMessages, intake)
+    : buildChatPrompt(settings, request.message, matchedPairs, previousMessages, isConfident, streaming);
 
   return {
     settings,
@@ -191,14 +232,9 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
     confidence,
     topMatch,
     previousMessages,
-    existingSession: existingSession ? {
-      id: existingSession.id,
-      escalated: existingSession.escalated,
-      escalated_at: existingSession.escalated_at,
-      visitor_email: existingSession.visitor_email ?? null,
-      visitor_name: existingSession.visitor_name ?? null,
-    } : null,
+    existingSession: sessionRef,
     llmMessages,
+    intake,
   };
 }
 
@@ -237,9 +273,10 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
   const parsed = parseLLMResponse(llmResponse.content);
   // Strip leftover CTAs and hallucinated URLs — the Book a Call button is separate
   parsed.answer = stripAssistantDisplayText(parsed.answer);
+  if (context.intake) parsed.escalation_offered = false;
 
   // Gap detection with dedup + noise filtering
-  const gapDetected = !context.isConfident;
+  const gapDetected = context.intake ? false : !context.isConfident;
   if (gapDetected) {
     const msg = request.message.trim();
     const isTooShort = msg.length < 20;
@@ -358,6 +395,24 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     }
   }
 
+  if (upsertedSession && context.intake) {
+    await persistIntakeSnapshot(upsertedSession.id, context.intake.snapshot);
+  }
+
+  if (upsertedSession && isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
+    const sessionId = upsertedSession.id;
+    const previousBrief = readBriefFromMetadata(context.existingSession?.metadata);
+    const conversation = updatedMessages.map((m) => ({ role: m.role, content: m.content }));
+    after(async () => {
+      const briefResult = await extractBrief(conversation, previousBrief);
+      if (briefResult.brief && briefResult.changed) {
+        await persistBrief(sessionId, briefResult.brief);
+      } else if (!briefResult.success) {
+        console.error('[Brief] Non-streaming extraction failed:', briefResult.error);
+      }
+    });
+  }
+
   return {
     answer: parsed.answer,
     confidence: context.confidence,
@@ -422,6 +477,11 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
   // SSE padding to push past TCP buffer thresholds (~1460 bytes MSS)
   const SSE_PADDING = `: ${' '.repeat(256)}\n\n`;
 
+  const previousBrief = readBriefFromMetadata(context.existingSession?.metadata);
+  let briefToPersist: Brief | null = null;
+  const intakeChips = suggestionsFor(context.intake?.question ?? null);
+  const isIntake = Boolean(context.intake);
+
   // Create SSE stream that wraps LLM tokens
   const sseStream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -443,14 +503,44 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           controller.enqueue(encoder.encode(SSE_PADDING));
         }
 
-        // Context-based escalation removed — LLM-only trigger via regex on response text
-        const escalationOffered = false;
+        if (intakeChips?.length) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'suggestions',
+            suggestions: intakeChips,
+          })}\n\n`));
+          controller.enqueue(encoder.encode(SSE_PADDING));
+        }
 
-        // Check if LLM naturally offered escalation via booking-related language
-        const llmOfferedEscalation = BOOKING_OFFER_REGEX.test(fullContent);
-        const finalEscalation = escalationOffered || llmOfferedEscalation;
+        const llmOfferedEscalation = isIntake ? false : BOOKING_OFFER_REGEX.test(fullContent);
+        const finalEscalation = llmOfferedEscalation;
 
-        // Send final metadata event
+        let briefToEmit = previousBrief;
+        if (isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
+          const briefResult = await extractBrief(
+            [
+              ...context.previousMessages.map((m) => ({ role: m.role, content: m.content })),
+              { role: 'user' as const, content: request.message },
+              { role: 'assistant' as const, content: fullContent },
+            ],
+            previousBrief
+          );
+          if (briefResult.brief) {
+            briefToEmit = briefResult.brief;
+            if (briefResult.changed) briefToPersist = briefResult.brief;
+          } else if (!briefResult.success) {
+            console.error('[Brief] Streaming extraction failed:', briefResult.error);
+          }
+        }
+
+        if (briefToEmit) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'brief_update',
+            version: briefToEmit.version,
+            brief: briefToEmit,
+          })}\n\n`));
+          controller.enqueue(encoder.encode(SSE_PADDING));
+        }
+
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
           type: 'done',
           escalation_offered: finalEscalation,
@@ -489,11 +579,11 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       const cleanedText = stripAssistantDisplayText(fullText);
 
       // Check if LLM naturally offered escalation via booking-related language
-      const llmOfferedEscalation = BOOKING_OFFER_REGEX.test(fullText);
+      const llmOfferedEscalation = isIntake ? false : BOOKING_OFFER_REGEX.test(fullText);
       const finalEscalation = streamingEscalation || llmOfferedEscalation;
 
       // Gap detection (same logic as non-streaming) with noise filtering
-      if (!context.isConfident) {
+      if (!isIntake && !context.isConfident) {
         const msg = request.message.trim();
         const isTooShort = msg.length < 20;
         const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg);
@@ -537,7 +627,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         role: 'assistant',
         content: cleanedText,
         timestamp: new Date().toISOString(),
-        gap_detected: !context.isConfident,
+        gap_detected: isIntake ? false : !context.isConfident,
         matched_qa_ids: context.matchedPairs.map(m => m.id),
         confidence: context.confidence,
         escalation_offered: finalEscalation,
@@ -709,6 +799,13 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           }
         }
       }
+
+      if (upsertedSession && context.intake) {
+        await persistIntakeSnapshot(upsertedSession.id, context.intake.snapshot);
+      }
+      if (upsertedSession && briefToPersist) {
+        await persistBrief(upsertedSession.id, briefToPersist);
+      }
     },
   };
 }
@@ -830,15 +927,42 @@ function appendUtmParams(
   }
 }
 
-function buildChatPrompt(
-  settings: WorkspaceSettings, userMessage: string, matchedPairs: MatchedPair[],
-  previousMessages: ChatMessage[], _isConfident: boolean, streaming: boolean = false
-): LLMMessage[] {
-  const contextBlock = matchedPairs.length > 0
+function knowledgeBlock(matchedPairs: MatchedPair[]): string {
+  return matchedPairs.length > 0
     ? matchedPairs.map((m, i) =>
         `[Q${i + 1}] ${m.question}\n[A${i + 1}] ${m.answer}\n(Category: ${m.category}, Relevance: ${(m.similarity * 100).toFixed(0)}%)`
       ).join('\n\n')
     : 'No relevant Q&A pairs found in the knowledge base.';
+}
+
+function buildIntakeChatPrompt(
+  settings: WorkspaceSettings,
+  userMessage: string,
+  matchedPairs: MatchedPair[],
+  previousMessages: ChatMessage[],
+  intake: { snapshot: IntakeSnapshot; question: IntakeQuestion | null }
+): LLMMessage[] {
+  const systemPrompt = intakeSystemPrompt({
+    displayName: settings.display_name || 'Clara',
+    snapshot: intake.snapshot,
+    question: intake.question,
+    knowledge: knowledgeBlock(matchedPairs),
+  });
+
+  const messages: LLMMessage[] = [{ role: 'system', content: systemPrompt }];
+  const recentHistory = previousMessages.slice(-20);
+  for (const msg of recentHistory) {
+    messages.push({ role: msg.role, content: msg.content });
+  }
+  messages.push({ role: 'user', content: userMessage });
+  return messages;
+}
+
+function buildChatPrompt(
+  settings: WorkspaceSettings, userMessage: string, matchedPairs: MatchedPair[],
+  previousMessages: ChatMessage[], _isConfident: boolean, streaming: boolean = false
+): LLMMessage[] {
+  const contextBlock = knowledgeBlock(matchedPairs);
 
   // Different response format for streaming vs non-streaming
   let responseFormatSection: string;

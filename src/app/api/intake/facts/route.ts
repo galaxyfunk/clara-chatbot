@@ -7,6 +7,8 @@ import {
   generateIntakeOpeningFromFacts,
   parseIntakeFactsBody,
 } from '@/lib/chat/intake-brief';
+import { briefFromIntakeSnapshot } from '@/lib/chat/extract-brief';
+import { buildBookedGreeting, isAskSourcePage } from '@/lib/chat/intake-plan';
 import type { ChatMessage } from '@/types/chat';
 
 /**
@@ -15,9 +17,9 @@ import type { ChatMessage } from '@/types/chat';
  * Public, unauthenticated. A booking-confirmation page already knows who the
  * visitor is and what they submitted. /api/chat cannot take that packet
  * (ChatRequest is workspace_id, session_token, message, message_id, optional
- * source_page), and metadata is invisible to later turns. This clones the JD
- * intake path: write a framed user turn into chat_sessions.messages, then
- * return session_token + greeting so the widget can open mid-conversation.
+ * source_page). We still write a framed user turn into chat_sessions.messages
+ * so later turns can see the facts, and we store the intake snapshot on
+ * metadata so /ask can walk one question at a time.
  *
  * SECURITY POSTURE. Matches /api/intake:
  *   - rate-limited by IP,
@@ -98,13 +100,35 @@ export async function POST(request: Request) {
     }
 
     const factsText = formatIntakeFacts(parsed.data);
-    const opening = await generateIntakeOpeningFromFacts(factsText, parsed.data);
-    if (!opening.success || !opening.opening) {
-      console.error('[Intake facts] Opening generation failed', opening.error);
-      return fail('We could not start that conversation. Please try again.', 502);
+    const now = new Date().toISOString();
+    const askPage = isAskSourcePage(sourcePage);
+    let greeting: string;
+    let suggestions: string[] | undefined;
+    let intakeMeta: Record<string, unknown> = {
+      kind: 'facts',
+      source_page: sourcePage ?? null,
+      received_at: now,
+    };
+    let seededBrief: ReturnType<typeof briefFromIntakeSnapshot> | undefined;
+
+    if (askPage) {
+      const booked = buildBookedGreeting(parsed.data);
+      greeting = booked.greeting;
+      suggestions = booked.suggestions;
+      intakeMeta = {
+        ...booked.snapshot,
+        received_at: now,
+      };
+      seededBrief = briefFromIntakeSnapshot(booked.snapshot);
+    } else {
+      const opening = await generateIntakeOpeningFromFacts(factsText, parsed.data);
+      if (!opening.success || !opening.opening) {
+        console.error('[Intake facts] Opening generation failed', opening.error);
+        return fail('We could not start that conversation. Please try again.', 502);
+      }
+      greeting = opening.opening;
     }
 
-    const now = new Date().toISOString();
     const sessionToken = crypto.randomUUID();
     const seedContent = buildFactsSeedContent(factsText);
 
@@ -118,10 +142,16 @@ export async function POST(request: Request) {
       {
         message_id: crypto.randomUUID(),
         role: 'assistant',
-        content: opening.opening,
+        content: greeting,
         timestamp: now,
       },
     ];
+
+    const metadata: Record<string, unknown> = { intake: intakeMeta };
+    if (seededBrief) {
+      metadata.brief = seededBrief;
+      metadata.brief_updated_at = now;
+    }
 
     const { error: sessionError } = await supabase.from('chat_sessions').upsert(
       {
@@ -130,13 +160,7 @@ export async function POST(request: Request) {
         messages,
         visitor_email: visitor.email,
         visitor_name: visitor.name ?? null,
-        metadata: {
-          intake: {
-            kind: 'facts',
-            source_page: sourcePage ?? null,
-            received_at: now,
-          },
-        },
+        metadata,
       },
       { onConflict: 'workspace_id,session_token' }
     );
@@ -150,7 +174,8 @@ export async function POST(request: Request) {
       {
         success: true,
         session_token: sessionToken,
-        greeting: opening.opening,
+        greeting,
+        ...(suggestions?.length ? { suggestions } : {}),
       },
       { headers: cors }
     );
