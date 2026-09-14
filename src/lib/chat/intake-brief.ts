@@ -102,6 +102,8 @@ export interface IntakeFactsBooking {
 export interface IntakeFactsVisitor {
   email: string;
   name?: string;
+  /** Who they are at the company. Never the role they are hiring. */
+  job_title?: string;
 }
 
 export interface ParsedIntakeFacts {
@@ -228,6 +230,8 @@ export function parseIntakeFactsBody(
   const visitor: IntakeFactsVisitor = { email };
   const name = asNonEmptyString(visitorRecord.name);
   if (name) visitor.name = name;
+  const jobTitle = asNonEmptyString(visitorRecord.job_title);
+  if (jobTitle) visitor.job_title = jobTitle;
 
   const parsed: ParsedIntakeFacts = { workspaceId, visitor };
 
@@ -291,6 +295,10 @@ export function formatIntakeFacts(facts: ParsedIntakeFacts): string {
   lines.push('Visitor');
   lines.push(`email: ${facts.visitor.email}`);
   if (facts.visitor.name) lines.push(`name: ${facts.visitor.name}`);
+  if (facts.visitor.job_title) {
+    lines.push(`job_title: ${facts.visitor.job_title}`);
+    lines.push('job_title_note: who they are at the company, not the role they are hiring');
+  }
 
   if (facts.booking) {
     const bookingLines: string[] = [];

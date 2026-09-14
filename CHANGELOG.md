@@ -4,6 +4,14 @@ Track of what shipped in each version. One paragraph per release.
 
 ---
 
+## Ask booked intake — greeting, question bank, brief_update, suggestions
+**Status:** IN PROGRESS
+**Date:** September 14, 2026
+
+After a sales booking, `/ask` seeds Clara with known facts. The first line is no longer the cold widget greeting. For `source_page` `/ask` (and `/uk/ask`), the greeting is written from the packet: thank them, name the host (or "your Cloud Employee lead"), and ask the first missing hole. Thin / medium / fat change that first line, not the product. Later turns walk one shared question bank, skip filled fields, insert role/stack probes with a reason, and treat `visitor.job_title` as who they are at the company, never the hire. Chat turns emit `suggestions` (chips, last item Other) and a complete `brief_update` when the brief version increases. The same `suggestions` array is returned on `POST /api/intake/facts` so the first question can draw buttons before anyone types. Options are also named in the sentence. Ready stays 70. No Calendly changes.
+
+---
+
 ## sales-coach Session 2.1 — Cron Auto-Trigger
 **Status:** ✅ COMPLETE
 **Date:** May 12, 2026
