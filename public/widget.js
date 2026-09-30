@@ -2044,20 +2044,44 @@
   }
 
   // ── Fetch Settings ──
-  function fetchSettings(id) {
+  //
+  // One retry, after a short pause. Until 9 Sep 2026 a single failed fetch
+  // meant the widget never mounted for that page view and never tried again;
+  // the host site's "Ask our AI anything" CTAs then fell through to their
+  // booking-page fallback with no error visible anywhere. The failures that
+  // prompted this were brief database blips lasting a few seconds, which is
+  // exactly what one retry after a pause covers. A genuine 404 (no such
+  // workspace) is not retried: it will not change.
+  var SETTINGS_RETRY_DELAY_MS = 1500;
+
+  function fetchSettingsOnce(id) {
     return fetch(BASE_URL + '/api/workspace/public?workspace_id=' + id)
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (!data.success) {
-          console.error('[Clara Widget] Failed to load settings:', data.error);
-          return null;
-        }
-        return data.settings;
+      .then(function(res) {
+        return res.json().then(function(data) {
+          if (!data.success) {
+            console.error('[Clara Widget] Failed to load settings:', data.error);
+            return { settings: null, retryable: res.status !== 404 };
+          }
+          return { settings: data.settings, retryable: false };
+        });
       })
       .catch(function(err) {
         console.error('[Clara Widget] Fetch error:', err);
-        return null;
+        return { settings: null, retryable: true };
       });
+  }
+
+  function fetchSettings(id) {
+    return fetchSettingsOnce(id).then(function(first) {
+      if (first.settings || !first.retryable) return first.settings;
+      return new Promise(function(resolve) {
+        setTimeout(resolve, SETTINGS_RETRY_DELAY_MS);
+      }).then(function() {
+        return fetchSettingsOnce(id);
+      }).then(function(second) {
+        return second.settings;
+      });
+    });
   }
 
   // ── Init ──
