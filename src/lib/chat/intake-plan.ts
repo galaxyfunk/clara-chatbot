@@ -74,6 +74,8 @@ export interface IntakeSnapshot {
   a7?: string;
   probe_count: number;
   long_note: boolean;
+  /** Landing: the fixed closing line has gone out; later turns just add to the brief. */
+  complete_sent?: boolean;
 }
 
 export const DEFAULT_HOST = 'your Cloud Employee lead';
@@ -413,7 +415,22 @@ function nextLandingQuestion(snapshot: IntakeSnapshot): IntakeQuestion | null {
   return null;
 }
 
+/** The question to ask again when a landing reply did not answer it. */
+export function landingQuestionToRepeat(snapshot: IntakeSnapshot): IntakeQuestion | null {
+  const asked = lastAskedId(snapshot);
+  if (asked) return questionById(asked, snapshot);
+  return nextLandingQuestion(snapshot);
+}
+
+export const LANDING_AFTER_CLOSE_PROMPT = 'Anything else about the role? Otherwise, leave your details in the form below.';
+
 export const LANDING_COMPLETE_LINE = "That's everything I need to start.";
+
+/**
+ * The last landing turn, sent verbatim rather than generated. The site shows
+ * its contact card under this reply, so it must never ask another question.
+ */
+export const LANDING_COMPLETE_REPLY = `${LANDING_COMPLETE_LINE} Leave your details below and we'll send two matched profiles within seven days.`;
 
 function landingSystemPrompt(args: {
   displayName: string;
@@ -425,7 +442,9 @@ function landingSystemPrompt(args: {
 
   const nextBlock = question
     ? `Ask exactly this next question, in your own short words, same meaning:\n${question.prompt}`
-    : `The brief is complete. Reply with exactly "${LANDING_COMPLETE_LINE}" and one short sentence saying that if they leave their details below, we will send two matched profiles within seven days. Ask nothing else.`;
+    : snapshot.complete_sent
+      ? 'The brief is already complete and the form for their details is on screen below. Acknowledge what they just added in one or two short sentences and say it is now part of their brief. If they asked something, answer it from the knowledge below. Ask no new question.'
+      : `The brief is complete. Reply with exactly "${LANDING_COMPLETE_LINE}" and one short sentence saying that if they leave their details below, we will send two matched profiles within seven days. Ask nothing else.`;
 
   return `You are ${displayName}, a curious hiring partner for Cloud Employee. A visitor landed on a page asking "Who are you hiring?" and is describing the role. You are gathering just enough for our engineers to start matching. Nobody has booked a call.
 
