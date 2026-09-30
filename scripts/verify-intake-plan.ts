@@ -215,6 +215,13 @@ const landingPrompt = intakeSystemPrompt({
   question: null,
   knowledge: '',
 });
+const afterClose = intakeSystemPrompt({
+  displayName: 'Clara',
+  snapshot: { ...landingTurn.snapshot, complete_sent: true },
+  question: null,
+  knowledge: '',
+});
+check('after the closing line Clara only acknowledges', /Ask no new question/.test(afterClose) && !/That's everything I need to start\./.test(afterClose));
 check('landing prompt says nobody booked', /nobody has booked a call/i.test(landingPrompt));
 check('landing complete prompt uses the fixed line', /That's everything I need to start\./.test(landingPrompt));
 check('landing prompt never asks for email', /do not ask for their name or email/i.test(landingPrompt));

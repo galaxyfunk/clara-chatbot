@@ -74,6 +74,8 @@ export interface IntakeSnapshot {
   a7?: string;
   probe_count: number;
   long_note: boolean;
+  /** Landing: the fixed closing line has gone out; later turns just add to the brief. */
+  complete_sent?: boolean;
 }
 
 export const DEFAULT_HOST = 'your Cloud Employee lead';
@@ -431,7 +433,9 @@ function landingSystemPrompt(args: {
 
   const nextBlock = question
     ? `Ask exactly this next question, in your own short words, same meaning:\n${question.prompt}`
-    : `The brief is complete. Reply with exactly "${LANDING_COMPLETE_LINE}" and one short sentence saying that if they leave their details below, we will send two matched profiles within seven days. Ask nothing else.`;
+    : snapshot.complete_sent
+      ? 'The brief is already complete and the form for their details is on screen below. Acknowledge what they just added in one or two short sentences and say it is now part of their brief. If they asked something, answer it from the knowledge below. Ask no new question.'
+      : `The brief is complete. Reply with exactly "${LANDING_COMPLETE_LINE}" and one short sentence saying that if they leave their details below, we will send two matched profiles within seven days. Ask nothing else.`;
 
   return `You are ${displayName}, a curious hiring partner for Cloud Employee. A visitor landed on a page asking "Who are you hiring?" and is describing the role. You are gathering just enough for our engineers to start matching. Nobody has booked a call.
 

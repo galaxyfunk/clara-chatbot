@@ -16,6 +16,7 @@ import {
 import {
   createLandingSnapshot,
   intakeSystemPrompt,
+  LANDING_COMPLETE_LINE,
   LANDING_COMPLETE_REPLY,
   isLandingSourcePage,
   namedFromBrief,
@@ -229,6 +230,13 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
 
   let preExtractedBrief: ChatContext['preExtractedBrief'];
   if (storedIntake?.kind === 'landing') {
+    // The snapshot is saved after the summary call, so a quick reply can read a
+    // stale one. The messages are saved first: trust them for the closing line.
+    if (!storedIntake.complete_sent && previousMessages.some(
+      (m) => m.role === 'assistant' && m.content.startsWith(LANDING_COMPLETE_LINE)
+    )) {
+      storedIntake = { ...storedIntake, complete_sent: true };
+    }
     const previousBrief = readBriefFromMetadata(existingSession?.metadata);
     preExtractedBrief = { brief: previousBrief, changed: false };
     if (isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
@@ -498,9 +506,15 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
   const isLanding = context.intake?.snapshot.kind === 'landing';
   const intakeComplete = isLanding && context.intake?.question === null;
+  // The closing line goes out once. Anything the visitor adds after it is
+  // acknowledged normally, with the form still on screen.
+  const sendClosingLine = intakeComplete && !context.intake?.snapshot.complete_sent;
+  if (sendClosingLine && context.intake) {
+    context.intake = { ...context.intake, snapshot: { ...context.intake.snapshot, complete_sent: true } };
+  }
 
-  // Stream from LLM, except the final landing turn, which is fixed text.
-  const { stream: llmStream, getFullResponse } = intakeComplete
+  // Stream from LLM, except the closing landing turn, which is fixed text.
+  const { stream: llmStream, getFullResponse } = sendClosingLine
     ? fixedReply(LANDING_COMPLETE_REPLY)
     : await chatCompletionStream(
         context.apiKeyRow.provider,
