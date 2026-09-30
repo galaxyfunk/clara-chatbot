@@ -162,6 +162,24 @@ const namedLanding = withNamedFacts(
     techStacks: ['React', 'TypeScript'],
   })
 );
+check(
+  'stack named in the role title counts',
+  nextQuestion(
+    withNamedFacts(
+      createLandingSnapshot('/brief-intake'),
+      namedFromBrief({ version: 1, intent: 'single_hire', strength: 40, roles: [{ title: 'React Engineer', count: 1 }] })
+    )
+  )?.id === 'L_TEAM'
+);
+check(
+  'a generic title still asks for the stack',
+  nextQuestion(
+    withNamedFacts(
+      createLandingSnapshot('/brief-intake'),
+      namedFromBrief({ version: 1, intent: 'single_hire', strength: 40, roles: [{ title: 'Backend engineer', count: 1 }] })
+    )
+  )?.id === 'A2'
+);
 check('named role carries seniority', namedLanding.named.role === 'Senior React engineer');
 check('named landing skips role and stack', nextQuestion(namedLanding)?.id === 'L_TEAM');
 

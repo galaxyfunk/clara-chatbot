@@ -524,8 +524,10 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
         let fullContent = '';
         while (true) {
-          const { done, value } = await reader.read();
+          const { done, value: raw } = await reader.read();
           if (done) break;
+          // The CE site forbids em dashes and the model does not always listen.
+          const value = isLanding ? raw.replace(/\u2014/g, '-') : raw;
           fullContent += value;
           // Send token event
           controller.enqueue(

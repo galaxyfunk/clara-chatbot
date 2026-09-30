@@ -227,6 +227,10 @@ export function namedFromBrief(brief: Brief | null): NamedSet {
     : role.title;
   const stack = brief.techStacks?.length ? brief.techStacks : role?.stacks;
   if (stack?.length) named.stack = stack;
+  else if (role?.title) {
+    const fromTitle = stackFromTitle(role.title);
+    if (fromTitle.length) named.stack = fromTitle;
+  }
   if (brief.headcount) named.headcount = String(brief.headcount);
   if (brief.timeline) named.timeline = brief.timeline;
   return named;
@@ -867,6 +871,19 @@ function salesforceNeedsFork(stack?: string[]): boolean {
   const joined = stack.join(' ').toLowerCase();
   if (!/\bsalesforce\b/.test(joined)) return false;
   return !/\b(admin|apex)\b/.test(joined);
+}
+
+/** "Senior React engineer" already names the stack; do not ask for it again. */
+const TITLE_STACK_RE =
+  /\b(react(?: native)?|next\.?js|vue|angular|svelte|node(?:\.js)?|typescript|javascript|python|django|flask|fastapi|java|spring|kotlin|swift|ios|android|flutter|go(?:lang)?|rust|ruby|rails|php|laravel|\.net|c#|c\+\+|salesforce|aws|azure|gcp|devops|data|ml|ai)\b/gi;
+
+function stackFromTitle(title: string): string[] {
+  const found = new Map<string, string>();
+  for (const match of title.matchAll(TITLE_STACK_RE)) {
+    const word = match[1];
+    if (!found.has(word.toLowerCase())) found.set(word.toLowerCase(), word);
+  }
+  return [...found.values()];
 }
 
 function stripVagueRoleWord(role: string): string {
