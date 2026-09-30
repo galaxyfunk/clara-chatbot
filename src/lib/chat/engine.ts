@@ -16,6 +16,8 @@ import {
 import {
   createLandingSnapshot,
   intakeSystemPrompt,
+  LANDING_AFTER_CLOSE_PROMPT,
+  landingQuestionToRepeat,
   LANDING_COMPLETE_LINE,
   LANDING_COMPLETE_REPLY,
   isLandingSourcePage,
@@ -27,6 +29,7 @@ import {
   type IntakeQuestion,
   type IntakeSnapshot,
 } from '@/lib/chat/intake-plan';
+import { classifyLandingTurn, offTrackReply, type LandingTurnKind } from '@/lib/chat/landing-guard';
 import {
   buildAskClaraLeadMessage,
   firstNameFromChat,
@@ -96,6 +99,10 @@ interface ChatContext {
   intake?: { snapshot: IntakeSnapshot; question: IntakeQuestion | null };
   /** Landing mode extracts BEFORE the reply so the plan can skip facts already given. */
   preExtractedBrief?: { brief: Brief | null; changed: boolean };
+  /** Landing guard verdict when the message did not answer anything. */
+  landingGuard?: Exclude<LandingTurnKind, 'answer'>;
+  /** Landing text sent verbatim instead of a model reply (off topic, job seeker). */
+  landingFixedReply?: string;
 }
 
 function toSessionRef(row: {
@@ -229,6 +236,9 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   }
 
   let preExtractedBrief: ChatContext['preExtractedBrief'];
+  let landingGuard: ChatContext['landingGuard'];
+  let landingFixedReply: string | undefined;
+  let landingIntake: ChatContext['intake'];
   if (storedIntake?.kind === 'landing') {
     // The snapshot is saved after the summary call, so a quick reply can read a
     // stale one. The messages are saved first: trust them for the closing line.
@@ -239,21 +249,39 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
     }
     const previousBrief = readBriefFromMetadata(existingSession?.metadata);
     preExtractedBrief = { brief: previousBrief, changed: false };
-    if (isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
-      const result = await extractBrief(
-        [
-          ...previousMessages.map((m) => ({ role: m.role, content: m.content })),
-          { role: 'user' as const, content: request.message },
-        ],
-        previousBrief
-      );
-      if (result.brief) preExtractedBrief = { brief: result.brief, changed: result.changed };
-      else if (!result.success) console.error('[Brief] Landing pre-extraction failed:', result.error);
+    const repeat = storedIntake.complete_sent ? null : landingQuestionToRepeat(storedIntake);
+    const lastAssistant = [...previousMessages].reverse().find((m) => m.role === 'assistant')?.content ?? null;
+    // Guard and extraction run side by side; the extraction is thrown away
+    // when the message turns out not to be about the hire.
+    const [kind, extracted] = await Promise.all([
+      classifyLandingTurn({ lastQuestion: lastAssistant, message: request.message, chips: repeat?.chips }),
+      isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)
+        ? extractBrief(
+            [
+              ...previousMessages.map((m) => ({ role: m.role, content: m.content })),
+              { role: 'user' as const, content: request.message },
+            ],
+            previousBrief
+          )
+        : Promise.resolve(null),
+    ]);
+
+    if (kind !== 'answer') {
+      landingGuard = kind;
+      landingIntake = { snapshot: storedIntake, question: repeat };
+      if (kind !== 'product_question') {
+        landingFixedReply = offTrackReply(kind, repeat?.prompt ?? LANDING_AFTER_CLOSE_PROMPT);
+      }
+    } else {
+      if (extracted?.brief) preExtractedBrief = { brief: extracted.brief, changed: extracted.changed };
+      else if (extracted && !extracted.success) console.error('[Brief] Landing pre-extraction failed:', extracted.error);
+      storedIntake = withNamedFacts(storedIntake, namedFromBrief(preExtractedBrief.brief));
     }
-    storedIntake = withNamedFacts(storedIntake, namedFromBrief(preExtractedBrief.brief));
   }
 
-  const intake = storedIntake ? planIntakeTurn(storedIntake, request.message) : undefined;
+  // A landing message that answered nothing re-asks the same question and
+  // leaves the plan where it was.
+  const intake = landingIntake ?? (storedIntake ? planIntakeTurn(storedIntake, request.message) : undefined);
 
   // 9. Build LLM messages
   const llmMessages = intake
@@ -273,6 +301,8 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
     llmMessages,
     intake,
     preExtractedBrief,
+    landingGuard,
+    landingFixedReply,
   };
 }
 
@@ -514,7 +544,9 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
   }
 
   // Stream from LLM, except the closing landing turn, which is fixed text.
-  const { stream: llmStream, getFullResponse } = sendClosingLine
+  const { stream: llmStream, getFullResponse } = context.landingFixedReply
+    ? fixedReply(context.landingFixedReply)
+    : sendClosingLine
     ? fixedReply(LANDING_COMPLETE_REPLY)
     : await chatCompletionStream(
         context.apiKeyRow.provider,
@@ -529,7 +561,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
   const previousBrief = readBriefFromMetadata(context.existingSession?.metadata);
   let briefToPersist: Brief | null = null;
-  const intakeChips = suggestionsFor(context.intake?.question ?? null);
+  // A job seeker gets no hiring chips; everyone else sees the question's options again.
+  const intakeChips = context.landingGuard === 'job_seeker' ? undefined : suggestionsFor(context.intake?.question ?? null);
   const isIntake = Boolean(context.intake);
 
   // Create SSE stream that wraps LLM tokens

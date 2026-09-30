@@ -9,6 +9,7 @@ import {
   createLandingSnapshot,
   intakeSystemPrompt,
   isLandingSourcePage,
+  landingQuestionToRepeat,
   namedFromBrief,
   nextQuestion,
   planIntakeTurn,
@@ -16,6 +17,7 @@ import {
   withNamedFacts,
 } from '../src/lib/chat/intake-plan';
 import { briefFromIntakeSnapshot } from '../src/lib/chat/extract-brief';
+import { looksLikeMash, offTrackReply } from '../src/lib/chat/landing-guard';
 
 const COLD = /what brings you to our staffing/i;
 const VIBE = /vibe coder/i;
@@ -222,6 +224,24 @@ const afterClose = intakeSystemPrompt({
   knowledge: '',
 });
 check('after the closing line Clara only acknowledges', /Ask no new question/.test(afterClose) && !/That's everything I need to start\./.test(afterClose));
+// ── Landing guard (no model call) ──
+for (const mash of ['asdasdasd', 'dsadsadsa', 'xkcdqwrtz', '!!!???', 'qwrtypsdfg hjkl']) {
+  check(`mash caught: ${mash}`, looksLikeMash(mash));
+}
+for (const real of ['Senior React engineer', 'asap', '2', 'Python and Go', 'Mostly own their work', 'not sure yet', 'SRE']) {
+  check(`real answer passes the mash check: ${real}`, !looksLikeMash(real));
+}
+check(
+  'off-topic reply re-asks the same question',
+  offTrackReply('off_topic', 'When would you like them to start?').endsWith('When would you like them to start?')
+);
+check('job seeker reply points to For Developers', /For Developers/.test(offTrackReply('job_seeker', 'x')));
+check(
+  'the question to repeat is the one last asked',
+  landingQuestionToRepeat({ ...namedLanding, asked: ['L_TEAM'] })?.id === 'L_TEAM'
+);
+check('a cold landing repeats the role question', landingQuestionToRepeat(createLandingSnapshot('/brief-intake'))?.id === 'A1');
+
 check('landing prompt says nobody booked', /nobody has booked a call/i.test(landingPrompt));
 check('landing complete prompt uses the fixed line', /That's everything I need to start\./.test(landingPrompt));
 check('landing prompt never asks for email', /do not ask for their name or email/i.test(landingPrompt));

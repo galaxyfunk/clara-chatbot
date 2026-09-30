@@ -415,6 +415,15 @@ function nextLandingQuestion(snapshot: IntakeSnapshot): IntakeQuestion | null {
   return null;
 }
 
+/** The question to ask again when a landing reply did not answer it. */
+export function landingQuestionToRepeat(snapshot: IntakeSnapshot): IntakeQuestion | null {
+  const asked = lastAskedId(snapshot);
+  if (asked) return questionById(asked, snapshot);
+  return nextLandingQuestion(snapshot);
+}
+
+export const LANDING_AFTER_CLOSE_PROMPT = 'Anything else about the role? Otherwise, leave your details in the form below.';
+
 export const LANDING_COMPLETE_LINE = "That's everything I need to start.";
 
 /**
