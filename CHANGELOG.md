@@ -4,6 +4,12 @@ Track of what shipped in each version. One paragraph per release.
 
 ---
 
+## Landing intake mode for /brief-intake (CE-35)
+**Status:** IN PROGRESS
+**Date:** September 30, 2026
+
+A cold ad visitor on cloudemployee.io `/brief-intake` (and `/uk/brief-intake`) gets a short fixed question plan instead of the Q&A persona: role and stack only if the first message or JD did not name them, then how the team works day to day, what great looks like, and when they should start. The brief is extracted BEFORE the reply on landing turns so the plan never re-asks a stated fact. When the plan is done, Clara says "That's everything I need to start." and `done` carries `intake_complete: true`, which is the site's cue to show its contact form. Landing sessions never capture email from chat: no HubSpot upsert and no `/api/lead` ping, because the site's `/api/brief` owns the lead. `POST /api/intake` with a landing `source_page` seeds the landing snapshot and brief from the JD and returns `suggestions` and `brief` alongside the greeting.
+
 ## Ask booked intake — greeting, question bank, brief_update, suggestions
 **Status:** IN PROGRESS
 **Date:** September 14, 2026

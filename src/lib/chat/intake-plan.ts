@@ -2,7 +2,12 @@
  * Post-booking /ask intake. One shared question bank. Skip what the seed
  * already holds. One question per turn. Host name comes from the packet;
  * if it is missing we say "your Cloud Employee lead" and never invent one.
+ *
+ * Landing mode (/brief-intake): a cold ad visitor, no email, no booking.
+ * Short fixed order, then `null` so the site can show its contact card.
  */
+
+import type { Brief } from '@/types/brief';
 
 export interface IntakeFactsInput {
   sourcePage?: string;
@@ -35,7 +40,10 @@ export type QuestionId =
   | 'B3'
   | 'B4'
   | 'B5'
-  | 'B6';
+  | 'B6'
+  | 'L_TEAM'
+  | 'L_GREAT'
+  | 'L_START';
 
 export interface NamedSet {
   role?: string;
@@ -52,7 +60,7 @@ export interface IntakeQuestion {
 }
 
 export interface IntakeSnapshot {
-  kind: 'facts';
+  kind: 'facts' | 'landing';
   source_page: string;
   band: IntakeBand;
   started_fat: boolean;
@@ -103,6 +111,12 @@ export function isAskSourcePage(sourcePage?: string): boolean {
   if (!sourcePage) return false;
   const path = sourcePage.split('?')[0].replace(/\/$/, '') || '/';
   return path === '/ask' || path === '/uk/ask';
+}
+
+export function isLandingSourcePage(sourcePage?: string): boolean {
+  if (!sourcePage) return false;
+  const path = sourcePage.split('?')[0].replace(/\/$/, '') || '/';
+  return path === '/brief-intake' || path === '/uk/brief-intake';
 }
 
 export function hostDisplayName(hostName?: string): string {
@@ -185,6 +199,49 @@ export function createIntakeSnapshot(facts: IntakeFactsInput): IntakeSnapshot {
   };
   if (jobTitle) snapshot.job_title = jobTitle;
   return snapshot;
+}
+
+export function createLandingSnapshot(sourcePage: string, named: NamedSet = {}): IntakeSnapshot {
+  return {
+    kind: 'landing',
+    source_page: sourcePage,
+    band: 'thin',
+    started_fat: false,
+    host: DEFAULT_HOST,
+    buyer_looks_hr: false,
+    named,
+    filled: filledFromNamed(named),
+    asked: [],
+    probe_count: 0,
+    long_note: false,
+  };
+}
+
+/** Role, stack and timeline the extractor already found, so landing never re-asks them. */
+export function namedFromBrief(brief: Brief | null): NamedSet {
+  if (!brief) return {};
+  const named: NamedSet = {};
+  const role = brief.roles?.[0];
+  if (role?.title) named.role = role.seniority && !role.title.toLowerCase().includes(role.seniority.toLowerCase())
+    ? `${role.seniority} ${role.title}`
+    : role.title;
+  const stack = brief.techStacks?.length ? brief.techStacks : role?.stacks;
+  if (stack?.length) named.stack = stack;
+  else if (role?.title) {
+    const fromTitle = stackFromTitle(role.title);
+    if (fromTitle.length) named.stack = fromTitle;
+  }
+  if (brief.headcount) named.headcount = String(brief.headcount);
+  if (brief.timeline) named.timeline = brief.timeline;
+  return named;
+}
+
+/** Fill holes in the snapshot from a fresh extraction. Never overwrites an answer. */
+export function withNamedFacts(snapshot: IntakeSnapshot, named: NamedSet): IntakeSnapshot {
+  const merged: NamedSet = { ...named, ...snapshot.named };
+  const next: IntakeSnapshot = { ...snapshot, named: merged, filled: [...snapshot.filled] };
+  for (const id of filledFromNamed(merged)) markFilled(next, id);
+  return next;
 }
 
 export function firstIntakeQuestion(snapshot: IntakeSnapshot): IntakeQuestion {
@@ -277,6 +334,9 @@ export function applyAnswer(
     case 'A7':
       next.a7 = text;
       break;
+    case 'L_START':
+      next.named.timeline = text;
+      break;
     case 'P_ROLE':
       next.named.role = next.named.role ? `${text} ${stripVagueRoleWord(next.named.role)}`.trim() : text;
       next.probe_count += 1;
@@ -293,6 +353,7 @@ export function applyAnswer(
 }
 
 export function nextQuestion(snapshot: IntakeSnapshot): IntakeQuestion | null {
+  if (snapshot.kind === 'landing') return nextLandingQuestion(snapshot);
   const filled = new Set(snapshot.filled);
   const asked = new Set(snapshot.asked);
   const skip = (id: QuestionId) => filled.has(id) || asked.has(id);
@@ -341,12 +402,65 @@ export function nextQuestion(snapshot: IntakeSnapshot): IntakeQuestion | null {
   return null;
 }
 
+function nextLandingQuestion(snapshot: IntakeSnapshot): IntakeQuestion | null {
+  const skip = (id: QuestionId) => snapshot.filled.includes(id) || snapshot.asked.includes(id);
+  if (!snapshot.named.role && !skip('A1')) return questionById('A1');
+  if (!snapshot.named.stack?.length && !skip('A2')) return questionById('A2');
+  for (const id of ['L_TEAM', 'L_GREAT', 'L_START'] as QuestionId[]) {
+    if (id === 'L_START' && snapshot.named.timeline) continue;
+    if (!skip(id)) return questionById(id);
+  }
+  return null;
+}
+
+export const LANDING_COMPLETE_LINE = "That's everything I need to start.";
+
+function landingSystemPrompt(args: {
+  displayName: string;
+  snapshot: IntakeSnapshot;
+  question: IntakeQuestion | null;
+  knowledge: string;
+}): string {
+  const { displayName, snapshot, question, knowledge } = args;
+
+  const nextBlock = question
+    ? `Ask exactly this next question, in your own short words, same meaning:\n${question.prompt}`
+    : `The brief is complete. Reply with exactly "${LANDING_COMPLETE_LINE}" and one short sentence saying that if they leave their details below, we will send two matched profiles within seven days. Ask nothing else.`;
+
+  return `You are ${displayName}, a curious hiring partner for Cloud Employee. A visitor landed on a page asking "Who are you hiring?" and is describing the role. You are gathering just enough for our engineers to start matching. Nobody has booked a call.
+
+Tone: one short acknowledgement of what they just said, then one question. Never a wall. They may stop anytime.
+
+Hard rules:
+- One question per turn.
+- Never re-ask something they already told you.
+- Never use em dashes.
+- Never claim you already matched someone from a database.
+- Do not ask for their name or email. The page collects those.
+- Do not offer to book a call.
+- Do not name the answer options in your sentence. The page shows them as buttons.
+- If they type past an option, that sentence is the answer.
+- If they are a developer looking for work, one line saying this page is for hiring, then ask who they are hiring for.
+
+Known facts: ${listWhatWeHave(snapshot.named) || 'almost none yet'}.
+
+${nextBlock}
+
+If they ask a product question, answer in one or two sentences from the knowledge below, then return to the next question.
+
+## Knowledge Base Context
+${knowledge}
+
+Respond naturally. Plain text. No JSON. No bullet list. Keep it under 60 words.`;
+}
+
 export function intakeSystemPrompt(args: {
   displayName: string;
   snapshot: IntakeSnapshot;
   question: IntakeQuestion | null;
   knowledge: string;
 }): string {
+  if (args.snapshot.kind === 'landing') return landingSystemPrompt(args);
   const { displayName, snapshot, question, knowledge } = args;
   const host = snapshot.host;
   const readyLine = snapshot.started_fat
@@ -434,17 +548,16 @@ export function readIntakeSnapshot(metadata: unknown): IntakeSnapshot | null {
   const raw = (metadata as Record<string, unknown>).intake;
   if (!raw || typeof raw !== 'object') return null;
   const row = raw as Record<string, unknown>;
-  if (row.kind !== 'facts') return null;
-  if (!isAskSourcePage(typeof row.source_page === 'string' ? row.source_page : undefined)) {
-    return null;
-  }
+  const sourcePage = typeof row.source_page === 'string' ? row.source_page : undefined;
+  if (row.kind === 'facts' && !isAskSourcePage(sourcePage)) return null;
+  if (row.kind === 'landing' && !isLandingSourcePage(sourcePage)) return null;
   if (!isSnapshotShape(row)) return null;
   return row as unknown as IntakeSnapshot;
 }
 
 function isSnapshotShape(row: Record<string, unknown>): boolean {
   return (
-    row.kind === 'facts' &&
+    (row.kind === 'facts' || row.kind === 'landing') &&
     typeof row.band === 'string' &&
     typeof row.host === 'string' &&
     typeof row.started_fat === 'boolean' &&
@@ -606,6 +719,25 @@ function questionById(id: QuestionId, snapshot?: IntakeSnapshot): IntakeQuestion
       };
     case 'A5x':
       return { id, prompt: 'Any extra context on how you work?' };
+    case 'L_TEAM':
+      return {
+        id,
+        prompt:
+          "What's your team like day to day? Lots of pairing and review, or do people mostly own their own work?",
+        chips: withOther(['Lots of pairing and review', 'Mostly own their work', 'A mix of both']),
+      };
+    case 'L_GREAT':
+      return {
+        id,
+        prompt:
+          "What does great look like to you? Think of the best engineer you've worked with. What did they actually do?",
+      };
+    case 'L_START':
+      return {
+        id,
+        prompt: 'When would you like them to start?',
+        chips: withOther(['As soon as possible', 'Within a month', 'In 1-3 months']),
+      };
   }
 }
 
@@ -739,6 +871,19 @@ function salesforceNeedsFork(stack?: string[]): boolean {
   const joined = stack.join(' ').toLowerCase();
   if (!/\bsalesforce\b/.test(joined)) return false;
   return !/\b(admin|apex)\b/.test(joined);
+}
+
+/** "Senior React engineer" already names the stack; do not ask for it again. */
+const TITLE_STACK_RE =
+  /\b(react(?: native)?|next\.?js|vue|angular|svelte|node(?:\.js)?|typescript|javascript|python|django|flask|fastapi|java|spring|kotlin|swift|ios|android|flutter|go(?:lang)?|rust|ruby|rails|php|laravel|\.net|c#|c\+\+|salesforce|aws|azure|gcp|devops|data|ml|ai)\b/gi;
+
+function stackFromTitle(title: string): string[] {
+  const found = new Map<string, string>();
+  for (const match of title.matchAll(TITLE_STACK_RE)) {
+    const word = match[1];
+    if (!found.has(word.toLowerCase())) found.set(word.toLowerCase(), word);
+  }
+  return [...found.values()];
 }
 
 function stripVagueRoleWord(role: string): string {

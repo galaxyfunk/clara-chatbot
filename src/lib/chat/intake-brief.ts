@@ -138,6 +138,34 @@ export async function generateIntakeOpeningFromFacts(
   return runOpening(system, factsText, 'No known facts to read');
 }
 
+/**
+ * /brief-intake opening after a JD upload. The page draws the stack and
+ * seniority read-out itself from the brief, so this says what the role is in
+ * one line and asks the landing plan's next question.
+ */
+export async function generateLandingIntakeOpening(
+  jobDescription: string,
+  nextQuestion: string | null
+): Promise<IntakeOpeningResult> {
+  const ask = nextQuestion
+    ? `Then ask this question, in your own short words, same meaning:\n${nextQuestion}`
+    : 'Then say that is everything you need to start.';
+  const system = `You are Clara, talking to someone who has just uploaded a job description on a page asking "Who are you hiring?". They are hiring, not job hunting.
+
+Write your opening message. First, one short sentence saying what they are hiring for in plain language, the role, seniority and hours if stated, ending with "Got it." ${ask}
+
+Hard rules:
+- Never guess a value the document does not state.
+- Do not list the document back. No bullet points, no headings.
+- Do not name answer options. The page shows them as buttons.
+- Do not greet them or introduce yourself.
+- Never use em dashes. Never write a URL.
+- Keep it under 60 words.
+
+Respond with the message text and nothing else.`;
+  return runOpening(system, jobDescription, 'No job description text to read');
+}
+
 /** True when we have contact details but nothing about the hire. */
 export function isThinIntakeFacts(facts: ParsedIntakeFacts): boolean {
   const brief = facts.brief;

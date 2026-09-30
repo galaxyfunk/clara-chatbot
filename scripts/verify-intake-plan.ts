@@ -6,8 +6,14 @@ import {
   applyAnswer,
   buildBookedGreeting,
   DEFAULT_HOST,
+  createLandingSnapshot,
+  intakeSystemPrompt,
+  isLandingSourcePage,
+  namedFromBrief,
   nextQuestion,
   planIntakeTurn,
+  readIntakeSnapshot,
+  withNamedFacts,
 } from '../src/lib/chat/intake-plan';
 import { briefFromIntakeSnapshot } from '../src/lib/chat/extract-brief';
 
@@ -138,6 +144,80 @@ check(
 );
 check('companyContext has the company', /Acme/i.test(seededBrief.companyContext ?? ''));
 check('ready stays a 70-or-under number until core facts land', seededBrief.strength <= 100);
+
+// ── Landing (/brief-intake) ──
+check('landing page detected', isLandingSourcePage('/brief-intake?utm_source=google'));
+check('ask page is not landing', !isLandingSourcePage('/ask'));
+
+const coldLanding = createLandingSnapshot('/brief-intake');
+check('cold landing asks role first', nextQuestion(coldLanding)?.id === 'A1');
+
+const namedLanding = withNamedFacts(
+  createLandingSnapshot('/brief-intake'),
+  namedFromBrief({
+    version: 1,
+    intent: 'single_hire',
+    strength: 40,
+    roles: [{ title: 'React engineer', seniority: 'Senior', count: 1 }],
+    techStacks: ['React', 'TypeScript'],
+  })
+);
+check(
+  'stack named in the role title counts',
+  nextQuestion(
+    withNamedFacts(
+      createLandingSnapshot('/brief-intake'),
+      namedFromBrief({ version: 1, intent: 'single_hire', strength: 40, roles: [{ title: 'React Engineer', count: 1 }] })
+    )
+  )?.id === 'L_TEAM'
+);
+check(
+  'a generic title still asks for the stack',
+  nextQuestion(
+    withNamedFacts(
+      createLandingSnapshot('/brief-intake'),
+      namedFromBrief({ version: 1, intent: 'single_hire', strength: 40, roles: [{ title: 'Backend engineer', count: 1 }] })
+    )
+  )?.id === 'A2'
+);
+check('named role carries seniority', namedLanding.named.role === 'Senior React engineer');
+check('named landing skips role and stack', nextQuestion(namedLanding)?.id === 'L_TEAM');
+
+let landingTurn = { snapshot: namedLanding, question: nextQuestion(namedLanding) };
+landingTurn.snapshot = { ...landingTurn.snapshot, asked: ['L_TEAM'] };
+landingTurn = planIntakeTurn(landingTurn.snapshot, 'Mostly own their work');
+check('after team comes what great looks like', landingTurn.question?.id === 'L_GREAT');
+landingTurn = planIntakeTurn(landingTurn.snapshot, 'They pushed back and shipped');
+check('then start date', landingTurn.question?.id === 'L_START');
+landingTurn = planIntakeTurn(landingTurn.snapshot, 'Within a month');
+check('landing completes after start date', landingTurn.question === null);
+check('start date lands as timeline', landingTurn.snapshot.named.timeline === 'Within a month');
+
+const timedLanding = withNamedFacts(namedLanding, { timeline: 'next week' });
+const timedAfterGreat = { ...timedLanding, asked: ['L_TEAM', 'L_GREAT'] as typeof timedLanding.asked };
+check('known timeline skips start date', nextQuestion(timedAfterGreat) === null);
+
+const answerKept = withNamedFacts(landingTurn.snapshot, { timeline: 'someday' });
+check('extraction never overwrites an answer', answerKept.named.timeline === 'Within a month');
+
+check(
+  'landing snapshot survives a metadata round trip',
+  readIntakeSnapshot({ intake: namedLanding })?.kind === 'landing'
+);
+check(
+  'landing snapshot on a non-landing page is ignored',
+  readIntakeSnapshot({ intake: { ...namedLanding, source_page: '/pricing' } }) === null
+);
+
+const landingPrompt = intakeSystemPrompt({
+  displayName: 'Clara',
+  snapshot: landingTurn.snapshot,
+  question: null,
+  knowledge: '',
+});
+check('landing prompt says nobody booked', /nobody has booked a call/i.test(landingPrompt));
+check('landing complete prompt uses the fixed line', /That's everything I need to start\./.test(landingPrompt));
+check('landing prompt never asks for email', /do not ask for their name or email/i.test(landingPrompt));
 
 if (failed > 0) {
   console.error(`\n${failed} check(s) failed`);
