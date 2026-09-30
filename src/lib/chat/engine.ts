@@ -1,7 +1,7 @@
 import { after } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
-import { chatCompletion, chatCompletionStream, type LLMMessage } from '@/lib/llm/provider';
+import { chatCompletion, chatCompletionStream, type LLMMessage, type StreamResult } from '@/lib/llm/provider';
 import { decrypt } from '@/lib/encryption';
 import { summarizeConversation } from '@/lib/chat/summarize';
 import { stripAssistantDisplayText } from '@/lib/chat/display-text';
@@ -16,6 +16,7 @@ import {
 import {
   createLandingSnapshot,
   intakeSystemPrompt,
+  LANDING_COMPLETE_REPLY,
   isLandingSourcePage,
   namedFromBrief,
   planIntakeTurn,
@@ -495,14 +496,19 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
   const emailCaptured = willCaptureEmail(request.message, context.existingSession?.visitor_email);
 
-  // Stream from LLM
-  const { stream: llmStream, getFullResponse } = await chatCompletionStream(
-    context.apiKeyRow.provider,
-    context.apiKeyRow.model,
-    context.rawApiKey,
-    context.llmMessages,
-    { maxTokens: 1024, temperature: 0.7 }
-  );
+  const isLanding = context.intake?.snapshot.kind === 'landing';
+  const intakeComplete = isLanding && context.intake?.question === null;
+
+  // Stream from LLM, except the final landing turn, which is fixed text.
+  const { stream: llmStream, getFullResponse } = intakeComplete
+    ? fixedReply(LANDING_COMPLETE_REPLY)
+    : await chatCompletionStream(
+        context.apiKeyRow.provider,
+        context.apiKeyRow.model,
+        context.rawApiKey,
+        context.llmMessages,
+        { maxTokens: 1024, temperature: 0.7 }
+      );
 
   // SSE padding to push past TCP buffer thresholds (~1460 bytes MSS)
   const SSE_PADDING = `: ${' '.repeat(256)}\n\n`;
@@ -511,8 +517,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
   let briefToPersist: Brief | null = null;
   const intakeChips = suggestionsFor(context.intake?.question ?? null);
   const isIntake = Boolean(context.intake);
-  const isLanding = context.intake?.snapshot.kind === 'landing';
-  const intakeComplete = isLanding && context.intake?.question === null;
 
   // Create SSE stream that wraps LLM tokens
   const sseStream = new ReadableStream<Uint8Array>({
@@ -845,6 +849,18 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         await persistBrief(upsertedSession.id, briefToPersist);
       }
     },
+  };
+}
+
+function fixedReply(text: string): StreamResult {
+  return {
+    stream: new ReadableStream<string>({
+      start(controller) {
+        controller.enqueue(text);
+        controller.close();
+      },
+    }),
+    getFullResponse: async () => text,
   };
 }
 

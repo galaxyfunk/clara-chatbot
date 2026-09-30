@@ -415,6 +415,12 @@ function nextLandingQuestion(snapshot: IntakeSnapshot): IntakeQuestion | null {
 
 export const LANDING_COMPLETE_LINE = "That's everything I need to start.";
 
+/**
+ * The last landing turn, sent verbatim rather than generated. The site shows
+ * its contact card under this reply, so it must never ask another question.
+ */
+export const LANDING_COMPLETE_REPLY = `${LANDING_COMPLETE_LINE} Leave your details below and we'll send two matched profiles within seven days.`;
+
 function landingSystemPrompt(args: {
   displayName: string;
   snapshot: IntakeSnapshot;
