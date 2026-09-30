@@ -14,9 +14,13 @@ import {
   shouldExtractBrief,
 } from '@/lib/chat/extract-brief';
 import {
+  createLandingSnapshot,
   intakeSystemPrompt,
+  isLandingSourcePage,
+  namedFromBrief,
   planIntakeTurn,
   readIntakeSnapshot,
+  withNamedFacts,
   suggestionsFor,
   type IntakeQuestion,
   type IntakeSnapshot,
@@ -88,6 +92,8 @@ interface ChatContext {
   llmMessages: LLMMessage[];
   fallbackAnswer?: string;
   intake?: { snapshot: IntakeSnapshot; question: IntakeQuestion | null };
+  /** Landing mode extracts BEFORE the reply so the plan can skip facts already given. */
+  preExtractedBrief?: { brief: Brief | null; changed: boolean };
 }
 
 function toSessionRef(row: {
@@ -215,7 +221,29 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
     }
   }
 
-  const storedIntake = readIntakeSnapshot(existingSession?.metadata);
+  let storedIntake = readIntakeSnapshot(existingSession?.metadata);
+  if (!storedIntake && !existingSession && isLandingSourcePage(request.source_page)) {
+    storedIntake = createLandingSnapshot(request.source_page!);
+  }
+
+  let preExtractedBrief: ChatContext['preExtractedBrief'];
+  if (storedIntake?.kind === 'landing') {
+    const previousBrief = readBriefFromMetadata(existingSession?.metadata);
+    preExtractedBrief = { brief: previousBrief, changed: false };
+    if (isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
+      const result = await extractBrief(
+        [
+          ...previousMessages.map((m) => ({ role: m.role, content: m.content })),
+          { role: 'user' as const, content: request.message },
+        ],
+        previousBrief
+      );
+      if (result.brief) preExtractedBrief = { brief: result.brief, changed: result.changed };
+      else if (!result.success) console.error('[Brief] Landing pre-extraction failed:', result.error);
+    }
+    storedIntake = withNamedFacts(storedIntake, namedFromBrief(preExtractedBrief.brief));
+  }
+
   const intake = storedIntake ? planIntakeTurn(storedIntake, request.message) : undefined;
 
   // 9. Build LLM messages
@@ -235,6 +263,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
     existingSession: sessionRef,
     llmMessages,
     intake,
+    preExtractedBrief,
   };
 }
 
@@ -343,7 +372,8 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
 
   // ── Email capture + HubSpot upsert ──
   if (upsertedSession) {
-    const detectedEmail = extractEmail(request.message);
+    // Landing leads are written by the site's own form, never from chat.
+    const detectedEmail = context.intake?.snapshot.kind === 'landing' ? null : extractEmail(request.message);
     console.log('[HubSpot Debug] Non-streaming path — email extracted:', detectedEmail, '| hubspot_enabled:', context.settings.hubspot_enabled);
     if (detectedEmail) {
       const { data: sessionCheck } = await supabase
@@ -481,6 +511,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
   let briefToPersist: Brief | null = null;
   const intakeChips = suggestionsFor(context.intake?.question ?? null);
   const isIntake = Boolean(context.intake);
+  const isLanding = context.intake?.snapshot.kind === 'landing';
+  const intakeComplete = isLanding && context.intake?.question === null;
 
   // Create SSE stream that wraps LLM tokens
   const sseStream = new ReadableStream<Uint8Array>({
@@ -515,7 +547,10 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         const finalEscalation = llmOfferedEscalation;
 
         let briefToEmit = previousBrief;
-        if (isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
+        if (context.preExtractedBrief) {
+          briefToEmit = context.preExtractedBrief.brief;
+          if (context.preExtractedBrief.changed) briefToPersist = context.preExtractedBrief.brief;
+        } else if (isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
           const briefResult = await extractBrief(
             [
               ...context.previousMessages.map((m) => ({ role: m.role, content: m.content })),
@@ -552,6 +587,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
               )
             : null,
           email_captured: emailCaptured,
+          ...(isLanding ? { intake_complete: intakeComplete } : {}),
         })}\n\n`));
 
         controller.close();
@@ -743,7 +779,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       // ── Email capture + HubSpot upsert ──
       if (upsertedSession) {
-        const detectedEmail = extractEmail(request.message);
+        const detectedEmail = isLanding ? null : extractEmail(request.message);
         console.log('[HubSpot Debug] Streaming postProcess — email extracted:', detectedEmail, '| hubspot_enabled:', context.settings.hubspot_enabled);
         if (detectedEmail) {
           const { data: sessionCheck } = await supabase

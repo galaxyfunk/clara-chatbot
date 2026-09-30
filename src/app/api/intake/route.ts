@@ -6,7 +6,20 @@ import {
   capJobDescription,
   generateIntakeOpening,
   generateIntakeOpeningFromVisual,
+  generateLandingIntakeOpening,
 } from '@/lib/chat/intake-brief';
+import { extractBrief, isBriefExtractionEnabled } from '@/lib/chat/extract-brief';
+import {
+  createLandingSnapshot,
+  isLandingSourcePage,
+  markAsked,
+  namedFromBrief,
+  nextQuestion,
+  suggestionsFor,
+  withNamedFacts,
+  type IntakeSnapshot,
+} from '@/lib/chat/intake-plan';
+import type { Brief } from '@/types/brief';
 import {
   buildVisualBlock,
   extensionOf,
@@ -94,6 +107,8 @@ export async function POST(request: Request) {
     const workspaceId = formData.get('workspace_id');
     // Free-text label for where this came from, e.g. "/services/hire-uk-engineers".
     const sourcePage = formData.get('source_page');
+    const landingPage =
+      typeof sourcePage === 'string' && isLandingSourcePage(sourcePage) ? sourcePage : null;
 
     if (typeof workspaceId !== 'string' || !workspaceId) {
       return fail('workspace_id is required', 400);
@@ -159,12 +174,17 @@ export async function POST(request: Request) {
 
       if (parsed.success && parsed.text) {
         jobDescription = capJobDescription(parsed.text);
-        const opening = await generateIntakeOpening(jobDescription);
-        if (!opening.success || !opening.opening) {
-          console.error('[Intake] Opening generation failed for', file.name, opening.error);
-          return fail('We could not read that document. Please try again.', 502);
+        if (landingPage) {
+          // Landing writes its own opening below, once the brief is known.
+          openingText = '';
+        } else {
+          const opening = await generateIntakeOpening(jobDescription);
+          if (!opening.success || !opening.opening) {
+            console.error('[Intake] Opening generation failed for', file.name, opening.error);
+            return fail('We could not read that document. Please try again.', 502);
+          }
+          openingText = opening.opening;
         }
-        openingText = opening.opening;
       } else if (parsed.visualFallback) {
         // No selectable text, but the bytes are readable by eye: a scanned PDF,
         // or the preview lifted out of a .pages bundle.
@@ -182,6 +202,39 @@ export async function POST(request: Request) {
         // parseFile's errors are already visitor-safe ("export it as a PDF", "the
         // document appears to be empty") and describe the file, never its content.
         return fail(parsed.error ?? 'We could not read that document.', 422);
+      }
+    }
+
+    // ── Landing plan ──
+    //
+    // /brief-intake runs a short fixed question order. Extract the brief from
+    // the JD first so the plan skips what the document already states.
+    let landingSnapshot: IntakeSnapshot | null = null;
+    let landingBrief: Brief | null = null;
+    let landingSuggestions: string[] | undefined;
+    if (landingPage) {
+      if (jobDescription && isBriefExtractionEnabled(workspaceId)) {
+        const extracted = await extractBrief([{ role: 'user', content: jobDescription }], null);
+        if (extracted.brief) landingBrief = extracted.brief;
+        else if (!extracted.success) console.error('[Intake] Landing extraction failed for', file.name, extracted.error);
+      }
+      let snapshot = withNamedFacts(createLandingSnapshot(landingPage), namedFromBrief(landingBrief));
+      const question = nextQuestion(snapshot);
+      if (question) snapshot = markAsked(snapshot, question.id);
+      landingSnapshot = snapshot;
+      landingSuggestions = suggestionsFor(question);
+
+      if (jobDescription) {
+        const opening = await generateLandingIntakeOpening(jobDescription, question?.prompt ?? null);
+        if (opening.success && opening.opening) openingText = opening.opening;
+        else console.error('[Intake] Landing opening failed for', file.name, opening.error);
+      }
+      if (!openingText) {
+        const fallback = await generateIntakeOpening(jobDescription || file.name);
+        if (!fallback.success || !fallback.opening) {
+          return fail('We could not read that document. Please try again.', 502);
+        }
+        openingText = fallback.opening;
       }
     }
 
@@ -229,13 +282,18 @@ export async function POST(request: Request) {
         workspace_id: workspaceId,
         session_token: sessionToken,
         messages,
-        metadata: {
-          intake: {
-            filename: file.name,
-            source_page: typeof sourcePage === 'string' ? sourcePage : null,
-            uploaded_at: now,
-          },
-        },
+        metadata: landingSnapshot
+          ? {
+              intake: { ...landingSnapshot, filename: file.name, uploaded_at: now },
+              ...(landingBrief ? { brief: landingBrief, brief_updated_at: now } : {}),
+            }
+          : {
+              intake: {
+                filename: file.name,
+                source_page: typeof sourcePage === 'string' ? sourcePage : null,
+                uploaded_at: now,
+              },
+            },
       },
       { onConflict: 'workspace_id,session_token' }
     );
@@ -254,6 +312,8 @@ export async function POST(request: Request) {
         session_token: sessionToken,
         greeting: openingText,
         filename: file.name,
+        ...(landingSuggestions?.length ? { suggestions: landingSuggestions } : {}),
+        ...(landingBrief ? { brief: landingBrief } : {}),
       },
       { headers: cors }
     );

@@ -43,6 +43,8 @@ export interface ChatResponse {
   message_count?: number;
   /** True only when this turn newly saved visitor_email. Never includes the address. */
   email_captured?: boolean;
+  /** Landing (/brief-intake) only: the question plan is finished, show the contact form. */
+  intake_complete?: boolean;
 }
 
 export interface ConversationSummary {
