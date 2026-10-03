@@ -1,3 +1,4 @@
+import { companyEmailError } from '@/lib/chat/company-email-policy';
 import { after } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateEmbedding } from '@/lib/embed';
@@ -791,7 +792,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                     .eq('id', upsertedSession.id)
                     .single();
 
-                  if (sessionForEmail?.visitor_email) {
+                  if (sessionForEmail?.visitor_email && !companyEmailError(request.workspace_id, sessionForEmail.visitor_email)) {
                     const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
                     const hubspotKey = process.env.HUBSPOT_API_KEY;
                     if (hubspotKey) {
@@ -958,8 +959,9 @@ function bookingPrefill(
   request: ChatRequest,
   context: ChatContext,
 ): { email: string | null; name: string | null } {
+  const email = extractEmail(request.message) || context.existingSession?.visitor_email || null;
   return {
-    email: extractEmail(request.message) || context.existingSession?.visitor_email || null,
+    email: email && !companyEmailError(request.workspace_id, email) ? email : null,
     name: visitorNameFromChat(
       context.existingSession?.visitor_name,
       context.previousMessages,

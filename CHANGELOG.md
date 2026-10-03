@@ -114,3 +114,7 @@ Intelligence features (docx/pdf upload, gap auto-resolution, conversation summar
 ---
 
 **v1.1 Session 9C Complete.** Clara is live at https://chatbot.jakevibes.dev
+
+## CLO-69 — company email enforcement, 3 October 2026
+
+Cloud Employee chat and booked-intake APIs reject personal/disposable email addresses before conversation/contact writes. Other tenant workspaces keep their existing policy. Both floating widget layouts show the actionable work-email response and keep input available. Historical records are preserved. This does not secure the separate Calendly booking service.
