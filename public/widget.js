@@ -1271,6 +1271,14 @@
         });
 
         if (!response.ok) {
+          if (response.status === 422) {
+            var rejection = await response.json().catch(function() { return null; });
+            if (rejection && rejection.reason === 'work_email_required') {
+              hideTyping();
+              showErrorMessage(rejection.error);
+              return;
+            }
+          }
           throw new Error('Chat request failed: ' + response.status);
         }
 
@@ -1928,6 +1936,14 @@
         });
 
         if (!response.ok) {
+          if (response.status === 422) {
+            var rejection = await response.json().catch(function() { return null; });
+            if (rejection && rejection.reason === 'work_email_required') {
+              typingDots.hide();
+              showErrorMessage(rejection.error);
+              return;
+            }
+          }
           throw new Error('Chat request failed: ' + response.status);
         }
 

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { companyEmailError } from '@/lib/chat/company-email-policy';
 import { createServerClient } from '@/lib/supabase/server';
 import { getCorsHeaders } from '@/lib/cors';
 import {
@@ -87,6 +88,8 @@ export async function POST(request: Request) {
     if (!parsed.ok) return fail(parsed.error, 400);
 
     const { workspaceId, sourcePage, visitor } = parsed.data;
+    const emailError = companyEmailError(workspaceId, visitor.email ?? '');
+    if (emailError) return fail(emailError, 422);
 
     const supabase = createServerClient();
     const { data: workspace, error: workspaceError } = await supabase

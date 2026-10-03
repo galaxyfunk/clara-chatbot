@@ -1,4 +1,5 @@
 import { NextResponse, after } from 'next/server';
+import { companyEmailError } from '@/lib/chat/company-email-policy';
 import { processChat, processChatStream } from '@/lib/chat/engine';
 import { summarizeConversation } from '@/lib/chat/summarize';
 import { createServerClient } from '@/lib/supabase/server';
@@ -30,6 +31,11 @@ export async function POST(request: Request) {
 
     if (body.message.length > 2000) {
       return NextResponse.json({ success: false, error: 'Message too long (max 2000 characters)' }, { status: 400, headers: cors });
+    }
+
+    const emailError = companyEmailError(body.workspace_id, body.message);
+    if (emailError) {
+      return NextResponse.json({ success: false, error: emailError, reason: 'work_email_required' }, { status: 422, headers: cors });
     }
 
     body.source_page = resolveSourcePage(body.source_page, request.headers.get('referer'));
