@@ -1,5 +1,6 @@
 import { NextResponse, after } from 'next/server';
 import { companyEmailError } from '@/lib/chat/company-email-policy';
+import { mailboxError } from '@/lib/chat/email-validation';
 import { processChat, processChatStream } from '@/lib/chat/engine';
 import { summarizeConversation } from '@/lib/chat/summarize';
 import { createServerClient } from '@/lib/supabase/server';
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
     if (emailError) {
       return NextResponse.json({ success: false, error: emailError, reason: 'work_email_required' }, { status: 422, headers: cors });
     }
+
+    const mailboxFailure = await mailboxError(body.workspace_id, body.message);
+    if (mailboxFailure) return NextResponse.json({ success: false, error: mailboxFailure, reason: 'email_validation_required' }, { status: 422, headers: cors });
 
     body.source_page = resolveSourcePage(body.source_page, request.headers.get('referer'));
 

@@ -118,3 +118,13 @@ Intelligence features (docx/pdf upload, gap auto-resolution, conversation summar
 ## CLO-69 — company email enforcement, 3 October 2026
 
 Cloud Employee chat and booked-intake APIs reject personal/disposable email addresses before conversation/contact writes. Other tenant workspaces keep their existing policy. Both floating widget layouts show the actionable work-email response and keep input available. Historical records are preserved. This does not secure the separate Calendly booking service.
+
+## 22 October 2026: CE mailbox validation (prepared, not deployed)
+
+CE chat and intake-facts routes now require a verified mailbox result from the
+website before contact capture. The bridge is server-to-server and authenticated
+with EMAIL_VALIDATION_BRIDGE_KEY; no provider key is copied to Clara. Invalid or
+uncertain responses and unavailable configuration return a correction/retry error.
+Other workspaces are unaffected. Mocked boundary tests and TypeScript pass.
+Coordinated website deployment/configuration and approved live credit tests remain
+pending. No production changes or credit use in this session.

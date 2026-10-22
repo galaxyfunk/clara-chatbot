@@ -277,3 +277,11 @@ Clara is a standalone, multi-tenant AI chatbot SaaS product. Users sign up, add 
 
 ## Relationship to Insights Bank
 Separate product. Separate repo, database, deployment, Claude Project. Future bridge API will push gap data to Insights Bank via REST call with shared secret. No database sharing, no shared auth. Not in v1.0 scope.
+
+## CE email validation release gate (22 October 2026)
+
+Prepared on `feat/zerobounce-intake`, not deployed. CE chat email turns and
+intake-facts require the website's authenticated mailbox validation endpoint.
+Configure the shared `EMAIL_VALIDATION_BRIDGE_KEY` and coordinate the website
+release before merging. Missing configuration fails closed. Other tenants are
+unchanged. No ZeroBounce calls were made; live credit tests need Jake's approval.
