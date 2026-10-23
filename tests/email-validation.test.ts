@@ -14,6 +14,8 @@ test('only CE email turns require an authenticated valid website verdict', async
   assert.equal(await mailboxError(CE_WORKSPACE_ID,'person@company.test'),null);assert.equal(calls,1);
   globalThis.fetch=async()=>Response.json({ok:false,message:'Please correct your address.'},{status:422});
   assert.equal(await mailboxError(CE_WORKSPACE_ID,'person@company.test'),'Please correct your address.');
+  globalThis.fetch=async()=>Response.json({ok:true,pendingReview:true,message:'Saved for review'},{status:202});
+  assert.deepEqual(await mailboxError(CE_WORKSPACE_ID,'person@company.test'),{pendingReview:true,message:'Saved for review'});
   globalThis.fetch=async()=>Response.json({accepted:true});assert.ok(await mailboxError(CE_WORKSPACE_ID,'person@company.test'));
   globalThis.fetch=async()=>{throw new Error('offline')};assert.ok(await mailboxError(CE_WORKSPACE_ID,'person@company.test'));
  } finally {globalThis.fetch=prior;if(key===undefined)delete process.env.EMAIL_VALIDATION_BRIDGE_KEY;else process.env.EMAIL_VALIDATION_BRIDGE_KEY=key;}

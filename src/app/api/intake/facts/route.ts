@@ -91,7 +91,8 @@ export async function POST(request: Request) {
     const { workspaceId, sourcePage, visitor } = parsed.data;
     const emailError = companyEmailError(workspaceId, visitor.email ?? '');
     if (emailError) return fail(emailError, 422);
-    const mailboxFailure = await mailboxError(workspaceId, visitor.email ?? '');
+    const mailboxFailure = await mailboxError(workspaceId, visitor.email ?? '', formatIntakeFacts(parsed.data));
+    if (mailboxFailure && typeof mailboxFailure !== 'string') return NextResponse.json({ success: true, pendingReview: true, message: mailboxFailure.message }, { status: 202, headers: getCorsHeaders(request.headers.get('origin'), 'POST, OPTIONS') });
     if (mailboxFailure) return fail(mailboxFailure, 422);
 
     const supabase = createServerClient();
