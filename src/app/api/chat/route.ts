@@ -46,7 +46,7 @@ export async function POST(request: Request) {
         const events = [{ type: 'token', content: answer }, { type: 'done', escalation_offered: false, booking_url: null, email_captured: false, pendingReview: true }];
         return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { ...cors, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' } });
       }
-      return NextResponse.json({ answer, pendingReview: true, email_captured: false, confidence: 0, gap_detected: false, escalation_offered: false, booking_url: null, matched_pairs: [] }, { headers: cors });
+      return NextResponse.json({ success: true, answer, pendingReview: true, email_captured: false, confidence: 0, gap_detected: false, escalation_offered: false, booking_url: null, matched_pairs: [] }, { headers: cors });
     }
     if (mailboxFailure) return NextResponse.json({ success: false, error: mailboxFailure, reason: 'email_validation_required' }, { status: 422, headers: cors });
 
