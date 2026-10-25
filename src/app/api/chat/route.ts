@@ -1,5 +1,6 @@
 import { NextResponse, after } from 'next/server';
 import { companyEmailError } from '@/lib/chat/company-email-policy';
+import { mailboxError } from '@/lib/chat/email-validation';
 import { processChat, processChatStream } from '@/lib/chat/engine';
 import { summarizeConversation } from '@/lib/chat/summarize';
 import { createServerClient } from '@/lib/supabase/server';
@@ -37,6 +38,17 @@ export async function POST(request: Request) {
     if (emailError) {
       return NextResponse.json({ success: false, error: emailError, reason: 'work_email_required' }, { status: 422, headers: cors });
     }
+
+    const mailboxFailure = await mailboxError(body.workspace_id, body.message, undefined, request.headers.get('x-vercel-ip-country'));
+    if (mailboxFailure && typeof mailboxFailure !== 'string') {
+      const answer = mailboxFailure.message;
+      if (body.stream === true || request.headers.get('accept')?.includes('text/event-stream')) {
+        const events = [{ type: 'token', content: answer }, { type: 'done', escalation_offered: false, booking_url: null, email_captured: false, pendingReview: true }];
+        return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { ...cors, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' } });
+      }
+      return NextResponse.json({ success: true, answer, pendingReview: true, email_captured: false, confidence: 0, gap_detected: false, escalation_offered: false, booking_url: null, matched_pairs: [] }, { headers: cors });
+    }
+    if (mailboxFailure) return NextResponse.json({ success: false, error: mailboxFailure, reason: 'email_validation_required' }, { status: 422, headers: cors });
 
     body.source_page = resolveSourcePage(body.source_page, request.headers.get('referer'));
 
