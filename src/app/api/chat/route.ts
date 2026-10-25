@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: emailError, reason: 'work_email_required' }, { status: 422, headers: cors });
     }
 
-    const mailboxFailure = await mailboxError(body.workspace_id, body.message);
+    const mailboxFailure = await mailboxError(body.workspace_id, body.message, undefined, request.headers.get('x-vercel-ip-country'));
     if (mailboxFailure && typeof mailboxFailure !== 'string') {
       const answer = mailboxFailure.message;
       if (body.stream === true || request.headers.get('accept')?.includes('text/event-stream')) {
