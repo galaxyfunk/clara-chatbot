@@ -34,11 +34,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Message too long (max 2000 characters)' }, { status: 400, headers: cors });
     }
 
-    const emailError = companyEmailError(body.workspace_id, body.message);
-    if (emailError) {
-      return NextResponse.json({ success: false, error: emailError, reason: 'work_email_required' }, { status: 422, headers: cors });
-    }
-
     const mailboxFailure = await chatMailboxError(body.workspace_id, body.message, request.headers.get('x-vercel-ip-country'), async () => {
       const {data,error} = await createServerClient().from('chat_sessions').select('messages')
         .eq('workspace_id',body.workspace_id).eq('session_token',body.session_token).maybeSingle();
@@ -54,6 +49,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, answer, pendingReview: true, email_captured: false, confidence: 0, gap_detected: false, escalation_offered: false, booking_url: null, matched_pairs: [] }, { headers: cors });
     }
     if (mailboxFailure) return NextResponse.json({ success: false, error: mailboxFailure, reason: 'email_validation_required' }, { status: 422, headers: cors });
+
+    const emailError = companyEmailError(body.workspace_id, body.message);
+    if (emailError) {
+      return NextResponse.json({ success: false, error: emailError, reason: 'work_email_required' }, { status: 422, headers: cors });
+    }
 
     body.source_page = resolveSourcePage(body.source_page, request.headers.get('referer'));
 
