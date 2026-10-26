@@ -1,3 +1,7 @@
+## 27 October 2026 — Preserve visitor intent during email preflight
+
+CE email turns now include stored visitor-authored messages in the website validation bridge. A service pitch followed by an email-only turn is classified before CRM capture. Session read errors hold capture; other tenants and turns without email do not load this context. Mocked regressions cover both cases.
+
 # CHANGELOG.md — Clara Chatbot
 
 Track of what shipped in each version. One paragraph per release.
