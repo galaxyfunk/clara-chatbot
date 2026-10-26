@@ -25,3 +25,19 @@ export async function mailboxError(workspaceId: string, text: string, context?: 
   }
   return null;
 }
+
+/** Use visitor-authored history: the email can arrive after the service pitch. */
+export async function chatMailboxError(
+  workspaceId: string, text: string, country: string | null,
+  loadMessages: () => Promise<Array<{role:string;content:string}>>,
+) {
+  const ce = workspaceId.trim().replace(/[{}-]/g, '').toLowerCase() === CE_WORKSPACE_ID.replace(/-/g, '');
+  if (!ce || !/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/.test(text)) return null;
+  try {
+    const messages = await loadMessages();
+    const history = messages.filter(m => m.role === 'user' && typeof m.content === 'string').map(m => m.content);
+    // Preserve the current message while bounding earlier visitor context.
+    const context = [...history, text].join('\n').slice(-20000);
+    return await mailboxError(workspaceId, text, context, country);
+  } catch { return UNAVAILABLE; }
+}
