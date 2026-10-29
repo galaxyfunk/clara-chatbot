@@ -24,9 +24,18 @@ test('widget reports truncated replies, and accepts terminal frame without newli
     assert.deepEqual(events,[expected]);
   }
 });
-test('UK fintech, 3 senior React/Node devs: CE guard requires Philippines, UK overlap and evidence-based pricing',()=>{
+test('UK fintech, 3 senior React/Node devs: CE guard requires Philippines, agreed hours on a call and evidence-based pricing',()=>{
   const guard=ceSalesGuard(CE_WORKSPACE_ID);
-  assert.match(guard,/Philippines/);assert.match(guard,/7am–4pm UK/);assert.match(guard,/three senior React\/Node/);assert.match(guard,/never invent a price/);
+  assert.match(guard,/Philippines/);
+  assert.match(guard,/working hours and shift overlap are agreed with the team on a call/);
+  assert.match(guard,/Do not state specific working hours or shift overlap times/);
+  assert.doesNotMatch(guard,/7am[–-]4pm/i);
+  assert.match(guard,/three senior React\/Node/);
+  assert.match(guard,/GBP 2,980–5,400 per developer per month/);
+  assert.match(guard,/GBP 8,940–16,200 monthly for three/);
+  assert.match(guard,/indicative benchmark, not a senior React\/Node quote/);
+  assert.match(guard,/site\/src\/components\/templates\/pricing\/content\.ts/);
+  assert.match(guard,/never invent a price/);
   assert.equal(ceSalesGuard('other-workspace'),'');
 });
 test('test mailbox skips validation bridge even without bridge credentials',async()=>{

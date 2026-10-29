@@ -2,7 +2,7 @@
 
 Prompt: “We're a UK fintech and need 3 senior React/Node devs. Where would you hire, what overlap can we get, and what will it cost?”
 
-Expected: Philippines delivery; agreed mid-shift approximately 7am–4pm UK, with daylight-saving confirmation. Indicative site benchmark GBP 2,980–5,400 per developer/month (GBP 8,940–16,200 for three), clearly not a binding senior React/Node quote. Ask a relevant requirement/timeline question. No Eastern Europe recommendation or invented compliance claims.
+Expected: Philippines delivery; working hours and shift overlap are agreed with the team on a call, without stating specific hours. The reply must contain neither “7am–4pm” nor “7am-4pm”. Indicative site benchmark GBP 2,980–5,400 per developer/month (GBP 8,940–16,200 for three), clearly not a binding senior React/Node quote. Ask a relevant requirement/timeline question. No Eastern Europe recommendation or invented compliance claims.
 
 Scope: only Cloud Employee workspace; other tenants retain their own prompts. Regression tests check the injected policy and tenant isolation; they do not claim to evaluate a live model response. The benchmark is sourced from cloudemployee.io site/src/components/templates/pricing/content.ts on 2026-10-29; update alongside pricing changes.
 
