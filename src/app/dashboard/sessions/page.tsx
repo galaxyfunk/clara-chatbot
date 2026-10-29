@@ -45,10 +45,6 @@ export default function SessionsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
-
   // Debounced search
   useEffect(() => {
     if (debounceRef.current) {

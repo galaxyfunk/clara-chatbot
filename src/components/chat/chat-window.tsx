@@ -207,9 +207,10 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false, seed =
       const decoder = new TextDecoder();
       let buffer = '';
       let fullContent = '';
+      let streamComplete = false;
       let prevStripped = '';
 
-      while (true) {
+      while (!streamComplete) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -218,6 +219,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false, seed =
         buffer = lines.pop() || '';
 
         for (const line of lines) {
+          if (streamComplete) break;
           if (!line.startsWith('data: ')) continue;
           try {
             const data = JSON.parse(line.slice(6));
@@ -235,6 +237,7 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false, seed =
             }
 
             if (data.type === 'done') {
+              streamComplete = true;
               // Flush remaining queue instantly and apply final metadata
               flushCharQueue();
               const finalContent = stripUrls(fullContent);
@@ -272,6 +275,9 @@ export function ChatWindow({ workspaceId, settings, isPlayground = false, seed =
           }
         }
       }
+
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
 
       // Final flush in case stream ended without 'done' event
       flushCharQueue();

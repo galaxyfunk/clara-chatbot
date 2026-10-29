@@ -34,3 +34,7 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+### Clara reliability regression checks (CLO-220)
+
+Run `npx tsx --test tests/*.test.ts`, `npx tsc --noEmit`, and `npm run lint`. Tests mock external delivery. The UK fintech fixture and verification limits are in `docs/evals/clara-uk-fintech.md`. The `fix/clara-e2e` branch disables automatic Vercel deployments so it can be reviewed without deployment.

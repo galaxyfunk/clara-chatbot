@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Upload, Loader2, X, ExternalLink } from 'lucide-react';
 import type { WorkspaceSettings } from '@/types/workspace';
 import { WIDGET_LAYOUTS } from '@/types/workspace';
@@ -65,10 +65,12 @@ export function StyleTab({ settings, onChange, workspaceId }: StyleTabProps) {
     (settings.hint_messages || []).join('\n')
   );
 
-  // Sync local state when settings change externally
-  useEffect(() => {
+  // Reset a draft when the parent replaces its settings, without an effect render.
+  const [previousHints, setPreviousHints] = useState(settings.hint_messages);
+  if (settings.hint_messages !== previousHints) {
+    setPreviousHints(settings.hint_messages);
     setHintText((settings.hint_messages || []).join('\n'));
-  }, [settings.hint_messages]);
+  }
 
   const handleUpload = async (
     file: File,

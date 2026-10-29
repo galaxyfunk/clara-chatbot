@@ -1,3 +1,4 @@
+import { ceSalesGuard } from './ce-sales-guard';
 import { companyEmailError } from '@/lib/chat/company-email-policy';
 import { after } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
@@ -288,6 +289,8 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   const llmMessages = intake
     ? buildIntakeChatPrompt(settings, request.message, matchedPairs, previousMessages, intake)
     : buildChatPrompt(settings, request.message, matchedPairs, previousMessages, isConfident, streaming);
+  const salesGuard = ceSalesGuard(request.workspace_id);
+  if (salesGuard && llmMessages[0]?.role === 'system') llmMessages[0].content += `\n\n${salesGuard}`;
 
   return {
     settings,
@@ -604,21 +607,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         if (context.preExtractedBrief) {
           briefToEmit = context.preExtractedBrief.brief;
           if (context.preExtractedBrief.changed) briefToPersist = context.preExtractedBrief.brief;
-        } else if (isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
-          const briefResult = await extractBrief(
-            [
-              ...context.previousMessages.map((m) => ({ role: m.role, content: m.content })),
-              { role: 'user' as const, content: request.message },
-              { role: 'assistant' as const, content: fullContent },
-            ],
-            previousBrief
-          );
-          if (briefResult.brief) {
-            briefToEmit = briefResult.brief;
-            if (briefResult.changed) briefToPersist = briefResult.brief;
-          } else if (!briefResult.success) {
-            console.error('[Brief] Streaming extraction failed:', briefResult.error);
-          }
         }
 
         if (briefToEmit) {
@@ -667,6 +655,18 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       // Wait for full response text (plain text in streaming mode)
       const fullText = await getFullResponse();
       const cleanedText = stripAssistantDisplayText(fullText);
+      // Optional enrichment must not keep an already-rendered reply open.
+      if (!context.preExtractedBrief && isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
+        try {
+          const extracted = await extractBrief([
+            ...context.previousMessages.map(m => ({ role: m.role, content: m.content })),
+            { role: 'user' as const, content: request.message },
+            { role: 'assistant' as const, content: fullText },
+          ], previousBrief);
+          if (extracted.changed && extracted.brief) briefToPersist = extracted.brief;
+        } catch { console.warn('[Brief] Background extraction unavailable'); }
+      }
+
 
       // Check if LLM naturally offered escalation via booking-related language
       const llmOfferedEscalation = isIntake ? false : BOOKING_OFFER_REGEX.test(fullText);

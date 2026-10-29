@@ -161,38 +161,65 @@
   }
 
   // SSE Stream Handler (with line buffering for TCP chunk splits)
+  // Retries preserve message_id; never replay a partially consumed stream.
+  async function fetchChat(url, options) {
+    for (var attempt = 0; ; attempt++) {
+      var controller = new AbortController();
+      var timer = setTimeout(function() { controller.abort(); }, 45000);
+      try {
+        var response = await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+        clearTimeout(timer);
+        return response;
+      } catch (error) {
+        clearTimeout(timer);
+        if (attempt >= 1) throw error;
+        await new Promise(function(resolve) { setTimeout(resolve, 750); });
+      }
+    }
+  }
+
   async function handleSSEStream(response, callbacks) {
     var reader = response.body.getReader();
     var decoder = new TextDecoder();
     var buffer = '';
-
+    var complete = false;
+    function consume(line) {
+      if (!line.startsWith('data:')) return;
+      var data;
+      try { data = JSON.parse(line.slice(5).trim()); } catch (_) { return; }
+      if (data.type === 'token' && callbacks.onToken) callbacks.onToken(data.content);
+      if (data.type === 'done') {
+        complete = true;
+        if (callbacks.onDone) callbacks.onDone(data);
+      }
+      if (data.type === 'error') throw new Error(data.message || 'Stream error');
+    }
     try {
-      while (true) {
-        var result = await reader.read();
-        if (result.done) break;
-
+      while (!complete) {
+        var timer;
+        var result;
+        try {
+          result = await Promise.race([
+            reader.read(),
+            new Promise(function(_, reject) { timer = setTimeout(function() { reject(new Error('Stream timed out')); }, 45000); })
+          ]);
+        } finally { clearTimeout(timer); }
+        if (result.done) {
+          buffer += decoder.decode();
+          if (buffer.trim()) consume(buffer.trim());
+          if (!complete) throw new Error('Stream ended before completion');
+          break;
+        }
         buffer += decoder.decode(result.value, { stream: true });
         var lines = buffer.split('\n');
-        // Keep the last element — it may be an incomplete line
         buffer = lines.pop() || '';
-
-        for (var i = 0; i < lines.length; i++) {
-          var line = lines[i].trim();
-          if (!line.startsWith('data: ')) continue;
-          try {
-            var data = JSON.parse(line.slice(6));
-            if (data.type === 'token' && callbacks.onToken) {
-              callbacks.onToken(data.content);
-            } else if (data.type === 'done' && callbacks.onDone) {
-              callbacks.onDone(data);
-            } else if (data.type === 'error' && callbacks.onError) {
-              callbacks.onError(new Error(data.message || 'Stream error'));
-            }
-          } catch (e) { /* skip malformed JSON lines */ }
-        }
+        for (var i = 0; i < lines.length && !complete; i++) consume(lines[i].trim());
       }
     } catch (err) {
-      if (callbacks.onError) callbacks.onError(err);
+      if (!complete && callbacks.onError) callbacks.onError(err);
+    } finally {
+      await reader.cancel().catch(function() {});
+      reader.releaseLock();
     }
   }
 
@@ -1258,7 +1285,7 @@
       scrollToBottom();
 
       try {
-        var response = await fetch(BASE_URL + '/api/chat', {
+        var response = await fetchChat(BASE_URL + '/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1273,7 +1300,7 @@
         if (!response.ok) {
           if (response.status === 422) {
             var rejection = await response.json().catch(function() { return null; });
-            if (rejection && rejection.reason === 'work_email_required') {
+            if (rejection && (rejection.reason === 'work_email_required' || rejection.reason === 'email_validation_required')) {
               hideTyping();
               showErrorMessage(rejection.error);
               return;
@@ -1923,7 +1950,7 @@
       scrollToBottom();
 
       try {
-        var response = await fetch(BASE_URL + '/api/chat', {
+        var response = await fetchChat(BASE_URL + '/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1938,7 +1965,7 @@
         if (!response.ok) {
           if (response.status === 422) {
             var rejection = await response.json().catch(function() { return null; });
-            if (rejection && rejection.reason === 'work_email_required') {
+            if (rejection && (rejection.reason === 'work_email_required' || rejection.reason === 'email_validation_required')) {
               typingDots.hide();
               showErrorMessage(rejection.error);
               return;

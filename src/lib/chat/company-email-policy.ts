@@ -80,5 +80,5 @@ export const WORK_EMAIL_MESSAGE = 'Please use your company email address. Person
 export function companyEmailError(workspaceId: string, text: string): string | null {
   if (workspaceId.trim().replace(/[{}-]/g, '').toLowerCase() !== CE_WORKSPACE_ID.replace(/-/g, '')) return null;
   const emails = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) ?? [];
-  return emails.some(email => classifyEmail(email) !== 'ok') ? WORK_EMAIL_MESSAGE : null;
+  return emails.some(email => !/\+test(?:[-_.\d]|$)/i.test(email.split('@')[0]) && classifyEmail(email) !== 'ok') ? WORK_EMAIL_MESSAGE : null;
 }

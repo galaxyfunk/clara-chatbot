@@ -138,10 +138,11 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
       const decoder = new TextDecoder();
       let buffer = '';
       let fullContent = '';
+      let streamComplete = false;
       let rafId: number | null = null;
       let pendingContent = '';
 
-      while (true) {
+      while (!streamComplete) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -150,6 +151,7 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
         buffer = lines.pop() || '';
 
         for (const line of lines) {
+          if (streamComplete) break;
           if (!line.startsWith('data: ')) continue;
           try {
             const data = JSON.parse(line.slice(6));
@@ -161,9 +163,10 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
               // Schedule render on next animation frame (batches multiple tokens)
               if (!rafId) {
                 rafId = requestAnimationFrame(() => {
+                  const renderedContent = pendingContent;
                   setMessages((prev) =>
                     prev.map((m) =>
-                      m.id === assistantId ? { ...m, content: pendingContent } : m
+                      m.id === assistantId ? { ...m, content: renderedContent } : m
                     )
                   );
                   rafId = null;
@@ -172,6 +175,8 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
             }
 
             if (data.type === 'done') {
+              const finalContent = stripAssistantDisplayText(fullContent);
+              streamComplete = true;
               // Cancel any pending RAF and do final render
               if (rafId) {
                 cancelAnimationFrame(rafId);
@@ -185,7 +190,7 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
                   m.id === assistantId
                     ? {
                         ...m,
-                        content: stripAssistantDisplayText(fullContent),
+                        content: finalContent,
                         isStreaming: false,
                       }
                     : m
@@ -194,6 +199,8 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
             }
 
             if (data.type === 'error') {
+              const finalContent = stripAssistantDisplayText(fullContent);
+              streamComplete = true;
               if (rafId) {
                 cancelAnimationFrame(rafId);
                 rafId = null;
@@ -203,7 +210,7 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
                   m.id === assistantId
                     ? {
                         ...m,
-                        content: stripAssistantDisplayText(fullContent) || 'Sorry, something went wrong. Please try again.',
+                        content: finalContent || 'Sorry, something went wrong. Please try again.',
                         isStreaming: false,
                       }
                     : m
@@ -216,13 +223,17 @@ export function PanelChat({ workspaceId, settings, seed = null }: PanelChatProps
         }
       }
 
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+
+      const finalContent = stripAssistantDisplayText(fullContent);
       // Final flush in case stream ended without 'done' event
       if (rafId) {
         cancelAnimationFrame(rafId);
       }
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: stripAssistantDisplayText(fullContent), isStreaming: false } : m
+          m.id === assistantId ? { ...m, content: finalContent, isStreaming: false } : m
         )
       );
 
