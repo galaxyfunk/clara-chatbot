@@ -7,9 +7,11 @@ export async function mailboxError(workspaceId: string, text: string, context?: 
   const emails = [...new Set(text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) ?? [])];
   if (!emails.length) return null;
   if (emails.length > 3) return 'Please provide one email address at a time.';
+  const realEmails = emails.filter(email => !/\+test(?:[-_.\d]|$)/i.test(email.split('@')[0]));
+  if (!realEmails.length) return null;
   const key = process.env.EMAIL_VALIDATION_BRIDGE_KEY;
   if (!key) return UNAVAILABLE;
-  for (const email of emails) {
+  for (const email of realEmails) {
     try {
       const response = await fetch('https://www.cloudemployee.io/api/email/validate', {
         method: 'POST', cache: 'no-store', signal: AbortSignal.timeout(12000),
@@ -33,6 +35,8 @@ export async function chatMailboxError(
 ) {
   const ce = workspaceId.trim().replace(/[{}-]/g, '').toLowerCase() === CE_WORKSPACE_ID.replace(/-/g, '');
   if (!ce || !/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/.test(text)) return null;
+  const emails = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) ?? [];
+  if (emails.length && emails.every(email => /\+test(?:[-_.\d]|$)/i.test(email.split('@')[0]))) return null;
   try {
     const messages = await loadMessages();
     const history = messages.filter(m => m.role === 'user' && typeof m.content === 'string').map(m => m.content);

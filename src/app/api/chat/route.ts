@@ -126,4 +126,5 @@ export async function POST(request: Request) {
   }
 }
 
-export const maxDuration = 30;
+// Allow the streamed answer and bounded persistence to finish within one invocation.
+export const maxDuration = 60;
