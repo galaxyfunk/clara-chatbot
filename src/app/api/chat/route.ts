@@ -1,8 +1,7 @@
 import { NextResponse, after } from 'next/server';
 import { companyEmailError } from '@/lib/chat/company-email-policy';
-import { chatMailboxError } from '@/lib/chat/email-validation';
 import { processChat, processChatStream } from '@/lib/chat/engine';
-import { summarizeConversation } from '@/lib/chat/summarize';
+import { summarizeConversation, summaryEnabled } from '@/lib/chat/summarize';
 import { createServerClient } from '@/lib/supabase/server';
 import { getCorsHeaders } from '@/lib/cors';
 import { resolveSourcePage } from '@/lib/integrations/ce-lead';
@@ -34,22 +33,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Message too long (max 2000 characters)' }, { status: 400, headers: cors });
     }
 
-    const mailboxFailure = await chatMailboxError(body.workspace_id, body.message, request.headers.get('x-vercel-ip-country'), async () => {
-      const {data,error} = await createServerClient().from('chat_sessions').select('messages')
-        .eq('workspace_id',body.workspace_id).eq('session_token',body.session_token).maybeSingle();
-      if (error) throw new Error('session_context_unavailable');
-      return Array.isArray(data?.messages) ? data.messages : [];
-    });
-    if (mailboxFailure && typeof mailboxFailure !== 'string') {
-      const answer = mailboxFailure.message;
-      if (body.stream === true || request.headers.get('accept')?.includes('text/event-stream')) {
-        const events = [{ type: 'token', content: answer }, { type: 'done', escalation_offered: false, booking_url: null, email_captured: false, pendingReview: true }];
-        return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { ...cors, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' } });
-      }
-      return NextResponse.json({ success: true, answer, pendingReview: true, email_captured: false, confidence: 0, gap_detected: false, escalation_offered: false, booking_url: null, matched_pairs: [] }, { headers: cors });
-    }
-    if (mailboxFailure) return NextResponse.json({ success: false, error: mailboxFailure, reason: 'email_validation_required' }, { status: 422, headers: cors });
-
+    // Mailbox verification belongs to the durable lead intake after the reply.
+    // A held address is not a chat rejection: preserve the turn, continue naturally
+    // and render booking. The website still holds outreach/CRM qualification.
     const emailError = companyEmailError(body.workspace_id, body.message);
     if (emailError) {
       return NextResponse.json({ success: false, error: emailError, reason: 'work_email_required' }, { status: 422, headers: cors });
@@ -81,7 +67,7 @@ export async function POST(request: Request) {
     const response = await processChat(body);
 
     // Trigger summary generation in background after enough messages
-    if (response.session_id && response.message_count && response.message_count >= SUMMARY_THRESHOLD) {
+    if (summaryEnabled() && response.session_id && response.message_count && response.message_count >= SUMMARY_THRESHOLD) {
       const sessionId = response.session_id;
       after(async () => {
         try {

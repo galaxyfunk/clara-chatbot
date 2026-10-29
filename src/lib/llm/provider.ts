@@ -32,7 +32,7 @@ export async function chatCompletion(
 }
 
 async function callAnthropic(model: string, apiKey: string, messages: LLMMessage[], maxTokens: number, temperature: number): Promise<LLMResponse> {
-  const client = new Anthropic({ apiKey, timeout: 120000 });
+  const client = new Anthropic({ apiKey, timeout: 20000, maxRetries: 0 });
   const systemMessage = messages.find(m => m.role === 'system');
   const chatMessages = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
   const response = await client.messages.create({ model, max_tokens: maxTokens, temperature, system: systemMessage?.content || '', messages: chatMessages });
@@ -41,7 +41,7 @@ async function callAnthropic(model: string, apiKey: string, messages: LLMMessage
 }
 
 async function callOpenAI(model: string, apiKey: string, messages: LLMMessage[], maxTokens: number, temperature: number): Promise<LLMResponse> {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, timeout: 20000, maxRetries: 0 });
   const response = await client.chat.completions.create({ model, max_tokens: maxTokens, temperature, messages: messages.map(m => ({ role: m.role, content: m.content })) });
   return { content: response.choices[0]?.message?.content ?? '', provider: 'openai', model, usage: { inputTokens: response.usage?.prompt_tokens ?? 0, outputTokens: response.usage?.completion_tokens ?? 0 } };
 }
@@ -78,7 +78,7 @@ async function streamAnthropic(
   maxTokens: number,
   temperature: number
 ): Promise<StreamResult> {
-  const client = new Anthropic({ apiKey, timeout: 120000 });
+  const client = new Anthropic({ apiKey, timeout: 20000, maxRetries: 0 });
   const systemMessage = messages.find(m => m.role === 'system');
   const chatMessages = messages
     .filter(m => m.role !== 'system')
@@ -127,7 +127,7 @@ async function streamOpenAI(
   maxTokens: number,
   temperature: number
 ): Promise<StreamResult> {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, timeout: 20000, maxRetries: 0 });
 
   let fullText = '';
   let resolveFullResponse: (value: string) => void;
