@@ -165,14 +165,14 @@
   async function fetchChat(url, options) {
     for (var attempt = 0; ; attempt++) {
       var controller = new AbortController();
-      var timer = setTimeout(function() { controller.abort(); }, 45000);
+      var timer = setTimeout(function() { controller.abort(); }, 30000);
       try {
-        var response = await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+        var response = await fetch(url, Object.assign({}, options, { signal: options.signal && AbortSignal.any ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }));
         clearTimeout(timer);
         return response;
       } catch (error) {
         clearTimeout(timer);
-        if (attempt >= 1) throw error;
+        if ((options.signal && options.signal.aborted) || error.name === 'AbortError' || error.name === 'TimeoutError' || attempt >= 1) throw error;
         await new Promise(function(resolve) { setTimeout(resolve, 750); });
       }
     }
@@ -201,7 +201,7 @@
         try {
           result = await Promise.race([
             reader.read(),
-            new Promise(function(_, reject) { timer = setTimeout(function() { reject(new Error('Stream timed out')); }, 45000); })
+            new Promise(function(_, reject) { timer = setTimeout(function() { reject(new Error('Stream timed out')); }, 30000); })
           ]);
         } finally { clearTimeout(timer); }
         if (result.done) {
@@ -581,6 +581,8 @@
     var s = settings;
     var sessionToken = generateUUID();
     var isSending = false;
+    var conversationRevision = 0;
+    var sendController = null;
     var hasConversation = false;
     var storageKey = 'clara:conversation:v1:' + WORKSPACE_ID;
     var transcript = [];
@@ -734,11 +736,12 @@
   position: absolute; top: 0; left: 0; right: 0;
   height: 2px;
   background: linear-gradient(90deg, var(--ce-lime) 0%, rgba(212,255,60,.15) 55%, rgba(212,255,60,0) 100%);
-  z-index: 1;
+  z-index: 1; pointer-events: none;
 }
 
 /* HEADER */
 .cb-header {
+  position: relative; z-index: 2; gap: 8px;
   padding: 16px 18px;
   border-bottom: 1px solid var(--ce-hairline);
   background: var(--ce-panel);
@@ -746,14 +749,14 @@
   flex-shrink: 0;
   border-radius: 20px 20px 0 0;
 }
-.cb-header-left { display: flex; align-items: center; gap: 12px; }
+.cb-header-left { min-width: 0; flex: 1; display: flex; align-items: center; gap: 12px; }
 .cb-avatar { width: 30px; height: 30px; border-radius: 50%; overflow: hidden; flex-shrink: 0; box-shadow: none; }
 .cb-avatar img, .cb-avatar svg { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cb-title    { font-size: 15.5px; font-weight: 600; letter-spacing: -.2px; color: #FFFFFF; }
 .cb-subtitle { font-size: 13px; font-weight: 400; color: var(--ce-muted); margin-left: 10px; }
-.cb-header-right { display: flex; align-items: center; gap: 8px; }
+.cb-header-right { flex-shrink: 0; position: relative; z-index: 3; display: flex; align-items: center; gap: 8px; }
 .cb-new-chat {
-  display: none;
+  display: inline-flex; align-items: center; min-height: 44px; white-space: nowrap; flex-shrink: 0;
   background: transparent;
   border: 1px solid var(--ce-border);
   border-radius: 999px;
@@ -769,7 +772,7 @@
 .cb-close {
   background: transparent; border: none;
   color: var(--ce-muted);
-  width: 28px; height: 28px;
+  width: 44px; height: 44px; flex-shrink: 0;
   border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px; line-height: 1; cursor: pointer;
@@ -778,7 +781,7 @@
 .cb-close:hover { background: var(--ce-hairline); color: #fff; }
 
 /* BODY / SCROLL */
-.cb-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; scrollbar-width: thin; scrollbar-color: var(--ce-border) transparent; }
+.cb-body { min-height: 0; flex: 1; overflow-y: auto; display: flex; flex-direction: column; scrollbar-width: thin; scrollbar-color: var(--ce-border) transparent; }
 .cb-body::-webkit-scrollbar { width: 8px; }
 .cb-body::-webkit-scrollbar-thumb { background: var(--ce-border); border-radius: 8px; }
 .cb-body::-webkit-scrollbar-track { background: transparent; }
@@ -917,6 +920,18 @@
   outline: 2px solid var(--ce-lime);
   outline-offset: 2px;
 }
+@media (max-width: 480px) {
+  .cb-modal { max-width: calc(100vw - 16px); max-height: calc(100dvh - 24px); border-radius: 16px; }
+  .cb-modal.expanded { height: min(680px, calc(100dvh - 24px)); }
+  .cb-header { padding: 8px 10px; }
+  .cb-header-left { gap: 8px; }
+  .cb-subtitle { display: none; }
+  .cb-header-right { gap: 4px; }
+  .cb-new-chat { padding: 6px 10px; }
+  .cb-input { font-size: 16px; min-width: 0; }
+  .cb-input-wrap { padding: 8px 10px max(8px, env(safe-area-inset-bottom)); }
+  .cb-msg-text { overflow-wrap: anywhere; }
+}
 /* The composer shows focus via the bar border, not an outline - see .cb-input-bar:focus-within */
 .cb-input:focus, .cb-input:focus-visible { outline: none; }
 
@@ -1015,11 +1030,14 @@
 
     var newChatBtn = document.createElement('button');
     newChatBtn.className = 'cb-new-chat';
+    newChatBtn.type = 'button';
     newChatBtn.textContent = 'New chat';
     headerRight.appendChild(newChatBtn);
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'cb-close';
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Close chat');
     closeBtn.textContent = '✕';
     headerRight.appendChild(closeBtn);
 
@@ -1096,7 +1114,7 @@
 
     var typingLabel = document.createElement('span');
     typingLabel.className = 'cb-typing-label';
-    typingLabel.textContent = 'Clara is thinking';
+    typingLabel.textContent = 'Clara is thinking…';
     typingRow.appendChild(typingLabel);
 
     messagesContainer.appendChild(typingRow);
@@ -1167,6 +1185,9 @@
       body.scrollTop = body.scrollHeight;
     }
 
+    typingRow.setAttribute('role', 'status');
+    typingRow.setAttribute('aria-label', 'Clara is thinking');
+
     function showTyping() {
       typingRow.style.display = 'flex';
       typingRow.style.alignItems = 'center';
@@ -1207,6 +1228,11 @@
     }
 
     function resetChat() {
+      conversationRevision++;
+      if (sendController) sendController.abort();
+      isSending = false;
+      hideTyping();
+      enableInput();
       messagesContainer.innerHTML = '';
       messagesContainer.appendChild(typingRow);
       welcomeZone.style.display = 'block';
@@ -1275,6 +1301,8 @@
     async function sendMessage(text) {
       if (!text.trim() || isSending) return;
       isSending = true;
+      var revision = conversationRevision;
+      sendController = new AbortController();
       disableInput();
       postClaraAnalytics('clara_conversation_started', sessionToken);
 
@@ -1303,6 +1331,7 @@
 
       try {
         var response = await fetchChat(BASE_URL + '/api/chat', {
+          signal: sendController.signal,
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1316,6 +1345,7 @@
           })
         });
 
+        if (revision !== conversationRevision) return;
         if (!response.ok) {
           if (response.status === 422) {
             var rejection = await response.json().catch(function() { return null; });
@@ -1328,14 +1358,19 @@
           throw new Error('Chat request failed: ' + response.status);
         }
 
-        hideTyping();
-        var msgResult = addAssistantMessage('');
+        var msgResult = null;
         var fullContent = '';
         var assistantEntry = {role: 'assistant', text: '', bookingUrl: null};
-        transcript.push(assistantEntry);
+        // Keep the typing indicator until the first actual text token.
 
         await handleSSEStream(response, {
           onToken: function(content) {
+            if (revision !== conversationRevision || !content) return;
+            if (!msgResult) {
+              hideTyping();
+              msgResult = addAssistantMessage('');
+              transcript.push(assistantEntry);
+            }
             fullContent += content;
             msgResult.textEl.textContent = stripAssistantDisplayText(fullContent);
             assistantEntry.text = stripAssistantDisplayText(fullContent);
@@ -1343,6 +1378,9 @@
             scrollToBottom();
           },
           onDone: function(data) {
+            if (revision !== conversationRevision) return;
+            hideTyping();
+            if (!msgResult) { showErrorMessage('No reply received. Please try again.'); return; }
             msgResult.textEl.textContent = stripAssistantDisplayText(fullContent);
             var bookingUrl = data.booking_url || (data.email_captured ? bookingFallback('book a call') : bookingFallback(fullContent));
             if (bookingUrl) renderBookingLink(bookingUrl, msgResult.content);
@@ -1355,19 +1393,24 @@
             scrollToBottom();
           },
           onError: function(err) {
+            if (revision !== conversationRevision) return;
             console.error('Clara stream error:', err);
             showErrorMessage('Something went wrong. Please try again.');
             hideTyping();
           }
         });
       } catch (err) {
+        if (revision !== conversationRevision) return;
         console.error('Clara chat error:', err);
         hideTyping();
         showErrorMessage('Could not connect. Please try again.');
       } finally {
-        isSending = false;
-        enableInput();
-        focusInput();
+        if (revision === conversationRevision) {
+          hideTyping();
+          isSending = false;
+          enableInput();
+          focusInput();
+        }
       }
     }
 

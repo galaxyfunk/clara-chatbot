@@ -24,7 +24,12 @@ interface SummarizeResult {
  * Generate an AI summary of a conversation.
  * Uses the app-level Claude API key (extraction).
  */
+export function summaryEnabled(): boolean {
+  return process.env.CLARA_SUMMARY_ENABLED === 'true' && Boolean(process.env.CLARA_SUMMARY_MODEL);
+}
+
 export async function summarizeConversation(messages: ChatMessage[]): Promise<SummarizeResult> {
+  if (!summaryEnabled()) return {success: false, error: 'Optional summary disabled'};
   if (!messages || messages.length === 0) {
     return { success: false, error: 'No messages to summarize' };
   }
@@ -36,11 +41,11 @@ export async function summarizeConversation(messages: ChatMessage[]): Promise<Su
 
   try {
     const client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey: process.env.ANTHROPIC_API_KEY, timeout: 5000, maxRetries: 0,
     });
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: process.env.CLARA_SUMMARY_MODEL!,
       max_tokens: 1024,
       temperature: 0.3,
       system: SUMMARIZE_PROMPT,

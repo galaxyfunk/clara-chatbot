@@ -19,6 +19,7 @@ export interface AskClaraLeadInput {
   lastName?: string | null;
   company?: string | null;
   surface?: 'popup' | 'ask';
+  conversationId?: string | null;
   sourcePage?: string | null;
   message?: string | null;
   /** Same session permalink HubSpot gets. Slack turns this into "Read the conversation". */
@@ -35,6 +36,7 @@ export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<bool
       lastName: input.lastName || undefined,
       company: input.company || undefined,
       sourceSurface: input.surface || 'popup',
+      claraConversationId: input.conversationId || undefined,
       ...(input.message?.trim()
         ? { message: input.message.trim().slice(0, 4000) }
         : {}),

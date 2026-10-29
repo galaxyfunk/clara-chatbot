@@ -3,7 +3,8 @@
   "git": {
     "deploymentEnabled": {
       "fix/clara-e2e": false,
-      "clara-fix-r4-20261029": false
+      "clara-fix-r4-20261029": false,
+      "clara-r8": false
     }
   }
 }
