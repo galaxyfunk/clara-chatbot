@@ -7,11 +7,11 @@
  *   - posts the Lead Agent brief to #aa-leads-channel
  *   - sends +test- emails to #aa-leads-test
  *
- * Failures are swallowed. A lead or Slack outage must never break the chat.
+ * Failures return false so the session can retry delivery on the next turn.
  */
 
-const CE_LEAD_URL = 'https://www.cloudemployee.io/api/lead';
-const LEAD_TIMEOUT_MS = 5000;
+const DEFAULT_CE_LEAD_URL = 'https://www.cloudemployee.io/api/lead';
+const LEAD_TIMEOUT_MS = 15000;
 
 export interface AskClaraLeadInput {
   email: string;
@@ -22,7 +22,7 @@ export interface AskClaraLeadInput {
   claraSessionUrl?: string | null;
 }
 
-export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<void> {
+export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<boolean> {
   try {
     const body = {
       gateway: 'ask_clara',
@@ -39,7 +39,7 @@ export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<void
 
     console.log('[CE Lead] POSTing ask_clara lead');
 
-    const response = await fetch(CE_LEAD_URL, {
+    const response = await fetch(process.env.CE_LEAD_URL || DEFAULT_CE_LEAD_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -49,13 +49,17 @@ export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<void
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
       console.error('[CE Lead] POST failed:', response.status, detail.slice(0, 300));
-      return;
+      return false;
     }
 
-    console.log('[CE Lead] POST ok');
+    const result = await response.json();
+    if (result.ok !== true) return false;
+    console.log('[CE Lead] Delivery accepted');
+    return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[CE Lead] notifyAskClaraLead error:', message);
+    return false;
   }
 }
 

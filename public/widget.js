@@ -253,6 +253,7 @@
   // Safe DOM construction — no innerHTML for user-facing content.
   function renderBookingLink(bookingUrl, containerEl) {
     if (!bookingUrl) return;
+    try { if (!/^https?:$/.test(new URL(bookingUrl, window.location.origin).protocol)) return; } catch (_) { return; }
     var wrapper = document.createElement('div');
     wrapper.style.marginTop = '8px';
     var a = document.createElement('a');
@@ -581,6 +582,18 @@
     var sessionToken = generateUUID();
     var isSending = false;
     var hasConversation = false;
+    var storageKey = 'clara:conversation:v1:' + WORKSPACE_ID;
+    var transcript = [];
+    function saveConversation() {
+      try { localStorage.setItem(storageKey, JSON.stringify({version: 1, sessionToken: sessionToken, messages: transcript.slice(-100), savedAt: Date.now()})); } catch (_) { /* Storage can be disabled. */ }
+    }
+    function bookingFallback(text) {
+      if (!/book.{0,30}(call|time|slot)|schedul.{0,30}(call|time)|button below|grab a time/i.test(text)) return null;
+      var url = new URL('/book-a-call', window.location.origin);
+      var emails = transcript.map(function(m) { return m.role === 'user' ? m.text : ''; }).join(' ').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g);
+      if (emails) url.searchParams.set('email', emails[emails.length - 1]);
+      return url.toString();
+    }
 
     // Fonts: @font-face declared in the main document applies inside the shadow root
     if (!document.getElementById('clara-fonts')) {
@@ -1203,6 +1216,8 @@
       newChatBtn.classList.remove('visible');
       hasConversation = false;
       sessionToken = generateUUID();
+      transcript = [];
+      saveConversation();
       inputEl.placeholder = s.placeholder_text || 'Ask a question...';
       updateFooterHint();
     }
@@ -1276,6 +1291,8 @@
       }
 
       addUserMessage(text);
+      transcript.push({role: 'user', text: text});
+      saveConversation();
       inputEl.value = '';
       escBadge.style.display = 'flex';
       sendBtn.style.display = 'none';
@@ -1293,6 +1310,7 @@
             session_token: sessionToken,
             message: text,
             message_id: generateUUID(),
+            source_page: window.location.pathname,
             stream: true
           })
         });
@@ -1312,18 +1330,24 @@
         hideTyping();
         var msgResult = addAssistantMessage('');
         var fullContent = '';
+        var assistantEntry = {role: 'assistant', text: '', bookingUrl: null};
+        transcript.push(assistantEntry);
 
         await handleSSEStream(response, {
           onToken: function(content) {
             fullContent += content;
             msgResult.textEl.textContent = stripAssistantDisplayText(fullContent);
+            assistantEntry.text = stripAssistantDisplayText(fullContent);
+            saveConversation();
             scrollToBottom();
           },
           onDone: function(data) {
             msgResult.textEl.textContent = stripAssistantDisplayText(fullContent);
-            if (data.booking_url) {
-              renderBookingLink(data.booking_url, msgResult.content);
-            }
+            var bookingUrl = data.booking_url || bookingFallback(fullContent);
+            if (bookingUrl) renderBookingLink(bookingUrl, msgResult.content);
+            assistantEntry.text = stripAssistantDisplayText(fullContent);
+            assistantEntry.bookingUrl = bookingUrl;
+            saveConversation();
             if (data.email_captured) {
               postClaraAnalytics('clara_email_captured', sessionToken);
             }
@@ -1345,6 +1369,36 @@
         focusInput();
       }
     }
+
+    // Restore plain text only; never interpret stored content as HTML.
+    try {
+      var saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+      if (saved && saved.version === 1 && typeof saved.sessionToken === 'string' &&
+          Date.now() - saved.savedAt < 7 * 86400000 && Array.isArray(saved.messages)) {
+        sessionToken = saved.sessionToken;
+        transcript = saved.messages.slice(-100).filter(function(m) {
+          return m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string' && m.text.length <= 20000;
+        });
+        transcript.forEach(function(m) {
+          if (m.role === 'user') addUserMessage(m.text);
+          else {
+            var restored = addAssistantMessage(m.text);
+            var booking = m.bookingUrl || bookingFallback(m.text);
+            if (booking) renderBookingLink(booking, restored.content);
+          }
+        });
+        if (transcript.length) {
+          hasConversation = true;
+          welcomeZone.style.display = 'none';
+          messagesContainer.style.display = 'flex';
+          modal.classList.remove('compact');
+          modal.classList.add('expanded');
+          newChatBtn.classList.add('visible');
+          inputEl.placeholder = 'Ask a follow-up...';
+          updateFooterHint();
+        }
+      }
+    } catch (_) { /* Corrupt/blocked storage must not break chat. */ }
 
     // ── EVENT LISTENERS ──
 
@@ -1408,6 +1462,7 @@
     // paint its opening turn, so the modal opens expanded and already in
     // conversation rather than showing the welcome zone and suggestions.
     applySeed = function(seed) {
+      resetChat();
       sessionToken = seed.sessionToken;
       hasConversation = true;
       welcomeZone.style.display = 'none';
@@ -1419,7 +1474,11 @@
       if (seed.filename) {
         messagesContainer.insertBefore(buildAttachmentChip(seed.filename), typingRow);
       }
-      if (seed.greeting) addAssistantMessage(seed.greeting);
+      if (seed.greeting) {
+        addAssistantMessage(seed.greeting);
+        transcript.push({role: 'assistant', text: seed.greeting});
+      }
+      saveConversation();
     };
 
     // ── WINDOW.CLARAWIDGET API ──
