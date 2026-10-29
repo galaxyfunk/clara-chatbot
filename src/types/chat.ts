@@ -30,6 +30,7 @@ export interface ChatRequest {
   message_id: string;
   /** Host page path when known (e.g. /pricing). Engine falls back to "/". */
   source_page?: string;
+  surface?: 'popup' | 'ask';
 }
 
 export interface ChatResponse {

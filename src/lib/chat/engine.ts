@@ -1,3 +1,4 @@
+import { contactDetails, chatSurface, shouldShowBooking } from './contact-details';
 import { ceSalesGuard } from './ce-sales-guard';
 import { companyEmailError } from '@/lib/chat/company-email-policy';
 import { after } from 'next/server';
@@ -273,7 +274,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   const llmMessages = intake
     ? buildIntakeChatPrompt(settings, request.message, matchedPairs, previousMessages, intake)
     : buildChatPrompt(settings, request.message, matchedPairs, previousMessages, isConfident, streaming);
-  const salesGuard = ceSalesGuard(request.workspace_id);
+  const salesGuard = ceSalesGuard(request.workspace_id, chatSurface(request.surface, request.source_page));
   if (salesGuard && llmMessages[0]?.role === 'system') llmMessages[0].content += `\n\n${salesGuard}`;
 
   return {
@@ -447,6 +448,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
           visitorName: sessionCheck?.visitor_name,
           messages: updatedMessages,
           sourcePage: request.source_page,
+          surface: chatSurface(request.surface, request.source_page),
           sessionId: upsertedSession.id,
         });
       } else {
@@ -478,8 +480,8 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     confidence: context.confidence,
     gap_detected: gapDetected,
     escalation_offered: parsed.escalation_offered,
-    booking_url: parsed.escalation_offered
-      ? appendUtmParams(context.settings.booking_url, request.session_token, bookingPrefill(request, context))
+    booking_url: shouldShowBooking(chatSurface(request.surface, request.source_page), (ceSalesGuard(request.workspace_id) ? bookingPrefill(request, context).email : null), parsed.escalation_offered)
+      ? appendUtmParams(context.settings.booking_url || (ceSalesGuard(request.workspace_id) ? 'https://calendly.com/d/cyhw-bqg-t9h/discovery-call-cloud-employee' : null), request.session_token, bookingPrefill(request, context))
       : null,
     matched_pairs: context.matchedPairs.map(m => ({ id: m.id, question: m.question, similarity: m.similarity })),
     session_id: upsertedSession?.id || context.existingSession?.id,
@@ -592,7 +594,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         }
 
         const llmOfferedEscalation = isIntake ? false : BOOKING_OFFER_REGEX.test(fullContent);
-        const finalEscalation = llmOfferedEscalation;
+        const finalEscalation = shouldShowBooking(chatSurface(request.surface, request.source_page), (ceSalesGuard(request.workspace_id) ? bookingPrefill(request, context).email : null), llmOfferedEscalation);
 
         let briefToEmit = previousBrief;
         if (context.preExtractedBrief) {
@@ -614,7 +616,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           escalation_offered: finalEscalation,
           booking_url: finalEscalation
             ? appendUtmParams(
-                context.settings.booking_url,
+                context.settings.booking_url || (ceSalesGuard(request.workspace_id) ? 'https://calendly.com/d/cyhw-bqg-t9h/discovery-call-cloud-employee' : null),
                 request.session_token,
                 bookingPrefill(request, context),
               )
@@ -647,7 +649,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       const cleanedText = stripAssistantDisplayText(fullText);
       // Check if LLM naturally offered escalation via booking-related language
       const llmOfferedEscalation = isIntake ? false : BOOKING_OFFER_REGEX.test(fullText);
-      const finalEscalation = streamingEscalation || llmOfferedEscalation;
+      const finalEscalation = shouldShowBooking(chatSurface(request.surface, request.source_page), (ceSalesGuard(request.workspace_id) ? bookingPrefill(request, context).email : null), streamingEscalation || llmOfferedEscalation);
 
       // Session upsert
       const userMessage: ChatMessage = {
@@ -698,7 +700,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           const visitorName = visitorNameFromChat(context.existingSession?.visitor_name, context.previousMessages, request.message);
           await supabase.from('chat_sessions').update({ visitor_email: email, visitor_name: visitorName }).eq('id', upsertedSession.id);
           const delivered = await fireAskClaraLead({ email, visitorName, messages: updatedMessages,
-            sourcePage: request.source_page, sessionId: upsertedSession.id });
+            sourcePage: request.source_page,
+            surface: chatSurface(request.surface, request.source_page), sessionId: upsertedSession.id });
           if (delivered) {
             const deliveredMetadata = { ...metadata, ce_lead_delivered_email: email, ce_lead_delivered_at: new Date().toISOString() };
             await supabase.from('chat_sessions').update({ metadata: deliveredMetadata }).eq('id', upsertedSession.id);
@@ -877,15 +880,21 @@ async function fireAskClaraLead(params: {
   messages: ChatMessage[];
   storedSummary?: string | null;
   sourcePage?: string | null;
+  surface?: 'popup' | 'ask';
   sessionId?: string | null;
 }): Promise<boolean> {
   try {
     const claraSessionUrl = params.sessionId
       ? `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions/${params.sessionId}`
       : undefined;
+    const details = contactDetails(params.messages);
+    const fullName = details.name || params.visitorName || '';
     return await notifyAskClaraLead({
       email: params.email,
-      firstName: firstNameFromChat(params.visitorName),
+      firstName: firstNameFromChat(fullName),
+      lastName: fullName.split(/\s+/).slice(1).join(' '),
+      company: details.company,
+      surface: params.surface || chatSurface(undefined, params.sourcePage || undefined),
       sourcePage: params.sourcePage || '/',
       message: buildAskClaraLeadMessage(params.messages, params.storedSummary),
       claraSessionUrl,
@@ -925,6 +934,8 @@ function visitorNameFromChat(
   previousMessages: ChatMessage[],
   currentMessage: string,
 ): string | null {
+  const extracted = contactDetails([...previousMessages, {role: 'user', content: currentMessage}]).name;
+  if (extracted) return extracted;
   if (storedName?.trim()) return storedName.trim();
 
   const texts = [
@@ -1023,7 +1034,7 @@ function buildChatPrompt(
     responseFormatSection = `## Response Format
 Respond naturally and conversationally. Do not use JSON format. Just write your answer as plain text.
 Keep responses concise — 2-4 sentences for simple questions, more for complex ones.
-${settings.escalation_enabled && settings.booking_url ? `When the visitor has gathered enough information and seems ready to take the next step, naturally invite them to a call in plain sentences. This is the ONLY trigger for the booking button. Do not offer this for general questions. Only ask once you genuinely sense buying intent or readiness. Never write a URL, markdown link, or bracketed CTA such as [Book a call] in your message text. The blue Book a Call button is added automatically — do not write the button label.` : ''}`;
+${settings.escalation_enabled && settings.booking_url ? `When the visitor has gathered enough information and seems ready to take the next step, naturally invite them to a call in plain sentences. Do not offer this for general questions. Only ask once you genuinely sense buying intent or readiness. Never write a URL, markdown link, or bracketed CTA such as [Book a call] in your message text. The blue Book a Call button is added automatically — do not write the button label.` : ''}`;
   } else {
     responseFormatSection = `${settings.escalation_enabled ? `## Escalation Rules
 Set escalation_offered to true ONLY when the visitor explicitly signals readiness to engage with a human. This means:

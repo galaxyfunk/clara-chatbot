@@ -29,7 +29,7 @@ test('live widget persists conversation and session across reload/pages, restore
     assert.match(await page.getByRole('link',{name:/Book/i}).getAttribute('href')||'',/\/book-a-call\?email=jake%2Btest-r6/)
     await page.reload()
     await page.locator('.cb-pill').click()
-    assert.equal(await page.locator('.cb-msg-text.user').innerText(),'Tom Test jake+test-r6@noxcapital.ae')
+    assert.equal(await page.locator('.cb-msg-text.user').textContent(),'Tom Test jake+test-r6@noxcapital.ae')
     await page.getByRole('link',{name:/Book/i}).waitFor()
     await page.goto('http://localhost:4180/pricing')
     await page.locator('.cb-pill').click()

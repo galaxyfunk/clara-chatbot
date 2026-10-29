@@ -16,6 +16,9 @@ const LEAD_TIMEOUT_MS = 15000;
 export interface AskClaraLeadInput {
   email: string;
   firstName?: string | null;
+  lastName?: string | null;
+  company?: string | null;
+  surface?: 'popup' | 'ask';
   sourcePage?: string | null;
   message?: string | null;
   /** Same session permalink HubSpot gets. Slack turns this into "Read the conversation". */
@@ -29,6 +32,9 @@ export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<bool
       sourcePage: input.sourcePage?.trim() || '/',
       firstName: input.firstName?.trim() || 'Visitor',
       email: input.email,
+      lastName: input.lastName || undefined,
+      company: input.company || undefined,
+      sourceSurface: input.surface || 'popup',
       ...(input.message?.trim()
         ? { message: input.message.trim().slice(0, 4000) }
         : {}),

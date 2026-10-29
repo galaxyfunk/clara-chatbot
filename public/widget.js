@@ -1311,6 +1311,7 @@
             message: text,
             message_id: generateUUID(),
             source_page: window.location.pathname,
+            surface: 'popup',
             stream: true
           })
         });
@@ -1343,7 +1344,7 @@
           },
           onDone: function(data) {
             msgResult.textEl.textContent = stripAssistantDisplayText(fullContent);
-            var bookingUrl = data.booking_url || bookingFallback(fullContent);
+            var bookingUrl = data.booking_url || (data.email_captured ? bookingFallback('book a call') : bookingFallback(fullContent));
             if (bookingUrl) renderBookingLink(bookingUrl, msgResult.content);
             assistantEntry.text = stripAssistantDisplayText(fullContent);
             assistantEntry.bookingUrl = bookingUrl;
