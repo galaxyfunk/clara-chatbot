@@ -30,9 +30,9 @@ test('UK fintech, 3 senior React/Node devs: CE guard requires Philippines, agree
   assert.match(guard,/working hours and shift overlap are agreed with the team on a call/);
   assert.match(guard,/Do not state specific working hours or shift overlap times/);
   assert.doesNotMatch(guard,/7am[–-]4pm/i);
-  assert.match(guard,/three senior React\/Node/);
+  assert.match(guard,/senior React\/Node/);
   assert.match(guard,/GBP 2,980–5,400 per developer per month/);
-  assert.match(guard,/GBP 8,940–16,200 monthly for three/);
+  assert.match(guard,/headcount the visitor explicitly requested/);
   assert.match(guard,/indicative benchmark, not a senior React\/Node quote/);
   assert.match(guard,/site\/src\/components\/templates\/pricing\/content\.ts/);
   assert.match(guard,/never invent a price/);
@@ -54,4 +54,14 @@ test('designated test mailbox bypasses history and company-email checks',async()
   assert.equal(await chatMailboxError(CE_WORKSPACE_ID,'jake+test@gmail.com','GB',async()=>{throw Error('must not read DB')}),null);
   assert.equal(companyEmailError(CE_WORKSPACE_ID,'jake+test@gmail.com'),null);
   assert.ok(companyEmailError(CE_WORKSPACE_ID,'jake@gmail.com'));
+});
+
+test('round 4 cost, overlap, headcount, latest-question and contact guard is scoped to CE',()=>{
+  const guard=ceSalesGuard(CE_WORKSPACE_ID);
+  assert.match(guard,/cost question must receive that GBP benchmark and its not-a-quote qualification/);
+  assert.match(guard,/timezone question must say shift overlap is agreed on a call, without inventing a number of hours/);
+  assert.match(guard,/keep exactly two Senior React\/Node developers/);
+  assert.match(guard,/Answer the latest visitor question first/);
+  assert.match(guard,/name, work email and company/);
+  assert.equal(ceSalesGuard('unrelated-tenant'),'');
 });
