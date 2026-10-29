@@ -1,3 +1,4 @@
+import { contactDetails, chatSurface, shouldShowBooking } from './contact-details';
 import { ceSalesGuard } from './ce-sales-guard';
 import { companyEmailError } from '@/lib/chat/company-email-policy';
 import { after } from 'next/server';
@@ -47,7 +48,7 @@ const SUMMARY_THRESHOLD = 4;
 
 /** Detects when the LLM offered a booking / human handoff in its reply text. */
 const BOOKING_OFFER_REGEX =
-  /open to a.*call|book a call|schedule a call|talk to a human|speak to a human|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call|grab a time/i;
+  /open to a.*call|book a call|schedule a call|talk to a human|speak to a human|would you like to book|ready to chat|speak with our team|happy to arrange|set up a call|jump on a call|grab a time|book a time|button below/i;
 
 interface MatchedPair {
   id: string;
@@ -146,18 +147,15 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
     };
   }
 
-  // 2. Get workspace
-  const { data: workspace, error: wsError } = await supabase
-    .from('workspaces').select('*').eq('id', request.workspace_id).single();
+  // Independent database reads overlap rather than adding four network round trips.
+  const [{ data: workspace, error: wsError }, { count }, { data: apiKeyRow, error: keyError }, { data: existingSession }] = await Promise.all([
+    supabase.from('workspaces').select('*').eq('id', request.workspace_id).single(),
+    supabase.from('qa_pairs').select('id', { count: 'exact', head: true }).eq('workspace_id', request.workspace_id).eq('is_active', true),
+    supabase.from('api_keys').select('*').eq('workspace_id', request.workspace_id).eq('is_default', true).eq('is_active', true).single(),
+    supabase.from('chat_sessions').select('id, messages, escalated, escalated_at, visitor_email, visitor_name, metadata').eq('workspace_id', request.workspace_id).eq('session_token', request.session_token).single(),
+  ]);
   if (wsError || !workspace) throw new Error('Workspace not found');
   const settings: WorkspaceSettings = workspace.settings;
-
-  // 3. Zero Q&A gate
-  const { count } = await supabase
-    .from('qa_pairs')
-    .select('id', { count: 'exact', head: true })
-    .eq('workspace_id', request.workspace_id)
-    .eq('is_active', true);
 
   if (count === 0) {
     return {
@@ -174,12 +172,6 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
       fallbackAnswer: `I'm not set up yet! My knowledge base is empty — add some Q&A pairs in the dashboard to get ${settings.display_name} started.`,
     };
   }
-
-  // 4. Get default API key
-  const { data: apiKeyRow, error: keyError } = await supabase
-    .from('api_keys').select('*')
-    .eq('workspace_id', request.workspace_id)
-    .eq('is_default', true).eq('is_active', true).single();
 
   if (keyError || !apiKeyRow) {
     throw new Error(`Add an API key in Settings to start chatting with ${settings.display_name}.`);
@@ -200,13 +192,6 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   const topMatch = matchedPairs[0] ?? null;
   const confidence = topMatch?.similarity ?? 0;
   const isConfident = confidence >= settings.confidence_threshold;
-
-  // 7. Get conversation history
-  const { data: existingSession } = await supabase
-    .from('chat_sessions')
-    .select('id, messages, escalated, escalated_at, visitor_email, visitor_name, metadata')
-    .eq('workspace_id', request.workspace_id)
-    .eq('session_token', request.session_token).single();
 
   const previousMessages: ChatMessage[] = existingSession?.messages ?? [];
   const sessionRef = toSessionRef(existingSession);
@@ -289,7 +274,7 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   const llmMessages = intake
     ? buildIntakeChatPrompt(settings, request.message, matchedPairs, previousMessages, intake)
     : buildChatPrompt(settings, request.message, matchedPairs, previousMessages, isConfident, streaming);
-  const salesGuard = ceSalesGuard(request.workspace_id);
+  const salesGuard = ceSalesGuard(request.workspace_id, chatSurface(request.surface, request.source_page));
   if (salesGuard && llmMessages[0]?.role === 'system') llmMessages[0].content += `\n\n${salesGuard}`;
 
   return {
@@ -313,7 +298,10 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
 // ─── Non-Streaming Chat (Original) ──────────────────────────────────
 
 export async function processChat(request: ChatRequest): Promise<ChatResponse> {
+  const startedAt = Date.now();
   const context = await prepareChatContext(request);
+
+  console.log('[Chat timing] context_ms', Date.now() - startedAt);
 
   // Handle fallback cases (rate limit, zero QA, idempotent hit)
   if (context.fallbackAnswer !== undefined) {
@@ -432,7 +420,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
           .eq('id', upsertedSession.id);
 
         try {
-          if (context.settings.hubspot_enabled) {
+          if (context.settings.hubspot_enabled && !/\+test(?:[-_.\d]|@)/i.test(detectedEmail)) {
             const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
             const hubspotKey = process.env.HUBSPOT_API_KEY;
             console.log('[HubSpot Debug] Non-streaming — calling upsert with email:', detectedEmail, '| has API key:', !!hubspotKey);
@@ -460,6 +448,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
           visitorName: sessionCheck?.visitor_name,
           messages: updatedMessages,
           sourcePage: request.source_page,
+          surface: chatSurface(request.surface, request.source_page),
           sessionId: upsertedSession.id,
         });
       } else {
@@ -491,8 +480,8 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
     confidence: context.confidence,
     gap_detected: gapDetected,
     escalation_offered: parsed.escalation_offered,
-    booking_url: parsed.escalation_offered
-      ? appendUtmParams(context.settings.booking_url, request.session_token, bookingPrefill(request, context))
+    booking_url: shouldShowBooking(chatSurface(request.surface, request.source_page), (ceSalesGuard(request.workspace_id) ? bookingPrefill(request, context).email : null), parsed.escalation_offered)
+      ? appendUtmParams(context.settings.booking_url || (ceSalesGuard(request.workspace_id) ? 'https://calendly.com/d/cyhw-bqg-t9h/discovery-call-cloud-employee' : null), request.session_token, bookingPrefill(request, context))
       : null,
     matched_pairs: context.matchedPairs.map(m => ({ id: m.id, question: m.question, similarity: m.similarity })),
     session_id: upsertedSession?.id || context.existingSession?.id,
@@ -509,8 +498,11 @@ export interface StreamingChatResult {
 }
 
 export async function processChatStream(request: ChatRequest): Promise<StreamingChatResult> {
+  const startedAt = Date.now();
   const encoder = new TextEncoder();
   const context = await prepareChatContext(request, true); // streaming = true
+
+  console.log('[Chat timing] context_ms', Date.now() - startedAt);
 
   // Handle fallback cases (rate limit, zero QA, idempotent hit)
   if (context.fallbackAnswer !== undefined) {
@@ -583,6 +575,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           if (done) break;
           // The CE site forbids em dashes and the model does not always listen.
           const value = isLanding ? raw.replace(/\u2014/g, '-') : raw;
+          if (!fullContent) console.log('[Chat timing] first_token_ms', Date.now() - startedAt);
           fullContent += value;
           // Send token event
           controller.enqueue(
@@ -601,7 +594,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
         }
 
         const llmOfferedEscalation = isIntake ? false : BOOKING_OFFER_REGEX.test(fullContent);
-        const finalEscalation = llmOfferedEscalation;
+        const finalEscalation = shouldShowBooking(chatSurface(request.surface, request.source_page), (ceSalesGuard(request.workspace_id) ? bookingPrefill(request, context).email : null), llmOfferedEscalation);
 
         let briefToEmit = previousBrief;
         if (context.preExtractedBrief) {
@@ -623,7 +616,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           escalation_offered: finalEscalation,
           booking_url: finalEscalation
             ? appendUtmParams(
-                context.settings.booking_url,
+                context.settings.booking_url || (ceSalesGuard(request.workspace_id) ? 'https://calendly.com/d/cyhw-bqg-t9h/discovery-call-cloud-employee' : null),
                 request.session_token,
                 bookingPrefill(request, context),
               )
@@ -650,60 +643,13 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
     stream: sseStream,
     postProcess: async () => {
       const supabase = createServerClient();
-      let generatedSummaryText: string | undefined;
 
       // Wait for full response text (plain text in streaming mode)
       const fullText = await getFullResponse();
       const cleanedText = stripAssistantDisplayText(fullText);
-      // Optional enrichment must not keep an already-rendered reply open.
-      if (!context.preExtractedBrief && isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
-        try {
-          const extracted = await extractBrief([
-            ...context.previousMessages.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user' as const, content: request.message },
-            { role: 'assistant' as const, content: fullText },
-          ], previousBrief);
-          if (extracted.changed && extracted.brief) briefToPersist = extracted.brief;
-        } catch { console.warn('[Brief] Background extraction unavailable'); }
-      }
-
-
       // Check if LLM naturally offered escalation via booking-related language
       const llmOfferedEscalation = isIntake ? false : BOOKING_OFFER_REGEX.test(fullText);
-      const finalEscalation = streamingEscalation || llmOfferedEscalation;
-
-      // Gap detection (same logic as non-streaming) with noise filtering
-      if (!isIntake && !context.isConfident) {
-        const msg = request.message.trim();
-        const isTooShort = msg.length < 20;
-        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg);
-        const isGreeting = /^(hi|hello|hey|thanks|thank you|ok|okay|bye|yes|no|sure|great)[\s!.,]*$/i.test(msg);
-        const looksLikeName = /^[a-zA-Z\s]{2,30}$/.test(msg) && msg.split(' ').length <= 4 && !msg.includes('?');
-        const hasQuestionIntent = msg.includes('?') || msg.split(' ').length >= 5;
-        const shouldSkipGap = isTooShort || isEmail || isGreeting || (looksLikeName && !hasQuestionIntent);
-
-        if (!shouldSkipGap) {
-          const { data: existingGaps } = await supabase
-            .from('qa_gaps').select('id, question')
-            .eq('workspace_id', request.workspace_id).eq('status', 'open');
-
-          const isDuplicateGap = (existingGaps ?? []).some(g =>
-            g.question.toLowerCase().trim() === request.message.toLowerCase().trim()
-          );
-
-          if (!isDuplicateGap) {
-            await supabase.from('qa_gaps').insert({
-              workspace_id: request.workspace_id,
-              question: request.message,
-              ai_answer: cleanedText,
-              best_match_id: context.topMatch?.id ?? null,
-              similarity_score: context.confidence,
-              session_id: context.existingSession?.id ?? null,
-              status: 'open',
-            });
-          }
-        }
-      }
+      const finalEscalation = shouldShowBooking(chatSurface(request.surface, request.source_page), (ceSalesGuard(request.workspace_id) ? bookingPrefill(request, context).email : null), streamingEscalation || llmOfferedEscalation);
 
       // Session upsert
       const userMessage: ChatMessage = {
@@ -745,6 +691,71 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       const upsertedSession = upsertResult.data;
 
+      // Required delivery precedes optional model summaries and CRM enrichment.
+      // Capturing an address is not delivery: retry until the bridge acknowledges it.
+      if (upsertedSession && !isLanding) {
+        const email = extractEmail(request.message) || context.existingSession?.visitor_email;
+        const metadata = (upsertedSession.metadata as Record<string, unknown>) || {};
+        if (email && !companyEmailError(request.workspace_id, email) && metadata.ce_lead_delivered_email !== email) {
+          const visitorName = visitorNameFromChat(context.existingSession?.visitor_name, context.previousMessages, request.message);
+          await supabase.from('chat_sessions').update({ visitor_email: email, visitor_name: visitorName }).eq('id', upsertedSession.id);
+          const delivered = await fireAskClaraLead({ email, visitorName, messages: updatedMessages,
+            sourcePage: request.source_page,
+            surface: chatSurface(request.surface, request.source_page), sessionId: upsertedSession.id });
+          if (delivered) {
+            const deliveredMetadata = { ...metadata, ce_lead_delivered_email: email, ce_lead_delivered_at: new Date().toISOString() };
+            await supabase.from('chat_sessions').update({ metadata: deliveredMetadata }).eq('id', upsertedSession.id);
+            upsertedSession.metadata = deliveredMetadata;
+          }
+        }
+      }
+
+      // Gap detection (same logic as non-streaming) with noise filtering
+      if (!isIntake && !context.isConfident) {
+        const msg = request.message.trim();
+        const isTooShort = msg.length < 20;
+        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg);
+        const isGreeting = /^(hi|hello|hey|thanks|thank you|ok|okay|bye|yes|no|sure|great)[\s!.,]*$/i.test(msg);
+        const looksLikeName = /^[a-zA-Z\s]{2,30}$/.test(msg) && msg.split(' ').length <= 4 && !msg.includes('?');
+        const hasQuestionIntent = msg.includes('?') || msg.split(' ').length >= 5;
+        const shouldSkipGap = isTooShort || isEmail || isGreeting || (looksLikeName && !hasQuestionIntent);
+
+        if (!shouldSkipGap) {
+          const { data: existingGaps } = await supabase
+            .from('qa_gaps').select('id, question')
+            .eq('workspace_id', request.workspace_id).eq('status', 'open');
+
+          const isDuplicateGap = (existingGaps ?? []).some(g =>
+            g.question.toLowerCase().trim() === request.message.toLowerCase().trim()
+          );
+
+          if (!isDuplicateGap) {
+            await supabase.from('qa_gaps').insert({
+              workspace_id: request.workspace_id,
+              question: request.message,
+              ai_answer: cleanedText,
+              best_match_id: context.topMatch?.id ?? null,
+              similarity_score: context.confidence,
+              session_id: context.existingSession?.id ?? null,
+              status: 'open',
+            });
+          }
+        }
+      }
+
+      // Optional enrichment must not keep an already-rendered reply open.
+      if (!context.preExtractedBrief && isBriefExtractionEnabled(request.workspace_id) && shouldExtractBrief(request.message)) {
+        try {
+          const extracted = await extractBrief([
+            ...context.previousMessages.map(m => ({ role: m.role, content: m.content })),
+            { role: 'user' as const, content: request.message },
+            { role: 'assistant' as const, content: fullText },
+          ], previousBrief);
+          if (extracted.changed && extracted.brief) briefToPersist = extracted.brief;
+        } catch { console.warn('[Brief] Background extraction unavailable'); }
+      }
+
+
       // Summary generation (same logic as non-streaming path)
       if (upsertedSession && updatedMessages.length >= SUMMARY_THRESHOLD) {
         console.log('[Summary Debug] Entering summary block', {
@@ -769,7 +780,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
             });
 
             if (result.success && result.summary) {
-              generatedSummaryText = result.summary.summary;
               const updateResult = await supabase
                 .from('chat_sessions')
                 .update({
@@ -792,7 +802,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                     .eq('id', upsertedSession.id)
                     .single();
 
-                  if (sessionForEmail?.visitor_email && !companyEmailError(request.workspace_id, sessionForEmail.visitor_email)) {
+                  if (sessionForEmail?.visitor_email && !/\+test(?:[-_.\d]|@)/i.test(sessionForEmail.visitor_email) && !companyEmailError(request.workspace_id, sessionForEmail.visitor_email)) {
                     const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
                     const hubspotKey = process.env.HUBSPOT_API_KEY;
                     if (hubspotKey) {
@@ -829,65 +839,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           messageCount: updatedMessages.length,
           threshold: SUMMARY_THRESHOLD,
         });
-      }
-
-      // ── Email capture + HubSpot upsert ──
-      if (upsertedSession) {
-        const detectedEmail = isLanding ? null : extractEmail(request.message);
-        console.log('[HubSpot Debug] Streaming postProcess — email extracted:', detectedEmail, '| hubspot_enabled:', context.settings.hubspot_enabled);
-        if (detectedEmail) {
-          const { data: sessionCheck } = await supabase
-            .from('chat_sessions')
-            .select('visitor_email, visitor_name')
-            .eq('id', upsertedSession.id)
-            .single();
-
-          if (!sessionCheck?.visitor_email) {
-            await supabase
-              .from('chat_sessions')
-              .update({ visitor_email: detectedEmail })
-              .eq('id', upsertedSession.id);
-
-            try {
-              if (context.settings.hubspot_enabled) {
-                const { upsertHubSpotContact } = await import('@/lib/integrations/hubspot');
-                const hubspotKey = process.env.HUBSPOT_API_KEY;
-                console.log('[HubSpot Debug] Streaming — calling upsert with email:', detectedEmail, '| has API key:', !!hubspotKey);
-                if (hubspotKey) {
-                  const metadata = (upsertedSession.metadata as Record<string, unknown>) || {};
-                  const summaryData = metadata.summary as Record<string, unknown> | undefined;
-                  const summaryText = typeof summaryData?.summary_text === 'string' ? summaryData.summary_text : undefined;
-                  const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions/${upsertedSession.id}`;
-                  console.log('[HubSpot Debug] Streaming — sessionUrl:', sessionUrl);
-
-                  const result = await upsertHubSpotContact({
-                    email: detectedEmail,
-                    lead_source: 'Website',
-                    lifecyclestage: 'marketingqualifiedlead',
-                    clara_chat_summary: summaryText,
-                    clara_session_url: sessionUrl,
-                  }, hubspotKey);
-                  console.log('[HubSpot Debug] Streaming — upsert result:', JSON.stringify(result));
-                }
-              } else {
-                console.log('[HubSpot Debug] Streaming — skipped: hubspot_enabled is false');
-              }
-            } catch (hsError) {
-              console.error('[HubSpot Debug] Streaming — upsert error:', hsError);
-            }
-
-            await fireAskClaraLead({
-              email: detectedEmail,
-              visitorName: sessionCheck?.visitor_name,
-              messages: updatedMessages,
-              storedSummary: generatedSummaryText,
-              sourcePage: request.source_page,
-              sessionId: upsertedSession.id,
-            });
-          } else {
-            console.log('[HubSpot Debug] Streaming — skipped: visitor_email already set:', sessionCheck.visitor_email);
-          }
-        }
       }
 
       if (upsertedSession && context.intake) {
@@ -929,15 +880,21 @@ async function fireAskClaraLead(params: {
   messages: ChatMessage[];
   storedSummary?: string | null;
   sourcePage?: string | null;
+  surface?: 'popup' | 'ask';
   sessionId?: string | null;
-}): Promise<void> {
+}): Promise<boolean> {
   try {
     const claraSessionUrl = params.sessionId
       ? `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions/${params.sessionId}`
       : undefined;
-    await notifyAskClaraLead({
+    const details = contactDetails(params.messages);
+    const fullName = details.name || params.visitorName || '';
+    return await notifyAskClaraLead({
       email: params.email,
-      firstName: firstNameFromChat(params.visitorName),
+      firstName: firstNameFromChat(fullName),
+      lastName: fullName.split(/\s+/).slice(1).join(' '),
+      company: details.company,
+      surface: params.surface || chatSurface(undefined, params.sourcePage || undefined),
       sourcePage: params.sourcePage || '/',
       message: buildAskClaraLeadMessage(params.messages, params.storedSummary),
       claraSessionUrl,
@@ -945,6 +902,7 @@ async function fireAskClaraLead(params: {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[CE Lead] fireAskClaraLead error:', message);
+    return false;
   }
 }
 
@@ -976,6 +934,8 @@ function visitorNameFromChat(
   previousMessages: ChatMessage[],
   currentMessage: string,
 ): string | null {
+  const extracted = contactDetails([...previousMessages, {role: 'user', content: currentMessage}]).name;
+  if (extracted) return extracted;
   if (storedName?.trim()) return storedName.trim();
 
   const texts = [
@@ -1074,7 +1034,7 @@ function buildChatPrompt(
     responseFormatSection = `## Response Format
 Respond naturally and conversationally. Do not use JSON format. Just write your answer as plain text.
 Keep responses concise — 2-4 sentences for simple questions, more for complex ones.
-${settings.escalation_enabled && settings.booking_url ? `When the visitor has gathered enough information and seems ready to take the next step, naturally invite them to a call in plain sentences. This is the ONLY trigger for the booking button. Do not offer this for general questions. Only ask once you genuinely sense buying intent or readiness. Never write a URL, markdown link, or bracketed CTA such as [Book a call] in your message text. The blue Book a Call button is added automatically — do not write the button label.` : ''}`;
+${settings.escalation_enabled && settings.booking_url ? `When the visitor has gathered enough information and seems ready to take the next step, naturally invite them to a call in plain sentences. Do not offer this for general questions. Only ask once you genuinely sense buying intent or readiness. Never write a URL, markdown link, or bracketed CTA such as [Book a call] in your message text. The blue Book a Call button is added automatically — do not write the button label.` : ''}`;
   } else {
     responseFormatSection = `${settings.escalation_enabled ? `## Escalation Rules
 Set escalation_offered to true ONLY when the visitor explicitly signals readiness to engage with a human. This means:
