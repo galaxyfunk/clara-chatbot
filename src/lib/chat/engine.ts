@@ -1,5 +1,6 @@
 import { contactDetails, chatSurface, shouldShowBooking } from './contact-details';
 import { ceSalesGuard } from './ce-sales-guard';
+import { reconcileRegionHistory } from './region-history';
 import { reconcileCompanyHeadcount } from './ce-company-facts';
 import { companyEmailError } from '@/lib/chat/company-email-policy';
 import { after } from 'next/server';
@@ -272,11 +273,12 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
   const intake = landingIntake ?? (storedIntake ? planIntakeTurn(storedIntake, request.message) : undefined);
 
   // 9. Build LLM messages
-  const llmMessages = intake
+  let llmMessages = intake
     ? buildIntakeChatPrompt(settings, request.message, matchedPairs, previousMessages, intake)
     : buildChatPrompt(settings, request.message, matchedPairs, previousMessages, isConfident, streaming);
   const salesGuard = ceSalesGuard(request.workspace_id, chatSurface(request.surface, request.source_page));
   if (salesGuard && llmMessages[0]?.role === 'system') {
+    llmMessages = reconcileRegionHistory(llmMessages);
     llmMessages[0].content = reconcileCompanyHeadcount(llmMessages[0].content);
     const contact = contactDetails([...previousMessages, {role: 'user', content: request.message}]);
     const known = {name: contact.name || sessionRef?.visitor_name, email: contact.email || sessionRef?.visitor_email, company: contact.company};
