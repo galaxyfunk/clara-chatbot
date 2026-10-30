@@ -30,6 +30,8 @@ test('390x844 popup: visible thinking before tokens, accessible New chat cancels
   await page.getByRole('status',{name:'Clara is thinking'}).waitFor();assert.equal(await page.locator('.cb-msg-text.assistant').count(),0,'no empty assistant bubble while awaiting tokens');
   const oldToken=await page.evaluate(()=>JSON.parse(localStorage.getItem('clara:conversation:v1:fixture')!).sessionToken);
   assert.equal(await newChat.evaluate(el=>{const r=el.getBoundingClientRect();return (el.getRootNode() as ShadowRoot).elementFromPoint(r.x+r.width/2,r.y+r.height/2)===el}),true,'not overlapped by header or backdrop');
+  // Wait for the opening transform to finish before measuring the tap target.
+  await newChat.click({trial:true});
   const rect=await newChat.boundingBox();assert.ok(rect&&rect.height>=44&&rect.x>=0&&rect.x+rect.width<=390);
   await newChat.click();release?.();await page.waitForTimeout(100);assert.equal(await page.locator('.cb-msg-text').count(),0);
   assert.notEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('clara:conversation:v1:fixture')!).sessionToken),oldToken);
