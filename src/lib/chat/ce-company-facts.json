@@ -1,0 +1,13 @@
+{
+  "totalHeadcount": 543,
+  "asOf": "September 23, 2026",
+  "metric": "total company headcount",
+  "activeDeveloperCountConfirmed": false,
+  "source": {
+    "repository": "galaxyfunk/cloudemployee.io",
+    "commit": "35854c8f288756f03656cd73abe25a8c285ac2c9",
+    "path": "docs/seo/evidence/company-facts.md",
+    "line": 95,
+    "scopeLine": 16
+  }
+}

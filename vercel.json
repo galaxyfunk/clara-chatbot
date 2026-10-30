@@ -4,7 +4,8 @@
     "deploymentEnabled": {
       "fix/clara-e2e": false,
       "clara-fix-r4-20261029": false,
-      "clara-r8": false
+      "clara-r8": false,
+      "fix/clara-r8-prod-e2e": false
     }
   }
 }
