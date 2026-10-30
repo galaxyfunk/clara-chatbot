@@ -23,8 +23,8 @@ async function main(){
   const reply=events.filter(e=>e.type==='token').map(e=>e.content).join('');
   console.log(JSON.stringify({prompt:index+1,reply,ms:Date.now()-start}));
   assert.ok(events.some(e=>e.type==='done'),'stream must finish');
-  if(index!==3)assert.match(reply,/Philippines|Philippine-based/i);
-  assert.doesNotMatch(reply,/Latin America|LATAM|nearshor|Eastern Europe|Poland|Croatia|Serbia/i,'do not introduce alternative regions');
+  if(index!==3)assert.match(reply,/Latin America|LATAM/i);
+  assert.doesNotMatch(reply,/recommend.{0,30}Philippines|Philippines.{0,30}(?:best|primary|first choice)/i,'Americas prospects lead with Latin America');
   assert.doesNotMatch(reply,/\b\d+(?:[–-]\d+)?\s*(?:hours?|am|pm)\b/i,'do not invent overlap hours');
   if(index!==3)assert.match(reply,/call|discuss|agree|arrang/i);
   if(index===3){assert.match(reply,/543/);assert.match(reply,/total (?:company )?headcount/i);assert.match(reply,/September.{0,5}23|23.{0,5}September/i);assert.doesNotMatch(reply,/543\+|543 (?:active|deployed)/i);if(reply.includes('260'))assert.match(reply,/outdated|obsolete|retired|not current|no longer/i)}
