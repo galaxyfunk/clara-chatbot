@@ -25,7 +25,9 @@ function getAllowedOrigins(): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  return [...BASE_ALLOWED_ORIGINS, ...extra];
+  const preview = process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_GIT_COMMIT_REF === 'fix/leads-lv2'
+    ? ['https://mygratr-git-fix-leads-lv2-cloud-employee.vercel.app'] : [];
+  return [...BASE_ALLOWED_ORIGINS, ...extra, ...preview];
 }
 
 export function getCorsHeaders(
