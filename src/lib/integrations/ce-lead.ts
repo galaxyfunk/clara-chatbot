@@ -47,10 +47,7 @@ export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<bool
 
     console.log('[CE Lead] POSTing ask_clara lead');
 
-    // Branch-only preview pairing; never send preview QA through the production receiver.
-    const target = process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_GIT_COMMIT_REF === 'fix/leads-lv2'
-      ? 'https://mygratr-git-fix-leads-lv2-cloud-employee.vercel.app/api/lead'
-      : process.env.CE_LEAD_URL || DEFAULT_CE_LEAD_URL;
+    const target = process.env.CE_LEAD_URL || DEFAULT_CE_LEAD_URL;
     const response = await fetch(target, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
