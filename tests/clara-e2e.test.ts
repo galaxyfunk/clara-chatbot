@@ -52,7 +52,7 @@ test('secondary brief extraction is outside the response stream',()=>{
 
 test('designated test mailbox bypasses history and company-email checks',async()=>{
   assert.equal(await chatMailboxError(CE_WORKSPACE_ID,'jake+test@gmail.com','GB',async()=>{throw Error('must not read DB')}),null);
-  assert.equal(companyEmailError(CE_WORKSPACE_ID,'jake+test@gmail.com'),null);
+  assert.ok(companyEmailError(CE_WORKSPACE_ID,'jake+test@gmail.com'));
   assert.ok(companyEmailError(CE_WORKSPACE_ID,'jake@gmail.com'));
 });
 

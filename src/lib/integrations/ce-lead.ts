@@ -47,7 +47,8 @@ export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<bool
 
     console.log('[CE Lead] POSTing ask_clara lead');
 
-    const response = await fetch(process.env.CE_LEAD_URL || DEFAULT_CE_LEAD_URL, {
+    const target = process.env.CE_LEAD_URL || DEFAULT_CE_LEAD_URL;
+    const response = await fetch(target, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -86,17 +87,13 @@ export function buildAskClaraLeadMessage(
   messages: Array<{ role: string; content: string }>,
   storedSummary?: string | null,
 ): string | undefined {
-  if (storedSummary?.trim()) {
-    return storedSummary.trim().slice(0, 4000);
-  }
 
   const userBits = messages
     .filter((m) => m.role === 'user')
     .map((m) => m.content.trim())
-    .filter(Boolean)
-    .slice(-6);
+    .filter(Boolean);
 
-  if (userBits.length === 0) return undefined;
+  if (userBits.length === 0) return storedSummary?.trim().slice(0, 4000) || undefined;
   return userBits.join('\n').slice(0, 4000);
 }
 
