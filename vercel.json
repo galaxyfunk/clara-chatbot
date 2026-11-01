@@ -7,7 +7,7 @@
       "clara-r8": false,
       "fix/clara-r8-prod-e2e": false,
       "fix/clara-r10-regions": false,
-      "fix/clara-company-extract": false
+      "fix/clara-company-extract": true
     }
   }
 }
