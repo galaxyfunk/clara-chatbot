@@ -1,3 +1,13 @@
+/** Location predicates are not business names. A missing name deliberately stays
+ * null so the website card can use its existing safe email-domain fallback. */
+function companyName(value: string | null | undefined): string | null {
+  const name = value?.trim().replace(/\s+(?:is\s+)?(?:based|located|headquartered)\s+(?:in|at|out of)\b.*$/i, '').trim();
+  if (!name || /^(?:(?:we|it|our (?:team|company))\s+(?:are|is)\s+)?(?:(?:based|located|headquartered|registered|operating)\s+(?:in|at|out of)|remote(?:ly)?(?:\s|$))\b/i.test(name)) return null;
+  if (/^(?:in|at|from|out of)\s|^(?:the\s+)?(?:United States|United Kingdom|USA|US|UK|Canada|Australia|Germany|Philippines|New Zealand|Singapore)$/i.test(name)) return null;
+  if (!/[A-Za-z]/.test(name) || /@|https?:\/\//i.test(name)) return null;
+  return name.slice(0, 120);
+}
+
 /** Extract only visitor-supplied identity, never an assistant's suggested example. */
 export function contactDetails(messages: Array<{role: string; content: string}>) {
   let name: string | null = null;
@@ -13,7 +23,8 @@ export function contactDetails(messages: Array<{role: string; content: string}>)
     const namedCompany = content.match(/\bcompany(?: name)?\s*(?:is|:)\s*([^,;\n]+?)(?=[.;](?:\s|$)|[,;\n]|$)/i)?.[1];
     const introducedCompany = name && content.includes(name) ? content.match(/\b(?:at|from|of)\s+([^,;\n]+?)(?=[.;](?:\s|$)|[,;\n]|$)/)?.[1] : null;
     const suffixCompany = content.match(/\b([A-Z][\w&'’-]*(?:\s+[A-Z][\w&'’-]*){0,4}\s+(?:Ltd|Limited|Inc|LLC|PLC))\b/)?.[1];
-    if (suffixCompany || namedCompany || introducedCompany) company = (suffixCompany || namedCompany || introducedCompany)!.trim().slice(0,120);
+    const candidate = companyName(suffixCompany) || companyName(namedCompany) || companyName(introducedCompany);
+    if (candidate) company = candidate;
     if (!name && !foundEmail && !suffixCompany && !namedCompany && !introducedCompany && /^[A-Z][A-Za-z0-9'’-]*\s+[A-Z][A-Za-z0-9'’-]*$/.test(content.trim())) name = content.trim();
   }
   return {name, company, email};
