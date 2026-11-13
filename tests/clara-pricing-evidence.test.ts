@@ -10,6 +10,8 @@ test('pricing comes verbatim from the Evidence Bank, with no conversion and no f
  assert.equal(pricingFacts.fees.length,3);
  for(const f of pricingFacts.fees)assert.ok(guard.includes(`"${f.statement}"`),f.id);
  assert.match(guard,/Do not convert to any other currency/);
+ assert.match(guard,/NEVER multiply them by the number of developers/);
+ assert.match(guard,/verbatim/);
  assert.match(guard,/do not switch currency because of the visitor's location/);
  assert.doesNotMatch(guard,/£/);
  assert.doesNotMatch(guard,/always use the £ symbol|never .*write GBP/i);
