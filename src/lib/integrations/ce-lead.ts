@@ -24,6 +24,10 @@ export interface AskClaraLeadInput {
   message?: string | null;
   /** Same session permalink HubSpot gets. Slack turns this into "Read the conversation". */
   claraSessionUrl?: string | null;
+  /** One-to-three line chat summary for the Slack card. Never contains contact details. */
+  claraSummary?: string | null;
+  /** Lets the website link the card to the Growth OS chat page. */
+  claraSessionToken?: string | null;
 }
 
 export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<boolean> {
@@ -42,6 +46,12 @@ export async function notifyAskClaraLead(input: AskClaraLeadInput): Promise<bool
         : {}),
       ...(input.claraSessionUrl?.trim()
         ? { claraSessionUrl: input.claraSessionUrl.trim() }
+        : {}),
+      ...(input.claraSummary?.trim()
+        ? { claraSummary: input.claraSummary.trim().slice(0, 300) }
+        : {}),
+      ...(input.claraSessionToken?.trim()
+        ? { claraSessionToken: input.claraSessionToken.trim() }
         : {}),
     };
 

@@ -10,7 +10,7 @@ export async function upsertHubSpotContact(
   payload: HubSpotContactPayload,
   apiKey: string
 ): Promise<{ success: boolean; contactId?: string; error?: string }> {
-  console.log('[HubSpot Debug] upsertHubSpotContact called with:', JSON.stringify({ email: payload.email, lead_source: payload.lead_source, lifecyclestage: payload.lifecyclestage, has_summary: !!payload.clara_chat_summary, has_session_url: !!payload.clara_session_url }));
+  console.log('[HubSpot] upsert contact', JSON.stringify({ has_summary: !!payload.clara_chat_summary, has_session_url: !!payload.clara_session_url }));
 
   try {
     const properties: Record<string, string> = {
@@ -49,13 +49,13 @@ export async function upsertHubSpotContact(
 
     if (!response.ok) {
       const errorBody = await response.text();
-      console.error('[HubSpot] Contact upsert failed:', response.status, errorBody);
+      console.error('[HubSpot] Contact upsert failed:', response.status, String(errorBody).replace(/[\w.+-]+@[\w.-]+/g, '[email]').slice(0, 200));
       return { success: false, error: `HubSpot API error: ${response.status}` };
     }
 
     const data = await response.json();
     const contactId = data?.results?.[0]?.id;
-    console.log('[HubSpot Debug] API response status:', response.status, '| contactId:', contactId, '| full response:', JSON.stringify(data));
+    console.log('[HubSpot] API response status:', response.status, '| contact saved:', Boolean(contactId));
     return { success: true, contactId };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
