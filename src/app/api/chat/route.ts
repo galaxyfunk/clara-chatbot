@@ -1,3 +1,4 @@
+import { isHealthProbe, HEALTH_CHECK_QUESTION } from '@/lib/chat/synthetic';
 import { NextResponse, after } from 'next/server';
 import { companyEmailError } from '@/lib/chat/company-email-policy';
 import { processChat, processChatStream } from '@/lib/chat/engine';
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   const cors = getCorsHeaders(origin, 'POST, OPTIONS');
 
   try {
-    const body: ChatRequest & { stream?: boolean } = await request.json();
+    const body: ChatRequest & { stream?: boolean; health_check?: boolean } = await request.json();
 
     if (!body.workspace_id || !body.session_token || !body.message) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400, headers: cors });
@@ -31,6 +32,12 @@ export async function POST(request: Request) {
 
     if (body.message.length > 2000) {
       return NextResponse.json({ success: false, error: 'Message too long (max 2000 characters)' }, { status: 400, headers: cors });
+    }
+
+    // Service-health monitor: answer the fixed probe question without saving a chat.
+    if (isHealthProbe(body)) {
+      const probe = await processChat({ ...body, message: HEALTH_CHECK_QUESTION, message_id: body.message_id || `health-${Date.now()}` }, { persist: false });
+      return NextResponse.json({ success: true, health_check: true, persisted: false, ...probe }, { headers: { ...cors, 'Cache-Control': 'no-store' } });
     }
 
     // Mailbox verification belongs to the durable lead intake after the reply.

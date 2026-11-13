@@ -15,7 +15,7 @@ export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Pr
   const { email, name, eventName, startTime } = payload;
 
   try {
-    console.log('[Calendly] Booking confirmed for:', email);
+    console.log('[Calendly] Booking confirmed');
 
     const apiKey = process.env.HUBSPOT_API_KEY;
     if (!apiKey) {
@@ -79,7 +79,7 @@ export async function handleCalendlyBooking(payload: CalendlyBookingPayload): Pr
         if (updateError) {
           console.error('[Calendly] Failed to write booked_at to chat_sessions:', updateError);
         } else {
-          console.log('[Calendly] booked_at written to chat_sessions for token:', payload.sessionToken);
+          console.log('[Calendly] booked_at written to chat_sessions');
         }
       }
 

@@ -5,7 +5,7 @@ import { handleCalendlyBooking } from '@/lib/integrations/calendly';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    console.log('[Calendly Debug] Full payload:', JSON.stringify(body, null, 2));
+    console.log('[Calendly] webhook received:', typeof body?.event === 'string' ? body.event : 'unknown');
 
     // Only process booking confirmations
     if (body.event !== 'invitee.created') {

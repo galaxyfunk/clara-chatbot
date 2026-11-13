@@ -4,6 +4,16 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
+import { safeNextPath } from '@/lib/safe-next';
+
+function nextPath(): string {
+  if (typeof window === 'undefined') return '/dashboard';
+  return safeNextPath(new URLSearchParams(window.location.search).get('next'));
+}
+
+function callbackUrl(): string {
+  return `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath())}`;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,7 +32,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl(),
       },
     });
 
@@ -45,7 +55,7 @@ export default function LoginPage() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: callbackUrl(),
         },
       });
 
@@ -63,7 +73,7 @@ export default function LoginPage() {
       if (error) {
         setError(error.message);
       } else {
-        router.push('/dashboard');
+        router.push(nextPath());
         router.refresh();
       }
     }

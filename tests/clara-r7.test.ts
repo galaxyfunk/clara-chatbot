@@ -19,7 +19,7 @@ test('combined and separate contact capture preserves full name and company for 
 });
 test('surface prompt forbids fabricated forms and all seniority price subranges',()=>{
  const popup=ceSalesGuard(CE_WORKSPACE_ID,'popup');
- assert.match(popup,/has NO contact form/);assert.match(popup,/£2,980–£5,400/);assert.match(popup,/Never narrow the range/);
+ assert.match(popup,/has NO contact form/);assert.match(popup,/LATAM senior band is \$6,500-\$15,000\/month/);assert.match(popup,/Do not invent sub-ranges/);
  assert.doesNotMatch(popup,/GBP 2/);assert.match(ceSalesGuard(CE_WORKSPACE_ID,'ask'),/surface is \/ask/);
 });
 

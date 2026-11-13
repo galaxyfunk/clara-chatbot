@@ -1,0 +1,39 @@
+{
+  "source": {
+    "repository": "galaxyfunk/cloudemployee.io",
+    "commit": "d4e4e8cc057e7b7705de4069005a90320b0f2bcb",
+    "path": "docs/seo/evidence/facts.json"
+  },
+  "fees": [
+    {
+      "id": "fee_ph",
+      "region": "Philippines",
+      "statement": "A client pays $4,000 to $6,000 a month for a Philippines engineer, where the engineer falls depending on role and seniority.",
+      "asOf": "7 Sep 2026",
+      "source": {
+        "file": "docs/seo/evidence/philippines-fees.md",
+        "line": 7
+      }
+    },
+    {
+      "id": "fee_latam",
+      "region": "Latin America",
+      "statement": "LATAM senior band is $6,500-$15,000/month",
+      "asOf": "2026-09-23",
+      "source": {
+        "file": "docs/seo/evidence/latam-fees.md",
+        "line": 56
+      }
+    },
+    {
+      "id": "fee_ee",
+      "region": "Eastern Europe",
+      "statement": "A client pays Cloud Employee, per month, for an Eastern Europe engineer: junior $4,500 to $5,500, mid $5,500 to $7,000, senior $7,000 to $9,000.",
+      "asOf": "7 Sep 2026",
+      "source": {
+        "file": "docs/seo/evidence/eastern-europe-fees.md",
+        "line": 8
+      }
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { safeNextPath } from '@/lib/safe-next';
 
 export async function middleware(request: NextRequest) {
   // Create response early
@@ -40,12 +41,14 @@ export async function middleware(request: NextRequest) {
     // Protect dashboard routes
     if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
       const loginUrl = new URL('/login', request.url);
+      // Keep the deep link (e.g. a Clara chat opened from a Slack card) through sign-in.
+      loginUrl.searchParams.set('next', request.nextUrl.pathname + request.nextUrl.search);
       return NextResponse.redirect(loginUrl);
     }
 
     // Redirect logged-in users away from login
     if (user && request.nextUrl.pathname === '/login') {
-      const dashboardUrl = new URL('/dashboard', request.url);
+      const dashboardUrl = new URL(safeNextPath(request.nextUrl.searchParams.get('next')), request.url);
       return NextResponse.redirect(dashboardUrl);
     }
   } catch (error) {

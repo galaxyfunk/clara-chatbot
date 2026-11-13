@@ -1,4 +1,5 @@
 import { contactDetails, chatSurface, shouldShowBooking } from './contact-details';
+import { buildShortSummary, persistShortSummary } from '@/lib/chat/short-summary';
 import { ceSalesGuard } from './ce-sales-guard';
 import { reconcileRegionHistory } from './region-history';
 import { reconcileCompanyHeadcount } from './ce-company-facts';
@@ -305,7 +306,8 @@ async function prepareChatContext(request: ChatRequest, streaming: boolean = fal
 
 // ─── Non-Streaming Chat (Original) ──────────────────────────────────
 
-export async function processChat(request: ChatRequest): Promise<ChatResponse> {
+/** persist:false answers without saving a chat, gap, lead or brief (service-health monitor). */
+export async function processChat(request: ChatRequest, options: { persist?: boolean } = {}): Promise<ChatResponse> {
   const startedAt = Date.now();
   const context = await prepareChatContext(request);
 
@@ -342,6 +344,19 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
   // Strip leftover CTAs and hallucinated URLs — the Book a Call button is separate
   parsed.answer = stripAssistantDisplayText(parsed.answer);
   if (context.intake) parsed.escalation_offered = false;
+
+  if (options.persist === false) {
+    return {
+      answer: parsed.answer,
+      confidence: context.confidence,
+      gap_detected: false,
+      escalation_offered: false,
+      booking_url: null,
+      matched_pairs: context.matchedPairs.map(m => ({ id: m.id, question: m.question, similarity: m.similarity })),
+      message_count: context.previousMessages.length + 2,
+      email_captured: false,
+    };
+  }
 
   // Gap detection with dedup + noise filtering
   const gapDetected = context.intake ? false : !context.isConfident;
@@ -406,7 +421,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
   }, { onConflict: 'workspace_id,session_token' }).select('id, metadata').single();
 
   if (sessionError) {
-    console.error('[Session Upsert Error]', sessionError);
+    console.error('[Session Upsert Error]', sessionError.code ?? 'unknown');
   }
 
   // Use the same reviewed lead bridge as streaming. Capturing an email is
@@ -419,7 +434,7 @@ export async function processChat(request: ChatRequest): Promise<ChatResponse> {
       await supabase.from('chat_sessions').update({ visitor_email: email, visitor_name: visitorName }).eq('id', upsertedSession.id);
       const delivered = await fireAskClaraLead({ email, visitorName, messages: updatedMessages,
         sourcePage: request.source_page,
-        surface: chatSurface(request.surface, request.source_page), sessionId: upsertedSession.id });
+        surface: chatSurface(request.surface, request.source_page), sessionId: upsertedSession.id, sessionToken: request.session_token });
       if (delivered) {
         await supabase.from('chat_sessions').update({ metadata: { ...metadata,
           ce_lead_delivered_email: email, ce_lead_delivered_at: new Date().toISOString() } }).eq('id', upsertedSession.id);
@@ -641,12 +656,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       const updatedMessages = [...context.previousMessages, userMessage, assistantMessage];
 
-      console.log('[Summary Debug] Starting postProcess', {
-        messageCount: updatedMessages.length,
-        threshold: SUMMARY_THRESHOLD,
-        meetsThreshold: updatedMessages.length >= SUMMARY_THRESHOLD,
-      });
-
       const upsertResult = await supabase.from('chat_sessions').upsert({
         workspace_id: request.workspace_id,
         session_token: request.session_token,
@@ -657,7 +666,8 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           : context.existingSession?.escalated_at ?? null,
       }, { onConflict: 'workspace_id,session_token' }).select('id, metadata').single();
 
-      console.log('[Summary Debug] Upsert result:', JSON.stringify(upsertResult, null, 2));
+      // Never log the upsert result: it carries the transcript and visitor email.
+      if (upsertResult.error) console.error('[Session Upsert Error]', upsertResult.error.code ?? 'unknown');
 
       const upsertedSession = upsertResult.data;
 
@@ -671,7 +681,7 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
           await supabase.from('chat_sessions').update({ visitor_email: email, visitor_name: visitorName }).eq('id', upsertedSession.id);
           const delivered = await fireAskClaraLead({ email, visitorName, messages: updatedMessages,
             sourcePage: request.source_page,
-            surface: chatSurface(request.surface, request.source_page), sessionId: upsertedSession.id });
+            surface: chatSurface(request.surface, request.source_page), sessionId: upsertedSession.id, sessionToken: request.session_token });
           if (delivered) {
             const deliveredMetadata = { ...metadata, ce_lead_delivered_email: email, ce_lead_delivered_at: new Date().toISOString() };
             await supabase.from('chat_sessions').update({ metadata: deliveredMetadata }).eq('id', upsertedSession.id);
@@ -728,26 +738,14 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
 
       // Summary generation (same logic as non-streaming path)
       if (summaryEnabled() && upsertedSession && updatedMessages.length >= SUMMARY_THRESHOLD) {
-        console.log('[Summary Debug] Entering summary block', {
-          sessionId: upsertedSession.id,
-          hasMetadata: !!upsertedSession.metadata,
-          metadata: upsertedSession.metadata,
-        });
 
         try {
           const metadata = (upsertedSession.metadata as Record<string, unknown>) || {};
 
           // Skip if already summarized
           if (!metadata.summarized_at) {
-            console.log('[Summary Debug] Calling summarizeConversation with', updatedMessages.length, 'messages');
 
             const result = await summarizeConversation(updatedMessages);
-
-            console.log('[Summary Debug] Summary result:', {
-              success: result.success,
-              hasSummary: !!result.summary,
-              error: result.error,
-            });
 
             if (result.success && result.summary) {
               const updateResult = await supabase
@@ -760,8 +758,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                   },
                 })
                 .eq('id', upsertedSession.id);
-
-              console.log('[Summary Debug] Metadata update result:', JSON.stringify(updateResult, null, 2));
 
               // Second HubSpot upsert — push summary to existing contact
               if (context.settings.hubspot_enabled) {
@@ -780,7 +776,6 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                         ? result.summary.summary.slice(0, 500)
                         : undefined;
                       const sessionUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/sessions/${upsertedSession.id}`;
-                      console.log('[HubSpot Debug] Post-summary upsert — sessionUrl:', sessionUrl);
 
                       const hsResult = await upsertHubSpotContact({
                         email: sessionForEmail.visitor_email,
@@ -789,26 +784,19 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
                         clara_chat_summary: summaryText,
                         clara_session_url: sessionUrl,
                       }, hubspotKey);
-                      console.log('[HubSpot Debug] Post-summary upsert result:', JSON.stringify(hsResult));
+                      console.log('[HubSpot] Post-summary upsert', (hsResult as { success?: boolean } | null)?.success ? 'ok' : 'failed');
                     }
                   }
                 } catch (hsError) {
-                  console.error('[HubSpot Debug] Post-summary upsert error:', hsError);
+                  console.error('[HubSpot] Post-summary upsert failed:', hsError instanceof Error ? hsError.name : 'unknown');
                 }
               }
             }
           } else {
-            console.log('[Summary Debug] Skipping - already summarized at:', metadata.summarized_at);
           }
         } catch (error) {
-          console.error('[Summary Debug] Error in summary generation:', error);
+          console.error('[Summary] generation failed:', error instanceof Error ? error.name : 'unknown');
         }
-      } else {
-        console.log('[Summary Debug] Skipping summary block', {
-          hasUpsertedSession: !!upsertedSession,
-          messageCount: updatedMessages.length,
-          threshold: SUMMARY_THRESHOLD,
-        });
       }
 
       if (upsertedSession && context.intake) {
@@ -816,6 +804,10 @@ export async function processChatStream(request: ChatRequest): Promise<Streaming
       }
       if (upsertedSession && briefToPersist) {
         await persistBrief(upsertedSession.id, briefToPersist);
+      }
+      // One-to-three line summary for lead cards and Growth OS (no model call).
+      if (upsertedSession) {
+        try { await persistShortSummary(upsertedSession.id); } catch { /* best effort */ }
       }
     },
   };
@@ -852,6 +844,7 @@ async function fireAskClaraLead(params: {
   sourcePage?: string | null;
   surface?: 'popup' | 'ask';
   sessionId?: string | null;
+  sessionToken?: string | null;
 }): Promise<boolean> {
   try {
     const claraSessionUrl = params.sessionId
@@ -869,6 +862,8 @@ async function fireAskClaraLead(params: {
       sourcePage: params.sourcePage || '/',
       message: buildAskClaraLeadMessage(params.messages, params.storedSummary),
       claraSessionUrl,
+      claraSummary: buildShortSummary({ messages: params.messages })?.text ?? null,
+      claraSessionToken: params.sessionToken ?? null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
